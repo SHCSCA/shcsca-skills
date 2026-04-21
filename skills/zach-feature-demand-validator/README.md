@@ -1,7 +1,6 @@
 # zach-feature-demand-validator
 
-> **作者**：Zach ｜ 公众号「Zach的进化笔记」
->
+
 > Learn in public！用真实用户证据验证一个功能点是不是值得做。
 
 功能需求真伪验证器。
