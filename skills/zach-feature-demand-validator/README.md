@@ -1,7 +1,8 @@
 # zach-feature-demand-validator
 
-
-> Learn in public！用真实用户证据验证一个功能点是不是值得做。
+> **作者**：SHCSCA
+>
+> 用真实用户证据验证一个功能点是不是值得做。
 
 功能需求真伪验证器。
 
@@ -43,21 +44,48 @@
 - **结构化交付**
   最后会输出 Markdown 结论、标准 CSV 和可回查证据，让你后续继续做产品立项或内部讨论。
 
-## 推荐安装方式：让 AI 帮你装
+## 安装方式
 
-推荐在以下 IDE 中直接用自然语言安装：
+### 方式 1：让 AI 直接安装
 
-- Claude Code
-- Codex
-- Cursor
+适用于 Claude Code、Codex、Cursor、OpenClaw 等 AI 编程 / Agent 环境。
 
-把下面这句话直接发给你的 AI：
+把下面这句话直接发给 AI：
 
 ```text
 帮我安装 `zach-feature-demand-validator` 这个 skill，来源仓库是 `amazon-skills`。直接装到当前工作区，并把依赖一起检查好。
 ```
 
-如果你要手动安装，直接把本仓库里的 `skills/zach-feature-demand-validator/` 复制到你的 skills 目录即可。
+### 方式 2：手动安装
+
+1. clone 仓库
+2. 找到 `skills/zach-feature-demand-validator/`
+3. 把整个目录复制到你的本地 skills 目录
+
+示例：
+
+```bash
+git clone https://github.com/SHCSCA/amazon-skills.git
+cd amazon-skills
+```
+
+然后复制：
+
+```text
+skills/zach-feature-demand-validator/
+```
+
+到你的目标 skills 目录。
+
+## 这个 skill 能做什么
+
+这个 skill 主要适合以下任务：
+
+- 判断某个功能是不是用户真需求
+- 识别用户是否真的在抱怨某个缺失点
+- 判断某个功能是“加分项”还是“会影响转化的核心卖点”
+- 在开发前减少拍脑袋立项
+- 给选品、产品定义、竞品分析提供证据链
 
 ## 两种使用模式
 
@@ -78,6 +106,15 @@
 - 社区维度：WebSearch
 
 这不是完整版，但至少能把“评论里到底有没有人在乎这个功能”这条证据链先跑通。
+
+## 输出结果
+
+正常使用后，这个 skill 会产出：
+
+- Markdown 验证报告
+- 标准 CSV 数据文件
+- 需要时附带 review fallback 证据包
+- 支撑内部判断的结构化证据链
 
 ## 快速使用
 
@@ -146,3 +183,17 @@ review_source_pack/
 5. 最后给我一个最短的验证步骤，确认这个 skill 已经能用了
 ```
 
+## 适合谁用
+
+这个 skill 适合：
+
+- 亚马逊卖家
+- 跨境电商运营
+- 产品开发 / 选品人员
+- 用 AI 做市场研究的人
+- 想把验证过程标准化的团队
+
+## 关于作者
+
+作者：**SHCSCA**  
+定位：亚马逊与跨境电商场景下的 AI skills 沉淀与实践
