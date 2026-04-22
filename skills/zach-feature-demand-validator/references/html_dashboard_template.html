@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>{{研究对象}}市场调研可视化看板</title>
+  <style>
+    body{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;background:linear-gradient(180deg,#f7f3ea,#f2efe8);color:#1f2937}
+    .wrap{max-width:1480px;margin:0 auto;padding:28px}
+    .section{background:#f8f4ec;border:1px solid #eadfce;border-radius:24px;padding:26px 28px;margin:18px 0;box-shadow:0 10px 30px rgba(124,86,54,.08)}
+    .eyebrow{font-size:12px;letter-spacing:1px;color:#c87a49;font-weight:700;text-transform:uppercase;margin-bottom:10px}
+    h1{font-size:54px;margin:0 0 12px;color:#1f2937}
+    h2{font-size:36px;margin:0 0 8px}
+    h3{font-size:22px;margin:0 0 8px}
+    .sub{color:#6b7280;font-size:15px;line-height:1.75}
+    .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+    .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+    .card{background:#fffaf3;border:1px solid #eadfce;border-radius:20px;padding:18px}
+    .dark{background:#24313d;color:#fff;border:none}
+    .kpi{background:#fffaf3;border:1px solid #eadfce;border-radius:18px;padding:18px}
+    .kpi .v{font-size:34px;font-weight:800;color:#1f2937;margin-top:8px}
+    .kpi .t{font-size:14px;color:#6b7280}
+    .mini{font-size:12px;color:#6b7280;line-height:1.65}
+    .list-box{background:#fffaf3;border:1px solid #eadfce;border-radius:18px;padding:14px 18px;margin:10px 0}
+    .idx{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f7d7c4;color:#c86f3b;font-size:12px;font-weight:700;margin-right:8px}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:10px 8px;border-bottom:1px solid #eadfce;text-align:left;font-size:13px;vertical-align:top}
+    .table th{color:#7c5d44;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+    .bar{height:10px;background:#ece7df;border-radius:999px;overflow:hidden;margin-top:6px}
+    .bar span{display:block;height:100%;border-radius:999px;background:#d97b49}
+    .note{background:#2c3f4b;color:#fff;border-radius:18px;padding:18px;line-height:1.75}
+    .tag{display:inline-block;background:#f6e6d7;color:#b86c3a;border-radius:999px;padding:5px 10px;font-size:12px;margin-right:6px;margin-bottom:6px}
+    .heat{width:100%;border-collapse:separate;border-spacing:0}
+    .heat td,.heat th{padding:12px;border:1px solid #eadfce;font-size:13px}
+    .heat td.hot{background:#e69b76;color:#fff;font-weight:700}
+    .heat td.warm{background:#f1c2a3}
+    .heat td.cool{background:#fbf5ef;color:#7a6b5b}
+    .footer{font-size:12px;color:#6b7280;text-align:center;margin-top:24px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 模块1：首页概览。必须有标题、方法、执行摘要、Go/No-Go、6-10个KPI -->
+  <section class="section">
+    <div class="grid2">
+      <div>
+        <div class="eyebrow">Amazon Product Research Dashboard</div>
+        <h1>{{研究对象}}市场调研可视化看板</h1>
+        <div class="sub">{{一句话说明研究方法、站点、数据源、研究目标。这里必须能让老板和产品经理 10 秒内知道这份页面是干什么的。}}</div>
+
+        <div style="margin-top:18px">
+          <div class="list-box"><span class="idx">1</span>{{Executive Summary 1：数据点 → 含义 → 行动建议}}</div>
+          <div class="list-box"><span class="idx">2</span>{{Executive Summary 2：数据点 → 含义 → 行动建议}}</div>
+          <div class="list-box"><span class="idx">3</span>{{Executive Summary 3：数据点 → 含义 → 行动建议}}</div>
+          <div class="list-box"><span class="idx">4</span>{{Executive Summary 4：数据点 → 含义 → 行动建议}}</div>
+          <div class="list-box"><span class="idx">5</span>{{Executive Summary 5：数据点 → 含义 → 行动建议}}</div>
+        </div>
+      </div>
+
+      <div class="card dark">
+        <div class="eyebrow" style="color:#d9c1a9">Go / No-Go</div>
+        <div style="font-size:48px;font-weight:800">{{综合评分}}</div>
+        <div class="sub" style="color:#d7dde3">{{结论标签，如 Conditional Go / Go / No-Go}}</div>
+        <div style="margin-top:18px">
+          <div class="list-box" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff">Tier 1：{{方向1}}</div>
+          <div class="list-box" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff">Tier 2：{{方向2}}</div>
+          <div class="list-box" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff">暂缓：{{方向3}}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid6" style="margin-top:18px">
+      <div class="kpi"><div class="t">核心词月搜索量</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+      <div class="kpi"><div class="t">Top100月销量</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+      <div class="kpi"><div class="t">Top100月销额</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+      <div class="kpi"><div class="t">头部集中度</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+      <div class="kpi"><div class="t">核心痛点样本数</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+      <div class="kpi"><div class="t">推荐价格带</div><div class="v">{{值}}</div><div class="mini">{{注释}}</div></div>
+    </div>
+  </section>
+
+  <!-- 模块2：市场大盘。必须有图表+表格+洞察框 -->
+  <section class="section">
+    <div class="eyebrow">Market View</div>
+    <h2>市场大盘</h2>
+    <div class="sub">{{这里回答市场有没有量、集中度高不高、主要价格带在哪里、切入难度如何。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>品牌 / 卖家集中度</h3>
+        <table class="table">
+          <tr><th>品牌/卖家</th><th>月销量</th><th>占比</th><th>分布</th></tr>
+          <tr><td>{{名称}}</td><td>{{值}}</td><td>{{占比}}</td><td><div class="bar"><span style="width:100%"></span></div></td></tr>
+          <tr><td>{{名称}}</td><td>{{值}}</td><td>{{占比}}</td><td><div class="bar"><span style="width:85%"></span></div></td></tr>
+          <tr><td>{{名称}}</td><td>{{值}}</td><td>{{占比}}</td><td><div class="bar"><span style="width:62%"></span></div></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>价格带分布</h3>
+        <table class="table">
+          <tr><th>价格带</th><th>产品数</th><th>月销量</th><th>分布</th></tr>
+          <tr><td>{{价格带}}</td><td>{{产品数}}</td><td>{{月销量}}</td><td><div class="bar"><span style="width:100%"></span></div></td></tr>
+          <tr><td>{{价格带}}</td><td>{{产品数}}</td><td>{{月销量}}</td><td><div class="bar"><span style="width:58%"></span></div></td></tr>
+          <tr><td>{{价格带}}</td><td>{{产品数}}</td><td>{{月销量}}</td><td><div class="bar"><span style="width:24%"></span></div></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>Top100 销量 vs 评论 / 星级关系</h3>
+        <table class="table">
+          <tr><th>分组</th><th>产品数</th><th>月销量</th><th>判断</th></tr>
+          <tr><td>{{分组}}</td><td>{{值}}</td><td>{{值}}</td><td>{{说明}}</td></tr>
+          <tr><td>{{分组}}</td><td>{{值}}</td><td>{{值}}</td><td>{{说明}}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>关键洞察</h3>
+        <div class="note">{{必须写 2-4 条洞察，不允许只有表格没有解释。}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块3：关键词透镜 -->
+  <section class="section">
+    <div class="eyebrow">Keyword Lens</div>
+    <h2>关键词透镜</h2>
+    <div class="sub">{{核心词 / 属性词 / 场景词 / 替代词必须联动分析，不能只列一张词表。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>关键词明细表</h3>
+        <table class="table">
+          <tr><th>关键词</th><th>类型</th><th>月搜索量</th><th>CPC</th><th>竞品数</th></tr>
+          <tr><td>{{关键词}}</td><td>{{类型}}</td><td>{{值}}</td><td>{{值}}</td><td>{{值}}</td></tr>
+          <tr><td>{{关键词}}</td><td>{{类型}}</td><td>{{值}}</td><td>{{值}}</td><td>{{值}}</td></tr>
+          <tr><td>{{关键词}}</td><td>{{类型}}</td><td>{{值}}</td><td>{{值}}</td><td>{{值}}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>关键词结论</h3>
+        <div class="list-box"><span class="idx">1</span>{{关键词判断 1}}</div>
+        <div class="list-box"><span class="idx">2</span>{{关键词判断 2}}</div>
+        <div class="list-box"><span class="idx">3</span>{{关键词判断 3}}</div>
+        <div class="list-box"><span class="idx">4</span>{{关键词判断 4}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块4：Top100 属性切片 -->
+  <section class="section">
+    <div class="eyebrow">Segment Split</div>
+    <h2>Top100 属性切片</h2>
+    <div class="sub">{{至少展示一个属性切片 + 一个交叉切片，且要解释为什么重要。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>属性组合占位</h3>
+        <table class="table">
+          <tr><th>属性</th><th>产品数</th><th>月销量</th><th>分布</th></tr>
+          <tr><td>{{属性}}</td><td>{{值}}</td><td>{{值}}</td><td><div class="bar"><span style="width:100%"></span></div></td></tr>
+          <tr><td>{{属性}}</td><td>{{值}}</td><td>{{值}}</td><td><div class="bar"><span style="width:70%"></span></div></td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>当前切口建议</h3>
+        <div class="note">{{必须写当前切口建议，说明哪些结构已经卷、哪些结构还可切。}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块5：Gap Finder -->
+  <section class="section">
+    <div class="eyebrow">Gap Finder</div>
+    <h2>供需缺口 / Gap Finder</h2>
+    <div class="sub">{{这里必须有二维交叉矩阵 + 空白机会列表 + 每个机会的原因解释。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>机会热区矩阵</h3>
+        <table class="heat">
+          <tr><th>维度 × 价格带</th><th>{{列1}}</th><th>{{列2}}</th><th>{{列3}}</th></tr>
+          <tr><th>{{行1}}</th><td class="hot">{{数据}}</td><td class="warm">{{数据}}</td><td class="cool">{{数据}}</td></tr>
+          <tr><th>{{行2}}</th><td class="warm">{{数据}}</td><td class="cool">{{数据}}</td><td class="cool">{{数据}}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>机会空白 Top 列表</h3>
+        <div class="list-box"><b>#1 {{方向}}</b><div class="mini">{{证据}}</div><div class="mini">为什么是空白：{{原因}}</div></div>
+        <div class="list-box"><b>#2 {{方向}}</b><div class="mini">{{证据}}</div><div class="mini">为什么是空白：{{原因}}</div></div>
+        <div class="list-box"><b>#3 {{方向}}</b><div class="mini">{{证据}}</div><div class="mini">为什么是空白：{{原因}}</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块6：竞品与VOC -->
+  <section class="section">
+    <div class="eyebrow">Competitor & VOC</div>
+    <h2>竞品与 VOC</h2>
+    <div class="sub">{{必须同时呈现代表竞品、痛点强度和“痛点→品牌能力→产品方案”映射。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>代表竞品清单</h3>
+        <table class="table">
+          <tr><th>品牌</th><th>价格</th><th>月销量</th><th>类型</th></tr>
+          <tr><td>{{品牌}}</td><td>{{价格}}</td><td>{{月销量}}</td><td>{{类型}}</td></tr>
+          <tr><td>{{品牌}}</td><td>{{价格}}</td><td>{{月销量}}</td><td>{{类型}}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>差评痛点强度</h3>
+        <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between"><b>{{痛点}}</b><span>{{样本数}}</span></div><div class="bar"><span style="width:100%"></span></div><div class="mini">{{解释}}</div></div>
+        <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between"><b>{{痛点}}</b><span>{{样本数}}</span></div><div class="bar"><span style="width:72%"></span></div><div class="mini">{{解释}}</div></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>痛点 → 品牌能力 → 产品方案</h3>
+        <table class="table">
+          <tr><th>痛点</th><th>品牌能力</th><th>产品方案</th></tr>
+          <tr><td>{{痛点}}</td><td>{{能力}}</td><td>{{方案}}</td></tr>
+          <tr><td>{{痛点}}</td><td>{{能力}}</td><td>{{方案}}</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>关键洞察</h3>
+        <div class="note">{{必须写 VOC 结论，不允许只堆竞品和差评。}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块7：决策建议 -->
+  <section class="section">
+    <div class="eyebrow">Decision</div>
+    <h2>决策建议</h2>
+    <div class="sub">{{这里要把分析收束成真正可执行的产品矩阵和优先级。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>Go / No-Go 评分拆解</h3>
+        <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between"><b>市场规模</b><span>{{分数}}</span></div><div class="bar"><span style="width:95%"></span></div><div class="mini">{{解释}}</div></div>
+        <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between"><b>技术可行性</b><span>{{分数}}</span></div><div class="bar"><span style="width:82%"></span></div><div class="mini">{{解释}}</div></div>
+        <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between"><b>品牌匹配</b><span>{{分数}}</span></div><div class="bar"><span style="width:76%"></span></div><div class="mini">{{解释}}</div></div>
+      </div>
+
+      <div class="card">
+        <h3>机会优先级</h3>
+        <table class="table">
+          <tr><th>层级</th><th>方向</th><th>综合分</th><th>建议价格带</th></tr>
+          <tr><td>Tier 1</td><td>{{方向}}</td><td>{{分数}}</td><td>{{价格带}}</td></tr>
+          <tr><td>Tier 2</td><td>{{方向}}</td><td>{{分数}}</td><td>{{价格带}}</td></tr>
+          <tr><td>暂缓</td><td>{{方向}}</td><td>{{分数}}</td><td>{{价格带}}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid3" style="margin-top:18px">
+      <div class="card"><div class="tag">Tier 1 规格</div><h3>{{产品方向}}</h3><ul><li>{{目标定价}}</li><li>{{核心结构}}</li><li>{{差异化主张}}</li></ul></div>
+      <div class="card"><div class="tag">对标竞品</div><h3>{{ASIN / 品牌}}</h3><ul><li>{{对标理由}}</li><li>{{需要超越的点}}</li><li>{{预估月销潜力}}</li></ul></div>
+      <div class="card"><div class="tag">不建议做</div><h3>{{方向}}</h3><ul><li>{{原因1}}</li><li>{{原因2}}</li><li>{{原因3}}</li></ul></div>
+    </div>
+  </section>
+
+  <!-- 模块8：数据来源与时效说明 -->
+  <section class="section">
+    <div class="eyebrow">Source & Boundary</div>
+    <h2>数据来源与时效说明</h2>
+    <div class="sub">{{这部分必须单独出现，用来说明结论边界和数据限制。}}</div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card">
+        <h3>数据来源</h3>
+        <ul>
+          <li>{{MCP / Web 数据源 1}}</li>
+          <li>{{MCP / Web 数据源 2}}</li>
+          <li>{{采集时间}}</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>重要限制</h3>
+        <ul>
+          <li>{{限制 1}}</li>
+          <li>{{限制 2}}</li>
+          <li>{{限制 3}}</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">生成时间：{{时间}} | 数据文件：{{来源}} | 说明：本页优先单文件离线打开</div>
+</div>
+</body>
+</html>

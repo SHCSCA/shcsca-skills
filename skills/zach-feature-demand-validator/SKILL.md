@@ -306,6 +306,13 @@ python3 skills/zach-feature-demand-validator/scripts/generate_community_csv.py \
 - **Excel 数据源**：保证可审计、可复核、可流转
 - **HTML 精简报告 / 看板**：保证非分析角色也能快速看到市场全貌
 
+HTML 执行时再额外强制要求：
+- 默认先读取 `references/output_presentation_spec.md`
+- 再读取 `references/html_dashboard_template.html`
+- HTML 的视觉语言应继承 2026-04-21 壁灯项目那版 dashboard 的风格
+- **但绝不允许直接把壁灯版 HTML 原样当模板复用**，因为它只能作为样式起点，深度仍不足
+- 最终交付页必须在壁灯版基础上做更深一层补足，尤其是集中度、属性切片、Gap Finder、VOC 映射、决策建议和数据边界说明
+
 ### Step 6：交付校验
 
 ```bash
@@ -410,6 +417,9 @@ outputs/feature-validation/
 31. ⛔ **HTML 必须全中文界面**：标题、模块名、图例、注释、按钮/标签、结论说明全部优先使用中文，避免中英混杂的半成品界面
 32. ⛔ **HTML 每个模块都必须有“图表 + 表格/明细 + 结论说明”三件套**：不能只有图，没有说明；也不能只有说明，没有结构化展示
 33. ⛔ **HTML 必须适合离线打开**：优先生成单文件 HTML；如拆分 CSS / JS / assets，必须使用相对路径，禁止依赖外部 CDN 才能正常打开
+34. ⛔ **HTML 模板必须以壁灯版风格为视觉基底，但不能直接照搬壁灯版内容结构**：旧壁灯 HTML 只能作为样式参考，正式模板以 `references/html_dashboard_template.html` 为准
+35. ⛔ **如果新页面只是把壁灯版 HTML 换标题、换数字、换几个方向名，视为不合格**
+36. ⛔ **正式模板必须比壁灯版更详细**：至少补强集中度拆解、属性交叉切片、Gap 原因分析、VOC 映射、Tier1 规格卡、限制说明六个部分
 
 ---
 
@@ -422,6 +432,7 @@ outputs/feature-validation/
 - `references/keyword_construction_guide.md`
 - `references/review_fallback_pack.md`
 - `references/analysis_patterns.md`
+- `references/html_dashboard_template.html`
 
 ## 风险与边界
 
