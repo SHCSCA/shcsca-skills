@@ -1,8 +1,8 @@
 # shcsca-skills
 
-> 一个面向**跨境电商运营 / AI 工作流 / 软件工程**的 Skills 合集仓库
+> 一个面向**跨境电商运营 / AI 工作流**的 Skills 合集仓库
 
-精选来自社区的优质 Skills，遵循 [Agent Skills](https://agentskills.io) 开放标准，支持 Claude Code、Codex、OpenClaw、Cursor 等主流 AI 开发工具直接安装使用。
+精选优质 Skills，遵循 [Agent Skills](https://agentskills.io) 开放标准，支持 Claude Code、OpenClaw 等主流 AI 开发工具直接安装使用。
 
 ---
 
@@ -27,76 +27,22 @@ cd shcsca-skills
 cp -r skills/<skill-name> ~/.openclaw/skills/
 ```
 
-### 安装方式三：通过包管理器
-
-```bash
-# ClawHub
-clawhub install <skill-name>
-
-# Tessl
-tessl install shcsca-skills/<skill-name>
-```
-
 ---
 
-## Skills 速查表
-
-### 🛒 亚马逊运营
-
-| Skill | 一句话说明 |
-|-------|-----------|
-| `zach-feature-demand-validator` | 用 Review / 关键词 / 社区三维证据验证功能点是不是真需求 |
-| `neat-freak` | 任务完成后自动同步文档、CLAUDE.md、Agent 记忆，防止 AI 脑腐 |
-| `hv-analysis` | 横纵分析法——输出万字级别竞品/公司/概念全景调研报告 |
-| `khazix-writer` | 模拟作者口吻写长文，拒绝"赋能、抓手、闭环"等空洞词汇 |
-
-### 💻 工程开发（mattpocock）
-
-| Skill | 一句话说明 |
-|-------|-----------|
-| `grill-me` | 上线前灵魂拷问，彻底理清需求再开工 |
-| `grill-with-docs` | 需求拷问 + 建立团队共享语言 + 更新 CONTEXT.md 和 ADR |
-| `diagnose` | 系统性调试循环：复现→最小化→假设→验证→修复→回归 |
-| `tdd` | 红绿重构测试驱动开发，垂直切片构建功能 |
-| `improve-codebase-architecture` | 发现代码架构深化机会，防止代码腐烂 |
-| `to-prd` | 将对话上下文合成 PRD 并提交为 GitHub Issue |
-| `to-issues` | 将 PRD 分解为可独立领取的垂直切片 GitHub Issue |
-| `triage` | Issue 分诊状态机 |
-| `zoom-out` | 让 Agent 从系统整体视角解释代码 |
-| `setup-matt-pocock-skills` | 每个项目初始化 Issue Tracker / 标签 / 文档结构 |
-
-### ⚡ 生产力工具（mattpocock）
-
-| Skill | 一句话说明 |
-|-------|-----------|
-| `caveman` | 压缩沟通语言，节省约 75% token |
-| `write-a-skill` | 创建新 Skill 的模板与规范 |
-
-### 🔧 工具类（mattpocock）
-
-| Skill | 一句话说明 |
-|-------|-----------|
-| `git-guardrails-claude-code` | 拦截危险 git 命令（push / reset --hard / clean） |
-| `setup-pre-commit` | 配置 Husky + lint-staged + Prettier + 类型检查 + 测试 |
-| `scaffold-exercises` | 创建练习目录结构（题目/解答/解析） |
-| `migrate-to-shoehorn` | 迁移类型断言到 @total-typescript/shoehorn |
-
-### 🔖 其他
+## Skills 速查
 
 | Skill | 来源 | 一句话说明 |
 |-------|------|-----------|
-| `edit-article` | mattpocock/personal | 辅助文章编辑 |
-| `obsidian-vault` | mattpocock/personal | Obsidian 知识库管理 |
-| `design-an-interface` | mattpocock/deprecated | 界面设计（已废弃） |
-| `qa` | mattpocock/deprecated | Q&A 流程（已废弃） |
-| `request-refactor-plan` | mattpocock/deprecated | 重构计划（已废弃） |
-| `ubiquitous-language` | mattpocock/deprecated | 共享语言（已废弃） |
+| `zach-feature-demand-validator` | 自建 | 用 Review / 关键词 / 社区三维证据验证功能点是不是真需求 |
+| `neat-freak` | khazix | 任务完成后自动同步文档、CLAUDE.md、Agent 记忆，防止 AI 脑腐 |
+| `hv-analysis` | khazix | 横纵分析法——输出万字级别竞品/公司/概念全景调研报告 |
+| `khazix-writer` | khazix | 模拟作者口吻写长文，拒绝"赋能、抓手、闭环"等空洞词汇 |
 
 ---
 
-## 核心 Skill 详解
+## Skill 详解
 
-### zach-feature-demand-validator
+### zach-feature-demand-validator（自建）
 
 > 解决"这个功能点，到底是不是用户真的在意"
 
@@ -109,7 +55,16 @@ tessl install shcsca-skills/<skill-name>
 /zach-feature-demand-validator 帮我验证一下 air fryer 的 steam 功能在美国站是不是真需求
 ```
 
+适合用来判断：
+- 某个微创新要不要立项
+- 某个功能是卖点还是伪需求
+- 用户是真的在抱怨，还是卖家自己想象出来的需求
+
+---
+
 ### neat-freak（khazix）
+
+> "每次任务做完要退出窗口的时候，如果不跑一遍 /neat，我就浑身难受，如坐针毡如芒刺背如鲠在喉。"
 
 每次任务完成后自动同步三层：
 
@@ -117,45 +72,42 @@ tessl install shcsca-skills/<skill-name>
 2. **Agent 记忆**（跨会话的自己）— 防止 AI 用过期信息
 3. **项目 README** — 给团队其他成员看
 
-触发方式：`/neat` 或 `整理一下` 或 `同步一下`
+触发方式：`/neat` 或 `整理一下` 或 `同步一下` 或 `sync up`
 
-```
-每次在 Agent 里干完一件事，跑一下 /neat，它会把你这次改的东西全部对齐。
-```
+🌐 跨平台支持：Claude Code · Codex · OpenCode · OpenClaw
+
+---
 
 ### hv-analysis（khazix）
 
+> "纵向追时间深度，横向追同期广度，最终交汇出判断。"
+
 同时跑两条线：
-- **纵向**：从诞生到当下，完整演变
+- **纵向**：从诞生到当下，完整演变，像讲故事一样
 - **横向**：同期所有主要竞品逐一对比
 
 最后两条线交叉，输出 10,000–30,000 字的排版精美 PDF 研究报告。
 
-适合：竞品调研、公司研究、概念入门、写作素材准备。
+适合：
+- 调研竞品 / 调研一个新概念 / 调研一个公司
+- 写作前期需要系统性的素材准备
+- 对一个领域想从零搞懂
+
+---
 
 ### khazix-writer（khazix）
 
-有立场的写作 skill。拒绝空洞词汇（赋能、抓手、闭环、首先...其次...）。
+> "有见识的普通人在认真聊一件打动他的事。"
+
+模拟作者口吻写长文。**有立场**——拒绝空洞词汇：
+- ❌ "赋能、抓手、闭环"
+- ❌ "首先...其次...最后"
+- ❌ "在当今 AI 快速发展的时代"
+- ❌ "说白了 / 本质上 / 换句话说"
 
 四层自检体系：结构 / 节奏 / 内容 / 文字。
 
-适合：写公众号长文、品牌内容、正式文档。
-
-### mattpocock 工程系列
-
-**grill-me / grill-with-docs**：最受欢迎的两个 skill。每次想做任何变更前，跑一遍灵魂拷问，Agent 会追问到每个决策分支都清晰为止。
-
-**tdd**：红绿重构循环，测试先行。帮助 Agent 保持一致的反馈水平，产出质量更高的代码。
-
-**improve-codebase-architecture**：建议每隔几天跑一次，防止 AI 加速开发导致的软件熵增。
-
-**diagnose**：封装了最佳调试实践的循环：复现 → 最小化 → 假设 → 验证 → 修复 → 回归测试。
-
-### caveman
-
-压缩沟通模式，保留完整技术准确度的同时减少约 75% token 使用量。
-
-适合高频对话、上下文紧张的场景。
+适合：你看过数字生命卡兹克的文章，觉得风格还行，想让你的 AI 照着这个调子写东西。
 
 ---
 
@@ -165,32 +117,10 @@ tessl install shcsca-skills/<skill-name>
 shcsca-skills/
 ├── README.md
 └── skills/
-    ├── zach-feature-demand-validator/   # 需求验证
-    ├── neat-freak/                      # 任务收尾同步
-    ├── hv-analysis/                     # 横纵分析法
-    ├── khazix-writer/                   # 写作风格
-    ├── diagnose/                        # 调试循环
-    ├── grill-with-docs/                 # 需求拷问 + 文档
-    ├── triage/                          # Issue 分诊
-    ├── improve-codebase-architecture/   # 架构改善
-    ├── setup-matt-pocock-skills/        # 项目初始化
-    ├── tdd/                             # 测试驱动开发
-    ├── to-issues/                       # PRD → Issue
-    ├── to-prd/                          # 对话 → PRD
-    ├── zoom-out/                        # 系统视角
-    ├── caveman/                         # 压缩沟通
-    ├── grill-me/                        # 需求拷问
-    ├── write-a-skill/                   # Skill 编写
-    ├── git-guardrails-claude-code/     # git 保护
-    ├── migrate-to-shoehorn/            # 类型迁移
-    ├── scaffold-exercises/             # 练习脚手架
-    ├── setup-pre-commit/               # pre-commit 配置
-    ├── edit-article/                   # 文章编辑
-    ├── obsidian-vault/                 # Obsidian 管理
-    ├── design-an-interface/            # (deprecated)
-    ├── qa/                              # (deprecated)
-    ├── request-refactor-plan/          # (deprecated)
-    └── ubiquitous-language/            # (deprecated)
+    ├── zach-feature-demand-validator/   # 自建 · 需求验证
+    ├── neat-freak/                      # khazix · 任务收尾同步
+    ├── hv-analysis/                     # khazix · 横纵分析法
+    └── khazix-writer/                   # khazix · 写作风格
 ```
 
 ---
@@ -200,7 +130,6 @@ shcsca-skills/
 - 🛒 **亚马逊卖家 & 跨境电商运营** — 用 AI 做市场研究和产品开发
 - 📝 **内容创作者** — 公众号、品牌文案、内容生产
 - 🔍 **市场调研人员** — 竞品分析、公司/概念全景调研
-- 💻 **软件工程团队** — TDD、代码质量、需求对齐
 - 🤖 **AI Agent 用户** — 把业务方法论沉淀成可复用 Skill
 
 ---
@@ -211,9 +140,6 @@ shcsca-skills/
 
 - **khazix-skills** — [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills)  
   作者：数字生命卡兹克，公众号「数字生命卡兹克」
-
-- **mattpocock/skills** — [mattpocock/skills](https://github.com/mattpocock/skills)  
-  作者：Matt Pocock，TypeScript 专家
 
 ---
 
