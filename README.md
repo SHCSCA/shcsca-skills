@@ -8,58 +8,103 @@
 
 **SHCSCA**
 
-## 项目定位
-
-`amazon-skills` 主要服务以下场景：
-
-- 亚马逊新品开发前的市场验证
-- 功能点 / 微创新需求判断
-- 竞品研究与评论痛点归因
-- 关键词与用户需求信号交叉验证
-- 后续可扩展到 listing、A+、广告、内容生成、运营 SOP 等方向
-
-也就是说，这个仓库会逐步沉淀成一个 **亚马逊 skills 合集**，让 AI 在具体业务任务里不只是“会聊天”，而是真的能按方法做事。
-
 ## 当前收录的 Skills
 
-| Skill | 作用 | 适用场景 |
-|---|---|---|
-| `zach-feature-demand-validator` | 用 Review / 关键词 / 社区三维证据验证一个功能点是不是真需求 | 选品后判断某个功能值不值得做、要不要跟进、是否是真需求 |
+| Skill | 来源 | 作用 | 适用场景 |
+|-------|------|------|---------|
+| `zach-feature-demand-validator` | 自建 | 用 Review / 关键词 / 社区三维证据验证功能点是不是真需求 | 选品功能立项判断 |
+| `neat-freak` | khazix | 任务完成后自动同步文档/CLAUDE.md/记忆，防止 Agent 脑腐 | 所有 AI 任务收尾 |
+| `hv-analysis` | khazix | 横纵分析法——万字 PDF 研究报告，竞品/公司/概念全景调研 | 市场调研、竞品分析 |
+| `khazix-writer` | khazix | 模拟作者口吻写长文，拒绝空洞词汇 | 公众号 / 品牌内容 |
+| **mattpocock 工程系列** | mattpocock | TDD、调试、架构改善、PRD 产出 | 软件开发流程 |
+| **mattpocock 生产力系列** | mattpocock | 需求拷问、沟通压缩、Skill 编写 | 团队协作与沟通 |
+
+---
 
 ## Skill 详细说明
 
-### 1. zach-feature-demand-validator
+### 1. zach-feature-demand-validator（自建）
 
-这是当前仓库里第一批收录的核心 skill。
+解决"某个功能点，到底是不是用户真的在意"。
 
-它解决的不是“这个品类值不值得做”，而是更关键也更常见的问题：
-
-**某个功能点，到底是不是用户真的在意。**
-
-它会从三个维度交叉验证：
-
-- **Review 信号**：用户有没有提到、抱怨缺失、吐槽现有实现
+从三个维度交叉验证：
+- **Review 信号**：用户有没有提到、抱怨缺失
 - **关键词信号**：用户有没有主动搜索这个功能
-- **社区信号**：用户在 Reddit / Quora 等社区是否反复讨论这个问题
+- **社区信号**：Reddit / Quora 等社区是否反复讨论
 
-适合用来判断：
+```
+/zach-feature-demand-validator 帮我验证一下 air fryer 的 steam 功能在美国站是不是真需求
+```
 
-- 某个微创新要不要立项
-- 某个功能是卖点还是伪需求
-- 用户是真的在抱怨，还是卖家自己想象出来的需求
+### 2. neat-freak（khazix）
+
+每次任务完成后自动同步三层：
+- 项目根的 CLAUDE.md / AGENTS.md（给 AI 看的）
+- 项目的 docs/ 和 README（给同事看的）
+- Agent 自己的记忆系统（给跨会话的自己看的）
+
+触发方式：`/neat` 或 `整理一下` 或 `同步一下`
+
+### 3. hv-analysis（khazix）
+
+横纵分析法——同时跑两条线：
+- **纵向**：从诞生到当下，完整演变
+- **横向**：同期所有主要竞品逐一对比
+
+输出排版精美的 PDF 研究报告，10,000–30,000 字，适合竞品调研、公司研究、概念入门。
+
+### 4. khazix-writer（khazix）
+
+模拟作者口吻写长文，拒绝"赋能、抓手、闭环"等空洞词汇。
+
+四层自检体系：结构、节奏、内容、文字。
+
+### 5. mattpocock 工程系列
+
+| Skill | 作用 |
+|-------|------|
+| `diagnose` | 系统性调试循环：复现→最小化→假设→验证→修复→回归 |
+| `grill-with-docs` | 上线前灵魂拷问，建立团队共享语言，更新 CONTEXT.md 和 ADR |
+| `triage` | Issue 分诊状态机 |
+| `improve-codebase-architecture` | 发现代码架构深化机会，防止代码腐烂 |
+| `setup-matt-pocock-skills` | 每个项目跑一次，初始化 Issue Tracker / 标签 / 文档结构 |
+| `tdd` | 红绿重构测试驱动开发 |
+| `to-issues` | 将 PRD 分解为垂直切片的 GitHub Issue |
+| `to-prd` | 将对话上下文合成 PRD 并提交为 GitHub Issue |
+| `zoom-out` | 让 Agent 从系统整体视角解释代码 |
+
+### 6. mattpocock 生产力系列
+
+| Skill | 作用 |
+|-------|------|
+| `caveman` | 压缩沟通语言，节省约 75% token |
+| `grill-me` | 需求拷问——彻底理清再开工 |
+| `write-a-skill` | 创建新 skill 的模板 |
+
+### 7. mattpocock 工具系列
+
+| Skill | 作用 |
+|-------|------|
+| `git-guardrails-claude-code` | 拦截危险 git 命令（push/reset --hard/clean） |
+| `migrate-to-shoehorn` | 迁移类型断言到 @total-typescript/shoehorn |
+| `scaffold-exercises` | 创建练习目录结构 |
+| `setup-pre-commit` | 配置 Husky + lint-staged + Prettier + 类型检查 + 测试 |
+
+---
 
 ## 仓库结构
 
 ```text
-amazon-skills/
+shcsca-skills/
 ├── README.md
 └── skills/
-    └── zach-feature-demand-validator/
-        ├── SKILL.md
-        ├── README.md
-        ├── references/
-        ├── examples/
-        └── scripts/
+    ├── zach-feature-demand-validator/    # 自建 · 需求验证
+    ├── neat-freak/                       # khazix · 任务收尾同步
+    ├── hv-analysis/                      # khazix · 横纵分析法调研
+    ├── khazix-writer/                    # khazix · 写作风格
+    ├── engineering/                      # mattpocock · 工程系列
+    ├── productivity/                     # mattpocock · 生产力系列
+    └── misc/                             # mattpocock · 工具系列
 ```
 
 ## 如何安装
@@ -68,72 +113,43 @@ amazon-skills/
 
 适用于 Claude Code、Codex、Cursor、OpenClaw 等可直接操作工作区的 AI 环境。
 
-你可以把下面这句话直接发给 AI：
-
 ```text
-帮我安装 `zach-feature-demand-validator` 这个 skill，来源仓库是 `amazon-skills`。直接装到当前工作区，并把依赖一起检查好。
+帮我安装 `hv-analysis` 这个 skill，来源仓库是 `shcsca-skills`。直接装到当前工作区。
 ```
 
-### 方式 2：手动安装单个 skill
-
-1. clone 本仓库
-2. 进入 `skills/`
-3. 把目标 skill 目录复制到你的本地 skills 目录
-
-例如：
+### 方式 2：手动安装
 
 ```bash
-git clone https://github.com/SHCSCA/amazon-skills.git
-cd amazon-skills
+# clone 本仓库
+git clone https://github.com/SHCSCA/shcsca-skills.git
+cd shcsca-skills
+
+# 复制单个 skill 到你的 skills 目录
+cp -r skills/<skill-name> ~/.openclaw/skills/
 ```
 
-然后把：
+### 方式 3：通过包管理器
 
-```text
-skills/zach-feature-demand-validator/
-```
+```bash
+# ClawHub
+clawhub install <skill-name>
 
-复制到你的实际 skills 目录中。
-
-### 方式 3：把整个仓库作为 skills 来源库
-
-如果你的 AI / Agent 支持从 GitHub 仓库直接读取 skills，也可以直接把这个仓库作为统一来源仓库使用，后续新增 skill 时就不用反复单独分发。
-
-## 如何使用
-
-安装完成后，直接在你的 AI 环境中调用对应 skill 即可。
-
-例如当前仓库内的：
-
-- `/zach-feature-demand-validator`
-
-典型使用方式：
-
-```text
-/zach-feature-demand-validator 帮我验证一下 air fryer 的 steam 功能在美国站是不是真需求
+# Tessl
+tessl install shcsca-skills/<skill-name>
 ```
 
 ## 适合谁用
 
-这个仓库适合：
-
-- 亚马逊卖家
-- 跨境电商运营
-- 独立站 / 电商选品团队
+- 亚马逊卖家 & 跨境电商运营
 - 用 AI 做市场研究和产品开发的人
+- 独立站 / 电商选品团队
 - 想把业务方法论沉淀成 skill 的团队
+- 软件工程团队（mattpocock 工程系列）
 
 ## 后续规划
 
-后续会继续往这个仓库里补充更多 Amazon 方向 skills，例如：
-
-- 选品研究
-- 竞品深挖
-- Listing 生成
-- A+ / Q&A 内容生产
-- 评论分析
-- 广告与关键词运营辅助
-
-## 当前状态
-
-这是第一版公开仓库，已完成基础结构搭建，并收录了第一个可用 skill。后续会持续扩展。
+- 选品研究 skill
+- 竞品深挖 skill
+- Listing 生成 skill
+- A+ / Q&A 内容生产 skill
+- 广告与关键词运营辅助 skill
