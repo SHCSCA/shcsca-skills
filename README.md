@@ -1,4 +1,4 @@
-# amazon-skills
+# shcsca-skills
 
 一个面向 **亚马逊卖家 / 跨境电商团队 / AI 工作流** 的 Skills 合集仓库。
 
