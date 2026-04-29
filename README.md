@@ -37,10 +37,11 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | `neat-freak` | khazix | 任务完成后自动同步文档、CLAUDE.md、Agent 记忆，防止 AI 脑腐 |
 | `hv-analysis` | khazix | 横纵分析法——输出万字级别竞品/公司/概念全景调研报告 |
 | `khazix-writer` | khazix | 模拟作者口吻写长文，拒绝"赋能、抓手、闭环"等空洞词汇 |
+| `mattpocock/*` | mattpocock | 工程开发系列 Skill（TDD、调试、需求拷问等） |
 
 ---
 
-## Skill 详解
+## 自建 & khazix Skills
 
 ### zach-feature-demand-validator（自建）
 
@@ -111,16 +112,72 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 ---
 
+## mattpocock Skills（工程开发系列）
+
+> "Skills I use every day to do real engineering — not vibe coding."
+
+来源：[mattpocock/skills](https://github.com/mattpocock/skills)，作者 Matt Pocock
+
+### 工程类
+
+| Skill | 一句话说明 |
+|-------|-----------|
+| `diagnose` | 系统性调试循环：复现→最小化→假设→验证→修复→回归 |
+| `grill-with-docs` | 需求拷问 + 建立团队共享语言 + 更新 CONTEXT.md 和 ADR |
+| `triage` | Issue 分诊状态机 |
+| `improve-codebase-architecture` | 发现代码架构深化机会，防止代码腐烂 |
+| `setup-matt-pocock-skills` | 每个项目初始化 Issue Tracker / 标签 / 文档结构 |
+| `tdd` | 红绿重构测试驱动开发，垂直切片构建功能 |
+| `to-issues` | 将 PRD 分解为可独立领取的垂直切片 GitHub Issue |
+| `to-prd` | 将对话上下文合成 PRD 并提交为 GitHub Issue |
+| `zoom-out` | 让 Agent 从系统整体视角解释代码 |
+
+### 生产力类
+
+| Skill | 一句话说明 |
+|-------|-----------|
+| `caveman` | 压缩沟通语言，节省约 75% token |
+| `grill-me` | 上线前灵魂拷问，彻底理清需求再开工 |
+| `write-a-skill` | 创建新 Skill 的模板与规范 |
+
+### 工具类
+
+| Skill | 一句话说明 |
+|-------|-----------|
+| `git-guardrails-claude-code` | 拦截危险 git 命令（push / reset --hard / clean） |
+| `setup-pre-commit` | 配置 Husky + lint-staged + Prettier + 类型检查 + 测试 |
+| `scaffold-exercises` | 创建练习目录结构（题目/解答/解析） |
+| `migrate-to-shoehorn` | 迁移类型断言到 @total-typescript/shoehorn |
+
+### 个人 & 已废弃
+
+| Skill | 说明 |
+|-------|------|
+| `edit-article` | 辅助文章编辑 |
+| `obsidian-vault` | Obsidian 知识库管理 |
+| `design-an-interface` | (deprecated) |
+| `qa` | (deprecated) |
+| `request-refactor-plan` | (deprecated) |
+| `ubiquitous-language` | (deprecated) |
+
+---
+
 ## 仓库结构
 
 ```
 shcsca-skills/
 ├── README.md
 └── skills/
-    ├── zach-feature-demand-validator/   # 自建 · 需求验证
-    ├── neat-freak/                      # khazix · 任务收尾同步
-    ├── hv-analysis/                     # khazix · 横纵分析法
-    └── khazix-writer/                   # khazix · 写作风格
+    ├── zach-feature-demand-validator/      # 自建 · 需求验证
+    ├── neat-freak/                         # khazix · 任务收尾同步
+    ├── hv-analysis/                        # khazix · 横纵分析法
+    ├── khazix-writer/                      # khazix · 写作风格
+    └── mattpocock/                         # mattpocock · 工程开发系列
+        ├── engineering/                    # 工程类（9个）
+        ├── productivity/                  # 生产力类（3个）
+        ├── misc/                          # 工具类（4个）
+        ├── personal/                      # 个人用
+        └── deprecated/                    # 已废弃
 ```
 
 ---
@@ -130,6 +187,7 @@ shcsca-skills/
 - 🛒 **亚马逊卖家 & 跨境电商运营** — 用 AI 做市场研究和产品开发
 - 📝 **内容创作者** — 公众号、品牌文案、内容生产
 - 🔍 **市场调研人员** — 竞品分析、公司/概念全景调研
+- 💻 **软件工程团队** — TDD、代码质量、需求对齐（mattpocock 系列）
 - 🤖 **AI Agent 用户** — 把业务方法论沉淀成可复用 Skill
 
 ---
@@ -140,6 +198,9 @@ shcsca-skills/
 
 - **khazix-skills** — [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills)  
   作者：数字生命卡兹克，公众号「数字生命卡兹克」
+
+- **mattpocock/skills** — [mattpocock/skills](https://github.com/mattpocock/skills)  
+  作者：Matt Pocock，TypeScript 专家
 
 ---
 
