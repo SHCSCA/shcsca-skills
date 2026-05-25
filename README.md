@@ -45,6 +45,7 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | Skill | 类型 | 适用场景 |
 |---|---|---|
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
+| `amz-market-research-orchestrated` | 自建 · 未完成 | Amazon / 电商市场调研总控草案，编排数据源、方法链和报告输出 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
@@ -52,6 +53,22 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | `mattpocock/*` | mattpocock | 工程协作 Skills：TDD、诊断、需求拷问、Issue 拆解等 |
 
 ## 跨境电商 Skills
+
+### `amz-market-research-orchestrated`（未完成 / WIP）
+
+Amazon / 电商市场调研总控 Skill 草案，用来编排“数据源平面、方法论平面、任务目的平面、输出平面”四个模块，目标是生成带数据血缘、方法链和交付规范的市场研究报告。
+
+当前状态：未完成。它仍依赖未随本仓库完整提供的 `data-source-orchestrator`、`market-method-orchestrator` 和 `research-output-orchestrator`，暂时适合作为架构草案、契约参考和后续开发入口，不建议当成稳定可用的完整 Skill。
+
+计划覆盖的调研任务：
+
+| 任务 | 目标 |
+|---|---|
+| 新市场 / 新品类进入 | 判断是否值得进入，以及切入点在哪里 |
+| 产品迭代 | 从 Review、VOC、竞品差异中提炼优化方向 |
+| 细分市场发现 | 找新人群、场景、价格带和未满足需求 |
+| 竞品差异化 | 找功能、定位、价格和内容表达上的机会 |
+| 社媒 / VOC 洞察 | 用 Reddit、YouTube、TikTok 等信号辅助判断真实需求 |
 
 ### `amz-create-image`
 
@@ -157,6 +174,7 @@ shcsca-skills/
     │   ├── SKILL.md
     │   ├── references/
     │   └── templates/
+    ├── amz-market-research-orchestrated/  # 自建 · 未完成 · Amazon 市场研究总控
     ├── zach-feature-demand-validator/     # 自建 · 功能需求验证
     ├── hv-analysis/                       # khazix · 横纵分析法
     ├── khazix-writer/                     # khazix · 长文写作

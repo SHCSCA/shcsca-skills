@@ -6,3 +6,4 @@ __pycache__/
 *.xlsx
 !skills/**/templates/*.xlsx
 output/
+skills/**/reports/
