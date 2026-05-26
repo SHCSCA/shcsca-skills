@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="zh-CN" data-report-style="strategic-dashboard-v1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{REPORT_TITLE}}</title>
+  <style>
+    :root {
+      --primary: #1a2744;
+      --primary-light: #243460;
+      --accent: #3d6b9e;
+      --accent-soft: #dbe7f2;
+      --sage: #8fa89a;
+      --rose: #c4a09a;
+      --warm: #c9b99a;
+      --lavender: #9a8fb5;
+      --bg: #f4f2ef;
+      --card: #ffffff;
+      --text: #1a2744;
+      --muted: #657485;
+      --line: #e0ddd8;
+      --danger: #c4705a;
+      --success: #6a9a7a;
+      --warning: #c9a05a;
+      --tag-bg: #eef2f7;
+      --shadow: none;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      line-height: 1.62;
+    }
+    .report-header {
+      position: relative;
+      overflow: hidden;
+      background: var(--primary);
+      color: #fff;
+      padding: 56px 60px 46px;
+    }
+    .report-header::before {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -80px;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: rgba(61, 107, 158, .15);
+    }
+    .report-header::after {
+      content: "";
+      position: absolute;
+      bottom: -60px;
+      left: 40%;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: rgba(91, 141, 184, .10);
+    }
+    .header-badge {
+      display: inline-block;
+      margin-bottom: 18px;
+      padding: 5px 12px;
+      border: 1px solid rgba(168, 200, 232, .45);
+      background: rgba(91, 141, 184, .24);
+      color: #a8c8e8;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    h1 {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 12px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 30px;
+      max-width: 880px;
+      color: rgba(255, 255, 255, .68);
+      font-size: 15px;
+    }
+    .header-meta {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 24px;
+      max-width: 980px;
+    }
+    .header-meta-item .label {
+      display: block;
+      color: rgba(255, 255, 255, .42);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .header-meta-item .value {
+      display: block;
+      margin-top: 4px;
+      color: rgba(255, 255, 255, .9);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 40px 56px;
+    }
+    .section {
+      padding-top: 48px;
+    }
+    .executive-dashboard {
+      margin-top: 0;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .section-number {
+      display: inline-flex;
+      width: 34px;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      background: var(--primary);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .section-title {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.2;
+    }
+    .section-desc {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 2;
+    }
+    .kpi-card,
+    .card,
+    .opportunity-card,
+    .risk-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: var(--shadow);
+    }
+    .kpi-card {
+      min-height: 132px;
+      padding: 22px 20px;
+      position: relative;
+      overflow: hidden;
+      border-top: 0;
+    }
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: var(--accent);
+    }
+    .kpi-card.success::before { background: var(--success); }
+    .kpi-card.warning::before { background: var(--warning); }
+    .kpi-card.danger::before { background: var(--danger); }
+    .kpi-label {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .kpi-value {
+      margin-bottom: 6px;
+      color: var(--primary);
+      font-size: 29px;
+      line-height: 1;
+      font-weight: 900;
+    }
+    .kpi-sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .card {
+      padding: 26px;
+      margin-bottom: 18px;
+    }
+    .chart-container {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+    .chart-title {
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .chart-body {
+      min-width: 0;
+    }
+    .card-title {
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .insight {
+      border-left: 4px solid var(--accent);
+      background: #fff;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: var(--shadow);
+    }
+    .insight-box {
+      padding: 16px 20px;
+      background: #eef4fb;
+      border-left: 4px solid var(--accent);
+      color: var(--primary);
+      font-weight: 700;
+      line-height: 1.6;
+    }
+    .conclusion {
+      margin-top: 18px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .conclusion-grid {
+      display: grid;
+      grid-template-columns: 1.35fr .65fr;
+      gap: 18px;
+    }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .toc a {
+      display: block;
+      padding: 9px 10px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.14);
+      color: rgba(255,255,255,.78);
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .metric {
+      padding: 16px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .metric b {
+      display: block;
+      font-size: 20px;
+      line-height: 1.1;
+      margin-bottom: 4px;
+      color: var(--primary);
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .evidence-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      box-shadow: var(--shadow);
+    }
+    .evidence-table tr:hover td {
+      background: #f8f7f5;
+    }
+    .evidence-table th,
+    .evidence-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .evidence-table th {
+      background: #eef2f7;
+      color: var(--primary);
+      font-size: 11px;
+      letter-spacing: .7px;
+      text-transform: uppercase;
+    }
+    .tag {
+      display: inline-block;
+      padding: 3px 9px;
+      background: #eef2f7;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin: 2px 3px 2px 0;
+    }
+    .badge-hot { color: #8a4d1c; background: #f5e4cf; }
+    .badge-growth { color: #326b49; background: #e4f0e8; }
+    .badge-premium { color: #564b84; background: #e8e3f1; }
+    .badge-risk { color: #944533; background: #f4dfda; }
+    .tag.warn { color: #8a5d00; background: #f7ecd0; }
+    .tag.good { color: #326b49; background: #e4f0e8; }
+    .tag.bad { color: #944533; background: #f4dfda; }
+    .score-meter {
+      height: 10px;
+      background: #e9edf1;
+      overflow: hidden;
+    }
+    .score-meter span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      width: var(--score, 50%);
+    }
+    .mini-chart {
+      display: grid;
+      gap: 9px;
+      margin-top: 14px;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 190px) 1fr minmax(56px, auto);
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .bar {
+      height: 11px;
+      background: #e8edf2;
+      overflow: hidden;
+    }
+    .bar span {
+      display: block;
+      height: 100%;
+      width: var(--w, 40%);
+      background: var(--accent);
+    }
+    .bar.warn span { background: var(--warning); }
+    .bar.good span { background: var(--success); }
+    .bar.bad span { background: var(--danger); }
+    .deep-dive-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .product-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 118px 1fr;
+      gap: 16px;
+      min-width: 0;
+      box-shadow: var(--shadow);
+    }
+    .comp-deep-grid { align-items: stretch; }
+    .comp-deep-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      overflow: hidden;
+      padding: 0;
+      display: block;
+    }
+    .comp-deep-header {
+      background: var(--primary);
+      color: #fff;
+      padding: 16px 20px;
+    }
+    .comp-deep-name {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .comp-deep-price {
+      font-size: 13px;
+      color: rgba(255,255,255,.65);
+    }
+    .comp-deep-body {
+      padding: 18px;
+    }
+    .product-card-body {
+      display: grid;
+      grid-template-columns: 118px 1fr;
+      gap: 16px;
+      min-width: 0;
+    }
+    .comp-deep-section {
+      margin-bottom: 12px;
+    }
+    .comp-deep-section-title {
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .comp-deep-text {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .product-card img {
+      width: 118px;
+      height: 118px;
+      object-fit: contain;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+    }
+    .product-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+    .product-card .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0;
+    }
+    .product-card p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .quote-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      padding: 16px;
+      font-size: 13px;
+      box-shadow: var(--shadow);
+    }
+    .quote-card.low {
+      border-left-color: var(--danger);
+    }
+    .quote-card strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--primary);
+    }
+    details {
+      background: #fff;
+      border: 1px solid var(--line);
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+    summary {
+      cursor: pointer;
+      padding: 14px 18px;
+      font-weight: 800;
+      color: var(--primary);
+      background: #eef2f7;
+    }
+    details > .details-body {
+      padding: 18px;
+      overflow: auto;
+    }
+    .opportunity-matrix {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .opportunity-card {
+      padding: 22px;
+      border-left: 5px solid var(--success);
+    }
+    .opportunity-card.watch { border-left-color: var(--warning); }
+    .opportunity-card.nogo { border-left-color: var(--danger); }
+    .opportunity-card h3,
+    .risk-card h3 {
+      margin: 0 0 10px;
+      font-size: 17px;
+    }
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .risk-card {
+      padding: 20px;
+      border-top: 4px solid var(--danger);
+    }
+    .pain-card { border-left-color: var(--danger); }
+    .joy-card { border-left-color: var(--success); }
+    .data-lineage {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .appendix-table {
+      font-size: 12px;
+    }
+    .footer {
+      padding: 28px 40px 42px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+    }
+    @media (max-width: 920px) {
+      .report-header { padding: 34px 22px; }
+      .container { padding: 0 18px 42px; }
+      .header-meta,
+      .kpi-grid,
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .metric-strip,
+      .toc,
+      .opportunity-matrix,
+      .deep-dive-grid,
+      .conclusion-grid,
+      .quote-grid,
+      .risk-grid {
+        grid-template-columns: 1fr;
+      }
+      .product-card {
+        grid-template-columns: 1fr;
+      }
+      .section-header { align-items: flex-start; }
+      .section-desc { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <div class="header-badge">Strategic Intelligence Report</div>
+    <h1>{{REPORT_TITLE}}</h1>
+    <p class="subtitle">{{REPORT_SUBTITLE}}</p>
+    <div class="header-meta">
+      <div class="header-meta-item"><span class="label">报告日期</span><span class="value">{{REPORT_DATE}}</span></div>
+      <div class="header-meta-item"><span class="label">目标市场</span><span class="value">{{TARGET_MARKET}}</span></div>
+      <div class="header-meta-item"><span class="label">数据深度</span><span class="value">{{DATA_DEPTH}}</span></div>
+      <div class="header-meta-item"><span class="label">核心判断</span><span class="value">Go / Watch / No-Go: {{DECISION}}</span></div>
+    </div>
+    <nav class="toc">
+      <a href="#data-coverage">数据覆盖</a>
+      <a href="#market-dashboard">市场大盘</a>
+      <a href="#keyword-demand">关键词需求</a>
+      <a href="#competitor-landscape">Top 竞品</a>
+      <a href="#competitor-deep-dive">竞品深挖</a>
+      <a href="#voc">Review / VOC</a>
+      <a href="#full-data-appendix">完整附录</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section id="executive-dashboard" class="section executive-dashboard">
+      <div class="kpi-grid">
+        {{KPI_CARDS}}
+      </div>
+      <div class="conclusion">
+        <div class="conclusion-grid">
+          <div>
+            <div class="chart-title">Executive Read</div>
+            <div class="insight-box">{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}</div>
+          </div>
+          <div>
+            <div class="chart-title">Readout Logic</div>
+            <p>先看判断和机会，再看关键词、竞品、VOC、TikTok、1688 和数据血缘。每个关键结论都回到 source_id。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="data-coverage" class="section">
+      <div class="section-header"><span class="section-number">01</span><h2 class="section-title">数据覆盖</h2><span class="section-desc">Coverage & Confidence</span></div>
+      {{DATA_COVERAGE}}
+    </section>
+
+    <section id="market-dashboard" class="section">
+      <div class="section-header"><span class="section-number">02</span><h2 class="section-title">市场大盘</h2><span class="section-desc">Market Dashboard</span></div>
+      {{MARKET_DASHBOARD}}
+    </section>
+
+    <section id="keyword-demand" class="section">
+      <div class="section-header"><span class="section-number">03</span><h2 class="section-title">关键词需求</h2><span class="section-desc">Search Demand</span></div>
+      {{KEYWORD_TABLE_AND_INTENT_CARDS}}
+    </section>
+
+    <section id="competitor-landscape" class="section">
+      <div class="section-header"><span class="section-number">04</span><h2 class="section-title">Top 竞品</h2><span class="section-desc">Competitor Landscape</span></div>
+      <table class="evidence-table">{{COMPETITOR_TABLE}}</table>
+      {{COMPETITOR_SEGMENT_CARDS}}
+    </section>
+
+    <section id="competitor-deep-dive" class="section">
+      <div class="section-header"><span class="section-number">05</span><h2 class="section-title">竞品深挖</h2><span class="section-desc">ASIN Deep Dives</span></div>
+      <div class="deep-dive-grid comp-deep-grid">{{COMPETITOR_DEEP_DIVES}}</div>
+    </section>
+
+    <section id="voc" class="section">
+      <div class="section-header"><span class="section-number">06</span><h2 class="section-title">Review / VOC</h2><span class="section-desc">Pain & Joy Clusters</span></div>
+      {{VOC_CARDS_AND_TABLE}}
+    </section>
+
+    <section id="tiktok-validation" class="section">
+      <div class="section-header"><span class="section-number">07</span><h2 class="section-title">TikTok 验证</h2><span class="section-desc">Content & Channel Signal</span></div>
+      {{TIKTOK_VALIDATION}}
+    </section>
+
+    <section id="supply-chain" class="section">
+      <div class="section-header"><span class="section-number">08</span><h2 class="section-title">1688 供应链</h2><span class="section-desc">Supply Chain Proxy</span></div>
+      {{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}
+    </section>
+
+    <section id="web-risk" class="section">
+      <div class="section-header"><span class="section-number">09</span><h2 class="section-title">Web / 风险补充</h2><span class="section-desc">Public Web, Policy & Recall Signals</span></div>
+      {{WEB_RISK_SUPPLEMENT}}
+    </section>
+
+    <section id="opportunity-matrix" class="section">
+      <div class="section-header"><span class="section-number">10</span><h2 class="section-title">机会矩阵</h2><span class="section-desc">Opportunity Matrix</span></div>
+      <div class="opportunity-matrix">{{OPPORTUNITY_CARDS}}</div>
+    </section>
+
+    <section id="decision-roadmap" class="section">
+      <div class="section-header"><span class="section-number">11</span><h2 class="section-title">Go / Watch / No-Go</h2><span class="section-desc">Decision & Validation Roadmap</span></div>
+      {{DECISION_ROADMAP}}
+    </section>
+
+    <section id="data-gaps" class="section">
+      <div class="section-header"><span class="section-number">12</span><h2 class="section-title">数据缺口</h2><span class="section-desc">Limitations & Next Evidence</span></div>
+      {{DATA_GAPS}}
+    </section>
+
+    <section id="full-data-appendix" class="section">
+      <div class="section-header"><span class="section-number">13</span><h2 class="section-title">完整数据附录</h2><span class="section-desc">All Renderable Evidence</span></div>
+      {{FULL_DATA_APPENDIX}}
+    </section>
+
+    <section id="lineage" class="section">
+      <div class="section-header"><span class="section-number">14</span><h2 class="section-title">数据血缘</h2><span class="section-desc">Source Lineage</span></div>
+      <div class="data-lineage"><table class="evidence-table">{{LINEAGE_TABLE}}</table></div>
+    </section>
+  </main>
+
+  <footer class="footer">{{REPORT_FOOTER}}</footer>
+</body>
+</html>

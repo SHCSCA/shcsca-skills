@@ -45,7 +45,7 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | Skill | 类型 | 适用场景 |
 |---|---|---|
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
-| `amz-market-research-orchestrated` | 自建 · 未完成 | Amazon / 电商市场调研总控草案，编排数据源、方法链和报告输出 |
+| `amz-market-research-orchestrated` | 自建 · 可执行 v1 | Amazon / 电商市场深度调研，使用 Sorftime MCP + Firecrawl 生成可审计报告 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
@@ -54,11 +54,11 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 ## 跨境电商 Skills
 
-### `amz-market-research-orchestrated`（未完成 / WIP）
+### `amz-market-research-orchestrated`（可执行 v1）
 
-Amazon / 电商市场调研总控 Skill 草案，用来编排“数据源平面、方法论平面、任务目的平面、输出平面”四个模块，目标是生成带数据血缘、方法链和交付规范的市场研究报告。
+Amazon / 电商市场调研 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链和交付规范的市场研究报告。
 
-当前状态：未完成。它仍依赖未随本仓库完整提供的 `data-source-orchestrator`、`market-method-orchestrator` 和 `research-output-orchestrator`，暂时适合作为架构草案、契约参考和后续开发入口，不建议当成稳定可用的完整 Skill。
+v1 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的完整战略情报大屏，不是 Markdown 套壳；会展开 KPI、数据覆盖、市场结构、关键词长尾、竞品深挖、VOC、TikTok、1688、Web 风险、完整数据附录和数据血缘，并提供 `validate_market_research_deliverables.py` 校验数据血缘、方法链、输出文件、HTML 深度和关键质量规则。
 
 计划覆盖的调研任务：
 
@@ -68,7 +68,17 @@ Amazon / 电商市场调研总控 Skill 草案，用来编排“数据源平面�
 | 产品迭代 | 从 Review、VOC、竞品差异中提炼优化方向 |
 | 细分市场发现 | 找新人群、场景、价格带和未满足需求 |
 | 竞品差异化 | 找功能、定位、价格和内容表达上的机会 |
-| 社媒 / VOC 洞察 | 用 Reddit、YouTube、TikTok 等信号辅助判断真实需求 |
+| TikTok / VOC 洞察 | 用 TikTok Shop、评论、公开网页和内容信号辅助判断真实需求 |
+| 1688 供应链验证 | 用 1688 相似货源判断采购成本带、同款供给和可复制风险 |
+
+v1 主要数据源：
+
+| 数据层 | 工具 |
+|---|---|
+| Amazon 商品 / 关键词 / 类目 / 评论 / 趋势 | Sorftime MCP |
+| TikTok Shop 商品 / 趋势 / 视频 / 达人 | Sorftime MCP |
+| 1688 相似货源和采购成本代理 | Sorftime MCP |
+| 行业报告 / 品牌站 / 测评 / 法规 / 召回 | Firecrawl MCP |
 
 ### `amz-create-image`
 
@@ -174,7 +184,7 @@ shcsca-skills/
     │   ├── SKILL.md
     │   ├── references/
     │   └── templates/
-    ├── amz-market-research-orchestrated/  # 自建 · 未完成 · Amazon 市场研究总控
+    ├── amz-market-research-orchestrated/  # 自建 · 可执行 v1 · Amazon 市场研究总控
     ├── zach-feature-demand-validator/     # 自建 · 功能需求验证
     ├── hv-analysis/                       # khazix · 横纵分析法
     ├── khazix-writer/                     # khazix · 长文写作
