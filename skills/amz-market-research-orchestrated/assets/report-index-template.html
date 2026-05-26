@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN" data-report-style="three-report-index-v2">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{REPORT_TITLE}}</title>
+  <style>
+    :root { --primary:#1a2744; --accent:#3d6b9e; --bg:#f4f2ef; --card:#fff; --text:#1a2744; --muted:#657485; --line:#e0ddd8; --success:#6a9a7a; --warning:#c9a05a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:"PingFang SC","Microsoft YaHei","Segoe UI",Arial,sans-serif; line-height:1.62; }
+    .report-header { background:var(--primary); color:#fff; padding:52px 60px 44px; }
+    .header-badge { display:inline-block; margin-bottom:18px; padding:5px 12px; border:1px solid rgba(168,200,232,.45); color:#a8c8e8; font-size:11px; letter-spacing:2px; text-transform:uppercase; }
+    h1 { margin:0 0 12px; font-size:38px; line-height:1.16; letter-spacing:0; }
+    .subtitle { margin:0; color:rgba(255,255,255,.68); font-size:15px; }
+    .container { max-width:1200px; margin:0 auto; padding:36px 40px 56px; }
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-bottom:24px; }
+    .kpi-card,.card,.report-card { background:var(--card); border:1px solid var(--line); border-radius:0; }
+    .kpi-card { min-height:124px; padding:22px 20px; position:relative; overflow:hidden; }
+    .kpi-card::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent); }
+    .kpi-card.success::before { background:var(--success); } .kpi-card.warning::before { background:var(--warning); }
+    .kpi-label { margin-bottom:8px; color:var(--muted); font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+    .kpi-value { margin-bottom:6px; font-size:26px; line-height:1.05; font-weight:900; }
+    .kpi-sub { color:var(--muted); font-size:12px; }
+    .report-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; margin-bottom:28px; }
+    .report-card { padding:24px; min-height:176px; }
+    .report-card a { display:flex; justify-content:space-between; gap:16px; color:var(--primary); text-decoration:none; font-size:19px; font-weight:900; }
+    .report-card strong { color:var(--accent); white-space:nowrap; font-size:13px; }
+    .report-card p { color:var(--muted); font-size:13px; }
+    .section { padding-top:28px; }
+    .section-number { display:inline-flex; width:34px; height:34px; align-items:center; justify-content:center; background:var(--primary); color:#fff; font-size:13px; font-weight:800; }
+    .section-title { display:inline-block; margin-left:10px; font-size:22px; font-weight:900; }
+    .evidence-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; }
+    .evidence-table th { background:var(--primary); color:rgba(255,255,255,.88); padding:10px; text-align:left; }
+    .evidence-table td { border-bottom:1px solid var(--line); padding:10px; vertical-align:top; }
+    .card { padding:22px; margin-bottom:18px; }
+    .card-title { color:var(--muted); font-size:12px; font-weight:900; letter-spacing:.8px; text-transform:uppercase; margin-bottom:12px; }
+    .metric-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .metric { background:#fff; border:1px solid var(--line); padding:14px; }
+    .metric b { display:block; font-size:22px; color:var(--primary); }
+    .metric span { color:var(--muted); font-size:12px; }
+    .grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .mini-chart .bar-row { display:grid; grid-template-columns:130px 1fr 50px; gap:10px; align-items:center; font-size:12px; margin:8px 0; }
+    .bar { height:8px; background:#eef2f7; } .bar span { display:block; height:100%; width:var(--w); background:var(--accent); }
+    details { background:#fff; border:1px solid var(--line); margin:12px 0; padding:12px; }
+    .footer { padding:20px 60px; color:#94a3b8; background:#111827; font-size:11px; }
+    @media (max-width:900px) { .report-header{padding:38px 24px}.container{padding:24px}.kpi-grid,.report-card-grid,.grid-3,.metric-strip{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <div class="header-badge">Three Report Bundle</div>
+    <h1>{{REPORT_TITLE}}</h1>
+    <p class="subtitle">三合一交付入口 · 市场深度调研 / 全生命周期拓品战略 / 用户心智断层与需求机会</p>
+  </header>
+  <main class="container report-index">
+    {{INDEX_CARDS}}
+    <section class="section">
+      <span class="section-number">01</span><span class="section-title">数据覆盖与方法链</span>
+      {{DATA_COVERAGE}}
+    </section>
+    <section class="section">
+      <span class="section-number">02</span><span class="section-title">数据缺口</span>
+      {{DATA_GAPS}}
+    </section>
+  </main>
+  <footer class="footer">{{REPORT_FOOTER}}</footer>
+</body>
+</html>

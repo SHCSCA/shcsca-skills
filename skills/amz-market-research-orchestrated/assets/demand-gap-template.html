@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN" data-report-style="demand-gap-report-v2">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{DEMAND_REPORT_TITLE}}</title>
+  <style>
+    :root{--bg:#0b1220;--panel:#101a2e;--card:#f8fafc;--line:rgba(148,163,184,.24);--text:#e5eefb;--muted:#9fb0c3;--primary:#4da3ff;--primary-deep:#8fc5ff;--accent:#22c55e;--warn:#fbbf24;--danger:#fb7185}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.65}.report-header{padding:52px 60px 42px;background:radial-gradient(circle at top right,rgba(77,163,255,.18),transparent 34%),var(--bg);border-bottom:1px solid var(--line)}.header-badge{display:inline-block;border:1px solid var(--line);padding:4px 10px;color:var(--primary-deep);font-size:11px;letter-spacing:2px;text-transform:uppercase}.report-header h1{margin:12px 0 8px;font-size:32px;line-height:1.25;color:#fff;letter-spacing:0}.subtitle{margin:0;color:#cbd5e1;font-size:14px;max-width:980px}.header-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:24px}.header-meta-item{border:1px solid var(--line);background:rgba(255,255,255,.04);padding:12px}.header-meta-item .label{display:block;color:var(--muted);font-size:11px}.header-meta-item .value{display:block;margin-top:4px;color:#fff;font-weight:800}
+    .container{max-width:1220px;margin:0 auto;padding:34px 40px 56px}.section{position:relative;margin-bottom:24px;padding:24px;background:rgba(255,255,255,.055);border:1px solid var(--line)}.section:before{content:"";position:absolute;left:0;top:0;width:100%;height:2px;background:linear-gradient(90deg,var(--primary),transparent 72%)}.section-header{display:flex;align-items:center;gap:12px;margin-bottom:18px}.section-number{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;background:var(--primary);color:#06111f;font-weight:900}.section-title{margin:0;color:var(--primary-deep);font-size:22px;line-height:1.3}.section-desc{margin-left:auto;color:var(--muted);font-size:13px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}.kpi-card{background:var(--card);color:#1a2744;border:1px solid rgba(255,255,255,.1);padding:20px}.kpi-card:before{content:"";display:block;height:3px;background:var(--primary);margin:-20px -20px 16px}.kpi-card.success:before{background:var(--accent)}.kpi-card.warning:before{background:var(--warn)}.kpi-label{font-size:12px;color:#64748b;font-weight:800}.kpi-value{font-size:28px;color:#1a2744;font-weight:900;line-height:1.05;margin-top:8px}.kpi-sub{font-size:12px;color:#64748b;margin-top:6px}
+    .card,.quote-card,.risk-card,.opportunity-card,.comp-deep-card{background:var(--card);color:#1a2744;border:1px solid rgba(255,255,255,.14);padding:18px;margin-bottom:16px}.card-title,.chart-title{font-size:13px;font-weight:900;color:#315b86;letter-spacing:.4px;margin-bottom:12px}.chart-container{background:var(--card);color:#1a2744;border:1px solid rgba(255,255,255,.14);padding:18px;margin-bottom:16px}.mini-chart .bar-row{display:grid;grid-template-columns:170px 1fr 56px;gap:10px;align-items:center;font-size:12px;margin:8px 0}.bar{height:8px;background:#dbe6f2}.bar span{display:block;height:100%;width:var(--w);background:var(--primary)}.bar.good span{background:var(--accent)}.bar.warn span{background:var(--warn)}.bar.bad span{background:var(--danger)}
+    .evidence-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);color:#1a2744;margin-bottom:16px}.evidence-table th,.evidence-table td{border:1px solid #d9e2ee;padding:9px;text-align:left;vertical-align:top}.evidence-table th{background:#eaf3ff;color:#1d3a63}.appendix-table{font-size:12px}.quote-grid,.deep-dive-grid,.opportunity-matrix{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.quote-cn{font-size:15px;font-weight:800;color:#1f3d63}.quote-origin{margin-top:8px;font-size:12px;color:#64748b}.insight-box{border-left:4px solid var(--primary);background:rgba(120,168,255,.12);padding:14px;margin:14px 0}.conclusion{background:#1a2744;color:#fff;padding:24px;margin-top:18px}.data-lineage{overflow-x:auto}.tag{display:inline-block;background:#eaf3ff;color:#315b86;padding:2px 8px;margin:2px;font-size:11px;font-weight:800}.metric-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.metric{background:var(--card);color:#1a2744;padding:14px}.grid-2,.grid-3,.risk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}details{background:rgba(255,255,255,.06);border:1px solid var(--line);padding:12px;margin:12px 0}.footer{padding:20px 60px;color:#94a3b8;background:#050914;font-size:11px}
+    @media(max-width:920px){.report-header{padding:38px 24px}.container{padding:24px}.header-meta,.kpi-grid,.quote-grid,.deep-dive-grid,.opportunity-matrix,.grid-2,.grid-3,.risk-grid,.metric-strip{grid-template-columns:1fr}.section-desc{margin-left:0}.section-header{align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <div class="header-badge">Demand Gap Analysis</div>
+    <h1>{{DEMAND_REPORT_TITLE}}</h1>
+    <p class="subtitle">用 $APPEALS + Gap Analysis + KANO × JTBD，把评论和搜索证据转成可执行的需求机会。</p>
+    <div class="header-meta">
+      <div class="header-meta-item"><span class="label">报告日期</span><span class="value">{{REPORT_DATE}}</span></div>
+      <div class="header-meta-item"><span class="label">目标市场</span><span class="value">{{TARGET_MARKET}}</span></div>
+      <div class="header-meta-item"><span class="label">核心判断</span><span class="value">{{DECISION}}</span></div>
+      <div class="header-meta-item"><span class="label">source_id</span><span class="value">{{PRIMARY_SOURCE_ID}}</span></div>
+    </div>
+  </header>
+  <main class="container">
+    <section id="target-anchor" class="section"><div class="section-header"><span class="section-number">01</span><h2 class="section-title">目标 ASIN/研究对象锚点</h2><span class="section-desc">研究边界</span></div>{{TARGET_ANCHOR}}</section>
+    <section id="decision-board" class="section"><div class="section-header"><span class="section-number">02</span><h2 class="section-title">决策看板</h2><span class="section-desc">执行摘要</span></div>{{DECISION_BOARD}}</section>
+    <section id="appeals-map" class="section"><div class="section-header"><span class="section-number">03</span><h2 class="section-title">$APPEALS 痛点全景</h2><span class="section-desc">维度 → 痛点 → 动作</span></div>{{APPEALS_MAP}}</section>
+    <section id="gap-analysis" class="section"><div class="section-header"><span class="section-number">04</span><h2 class="section-title">满意度鸿沟</h2><span class="section-desc">Gap Analysis 差距分析</span></div>{{GAP_ANALYSIS}}</section>
+    <section id="kano-jtbd" class="section"><div class="section-header"><span class="section-number">05</span><h2 class="section-title">KANO × JTBD 机会矩阵</h2><span class="section-desc">场景化机会</span></div>{{KANO_JTBD_MATRIX}}</section>
+    <section id="voice-theater" class="section"><div class="section-header"><span class="section-number">06</span><h2 class="section-title">用户原声</h2><span class="section-desc">真实评论剧场</span></div>{{VOICE_THEATER}}</section>
+    <section id="priority-table" class="section"><div class="section-header"><span class="section-number">07</span><h2 class="section-title">需求优先级与证据表</h2><span class="section-desc">从洞察到动作</span></div>{{PRIORITY_TABLE}}<div class="data-lineage"><table class="evidence-table appendix-table">{{DEMAND_LINEAGE}}</table></div></section>
+  </main>
+  <footer class="footer">{{REPORT_FOOTER}}</footer>
+</body>
+</html>

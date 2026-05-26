@@ -1,20 +1,20 @@
 ---
 name: amz-market-research-orchestrated
-description: "Amazon / 电商市场调研可执行 v1 Skill。用户要求调研市场、品类、赛道、竞品格局、用户需求、产品迭代、新细分机会、TikTok 验证或 1688 供应链成本时使用。以 Sorftime MCP 为主数据源，Firecrawl 为公开网页补充，生成可审计的 Data Pack、Analysis Plan、HTML 和 Markdown 报告。"
+description: "Amazon / 电商市场调研可执行 v2 Skill。用户要求调研市场、品类、赛道、竞品格局、用户需求、产品迭代、新细分机会、TikTok 验证或 1688 供应链成本时使用。以 Sorftime MCP 为主数据源，Firecrawl 为公开网页补充，生成可审计的 Data Pack、Analysis Plan、三份 HTML 和 Markdown 报告。"
 ---
 
-# Amazon 市场调研总控 v1
+# Amazon 市场调研总控 v2
 
 ## 定位
 
-`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研 Skill。它不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v1 内置最小可执行流程：
+`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研 Skill。它不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v2 内置最小可执行流程：
 
 1. 澄清调研目的和数据深度。
 2. 生成 `OrchestrationBrief`。
 3. 用 Sorftime MCP 抓 Amazon / TikTok Shop / 1688 主数据。
 4. 用 Firecrawl 抓公开报告、品牌站、测评、法规和召回信息。
 5. 标准化为 `data_pack.json`，交叉验证、去重、补中文映射，并保留 `source_id`、质量评分和数据缺口。
-6. 生成 `analysis_plan.json`、HTML 报告、Markdown 报告、lineage 和交付结果。
+6. 生成 `analysis_plan.json`、三份 HTML 报告、Markdown 报告、lineage 和交付结果。
 7. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开。
 
 详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)。
@@ -37,7 +37,7 @@ description: "Amazon / 电商市场调研可执行 v1 Skill。用户要求调研
 
 1. 先明确决策，再选择数据深度，再拿数据，再下结论。
 2. Sorftime 是主数据源；Firecrawl 只能作为公开网页补充和兜底。
-3. 数据广度不等于深度；v1 必须优先打穿 Amazon 产品池、评论、关键词、趋势和供应链证据。
+3. 数据广度不等于深度；v2 必须优先打穿 Amazon 产品池、评论、关键词、趋势和供应链证据。
 4. 所有关键结论必须追溯到 `data_pack.json` 的 `source_id`，或明确标注为 AI 推理。
 5. 报告不能把 Sorftime、第三方或公开网页估算写成 Amazon 官方销量。
 6. 缺少成本、退货率、FBA 费用或广告数据时，只写成本门槛和利润红线，不写伪利润表。
@@ -46,15 +46,19 @@ description: "Amazon / 电商市场调研可执行 v1 Skill。用户要求调研
 
 ## Step 0: 解析并补齐用户输入
 
-优先从用户原话中解析，不要机械提问。只有以下信息缺失且会影响执行时才问：
+完整三报告调研启动前必须先做“调研确认卡”。优先从用户原话中解析，但必须让用户明确确认；如果用户没有明确答复，不进入 Sorftime / Firecrawl 采集和报告生成。
 
 ```text
-为了把调研做成可审计的数据报告，我需要确认 4 件事：
+为了把调研做成可审计的三报告交付包，我需要你明确确认下面信息：
 
-1. 研究对象：关键词、ASIN、品牌、类目、产品想法或文件？
-2. 主要决策：新品类进入 / 产品迭代 / 细分机会 / 竞品差异化 / VOC / 供应链利润 / 汇报？
-3. 目标市场：默认 Amazon US + TikTok Shop US + 1688 中国供应端，是否调整？
-4. 数据深度：快速版 / 标准版 / 深度版？
+1. 研究对象：关键词、ASIN、品牌、类目、产品想法或文件。
+2. 主要决策：新品类进入 / 产品迭代 / 细分机会 / 竞品差异化 / VOC / 供应链利润 / 汇报。
+3. 目标市场：Amazon 站点、TikTok Shop 站点、供应链市场。
+4. 数据深度：快速版 / 标准版 / 深度版。
+5. 输出方向：三份报告都要，还是更重市场判断 / 生命周期拓品 / 用户需求断层中的某一份。
+6. 约束条件：目标价格带、禁做方向、已知竞品、已有成本、必须包含或排除的信息。
+
+请直接按 1-6 回复；我会基于你的答复生成 OrchestrationBrief 再开始采集。
 ```
 
 默认值：
@@ -62,9 +66,16 @@ description: "Amazon / 电商市场调研可执行 v1 Skill。用户要求调研
 - 目标市场：Amazon US。
 - TikTok Shop：US。
 - 1688：CN 供应端。
-- 输出：`HTML + Markdown + Data Pack`。
+- 输出：`三份 HTML + Markdown + Data Pack`，入口页为 `output/report.html`。
 - 语言和风格：中文、本土化、老练直接、面向跨境卖家决策。
 - `primary purpose` 只能有一个，`secondary purposes` 最多两个。
+
+显式确认规则：
+
+- 如果用户已经在一句话里给齐 1-6，先复述成确认卡，并要求用户回复“确认”或修改点。
+- 如果用户只给研究对象，必须先问清主要决策、数据深度和输出方向。
+- 如果用户要“直接开始”，但关键字段缺失，仍需先让用户补齐；不能用默认值静默启动完整三报告。
+- 默认值只能作为推荐项呈现，不能替代用户明确答复。
 
 不要默认索取：
 
@@ -85,7 +96,7 @@ description: "Amazon / 电商市场调研可执行 v1 Skill。用户要求调研
 
 ## Step 2: 生成 OrchestrationBrief
 
-使用 [orchestration-brief-contract.md](references/orchestration-brief-contract.md) 的 v1 格式。Brief 必须包含：
+使用 [orchestration-brief-contract.md](references/orchestration-brief-contract.md) 的格式。Brief 必须包含：
 
 - `task_id`
 - `research_object`
@@ -195,18 +206,21 @@ reports/{task_id}/data/normalized/cross_validated_data_pack.json
 
 ## Step 6: 分析模块
 
-按任务目的组合方法链，输出 `analysis_plan.json`。v1 固定模块：
+按任务目的组合方法链，输出 `analysis_plan.json`。v2 固定为三条报告方法链：
 
-1. 首页结论：一句话 Go / Watch / No-Go。
-2. 市场大盘：类目体量、趋势、集中度、价格带、季节性。
-3. 关键词需求：搜索量、趋势、延伸词、自然位竞品。
-4. Top 竞品：价格、评分、评论数、月销量估算、变体、卖点和弱点。
-5. Review / VOC：差评主题、好评动机、购买阻力、需求强度。
-6. TikTok 验证：相似产品、销量趋势、带货视频、达人、内容打法。
-7. 1688 供应链：采购成本带、MOQ、同款供给、可复制风险。
-8. 机会矩阵：细分人群、场景、价格带、功能 wedge、内容 wedge。
-9. Go / Watch / No-Go：进入条件、停止条件、下一步验证动作。
-10. 数据血缘附录：source_id、工具、时间、限制。
+1. 市场深度调研：大盘仪表盘、关键词需求、Top 竞品、VOC 痛点/爽点、标杆竞品深挖、机会判断、TikTok 验证、1688 供应链、Web 风险、数据血缘。
+2. 产品全生命周期拓品战略：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、SKU 执行总表、Bundle 策略、30/60/90 天路线图、风险矩阵、市场数据验证。
+3. 用户心智断层与需求机会：目标 ASIN/研究对象锚点、决策看板、`$APPEALS` 痛点全景、满意度鸿沟、`KANO × JTBD` 机会矩阵、用户原声、需求优先级与证据表。
+
+推荐额外写入：
+
+```text
+reports/{task_id}/analysis/
+  lifecycle_strategy.json
+  demand_gap.json
+```
+
+如果这两个文件缺失，HTML 渲染器会从 Data Pack 推导基础区块，但必须在 `data_gaps` 或 `analysis_plan.limitations` 标注分析深度不足。
 
 方法链必须记录：
 
@@ -237,33 +251,32 @@ reports/{task_id}/
     voc.json
     opportunity.json
     profitability.json
+    lifecycle_strategy.json
+    demand_gap.json
   output/
     report.html
+    market-depth-report.html
+    lifecycle-strategy-report.html
+    demand-gap-report.html
     report.md
     delivery_result.json
 ```
 
 报告默认要求：
 
-- HTML 必须按 [html-report-design-contract.md](references/html-report-design-contract.md) 生成完整战略情报大屏，优先使用 `assets/report-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
+- HTML 必须按 [html-report-design-contract.md](references/html-report-design-contract.md) 生成三报告交付包：`report.html` 是入口页，三份子报告分别是 `market-depth-report.html`、`lifecycle-strategy-report.html`、`demand-gap-report.html`。
+- HTML 优先使用 `assets/report-index-template.html`、`assets/market-depth-template.html`、`assets/lifecycle-strategy-template.html`、`assets/demand-gap-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
 - HTML 可离线打开，不依赖外部 CDN 才能显示核心内容、布局、表格和关键判断。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
 - HTML 和 Markdown 都要有数据范围、质量评分、缺口和限制。
 - 聊天里只给摘要和路径，不粘贴完整报告。
 
-HTML 首屏必须包含：
-
-- 深色报告头：报告标题、目标市场、数据深度、核心判断。
-- KPI 仪表盘：市场规模、需求、竞争、价格带、数据质量、证据数量和机会分数。
-- 一句话 `Go / Watch / No-Go` 与核心机会。
-
 HTML 主体必须使用真实结构化组件：
 
-- `<section>` 编号章节。
-- KPI cards、CSS mini charts、evidence tables、ASIN deep-dive cards、VOC quote cards、opportunity cards、risk cards、roadmap/timeline。
-- 竞品、关键词、1688、TikTok、Web、数据血缘和完整数据附录必须用 `<table>`，不能用 Markdown 表格文本。
-- 关键结论旁必须显示 `source_id`。
-- 页面必须包含：数据覆盖、市场大盘、关键词需求、Top 竞品、竞品深挖、Review / VOC、TikTok 验证、1688 供应链、Web / 风险补充、机会矩阵、Go / Watch / No-Go、数据缺口、完整数据附录、数据血缘。
+- 四个 HTML 都必须是 standalone HTML document，并带对应 `data-report-style`。
+- 三份子报告必须使用 `<section>` 编号章节、KPI cards、CSS mini charts、evidence tables、cards、risk/roadmap/timeline 等结构化组件。
+- 竞品、关键词、1688、TikTok、Web、SKU、KANO/JTBD、数据血缘和附录必须用 `<table>`，不能用 Markdown 表格文本。
+- 关键结论旁必须显示 `source_id`；入口页必须链接三份子报告。
 - 能展示的数据尽量进入 HTML：主报告展示重点和分析，长表进入 `<details>` 折叠附录；不要只展示 Top 几条后把其余数据藏在 JSON 里。
 
 推荐生成顺序：
@@ -287,7 +300,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py --dir reports/{task_id}
 ```
 
-5. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留 `data-report-style="strategic-dashboard-v1"` 和所有必备章节。
+5. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
 
 完成后运行：
 
@@ -307,14 +320,15 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 - 不因为 TikTok、1688 或 Firecrawl 失败就删除模块；保留模块并说明缺口。
 - 所有关键结论必须能追溯到 `source_id`。
 - 所有关键方法必须能追溯到 `method_chain`。
-- `report.html` 必须包含 `data-report-style="strategic-dashboard-v1"`，并通过 HTML 设计门禁。
-- `report.html` 不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
+- `report.html` 必须包含 `data-report-style="three-report-index-v2"`，并链接三份子报告。
+- 三份子报告必须分别包含 `data-report-style="market-depth-report-v2"`、`data-report-style="lifecycle-strategy-report-v2"`、`data-report-style="demand-gap-report-v2"`。
+- 四个 HTML 都不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
 - 输出默认全中文，仅保留品牌名、ASIN、平台名、工具名和必要英文专有名词。
 
 ## 结束语模板
 
 ```text
-报告已生成：/absolute/path/to/report.html
+报告入口已生成：/absolute/path/to/report.html
 
 核心判断：Go / Watch / No-Go
 任务目的：
@@ -325,6 +339,9 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 最大风险：
 数据质量：
 输出文件：
+- /absolute/path/to/market-depth-report.html
+- /absolute/path/to/lifecycle-strategy-report.html
+- /absolute/path/to/demand-gap-report.html
 ```
 
 不要在聊天中粘贴完整 HTML。

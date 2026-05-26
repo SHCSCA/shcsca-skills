@@ -1,10 +1,10 @@
-# Four-Plane Architecture v1
+# Four-Plane Architecture v2
 
-The original architecture separated market research into four planes. v1 keeps the language, but ships a self-contained implementation path instead of depending on missing external orchestrator skills.
+The original architecture separated market research into four planes. v2 keeps the language, but ships a self-contained implementation path instead of depending on missing external orchestrator skills.
 
 ## 1. Data Source Plane
 
-Built into this skill for v1.
+Built into this skill for v2.
 
 Primary providers:
 
@@ -21,7 +21,7 @@ Responsibilities:
 
 ## 2. Methodology Plane
 
-Built into this skill for v1.
+Built into this skill for v2.
 
 Responsibilities:
 
@@ -48,7 +48,7 @@ Responsibilities:
 
 ## 4. Output Plane
 
-Built into this skill for v1.
+Built into this skill for v2.
 
 Responsibilities:
 
@@ -58,10 +58,10 @@ Responsibilities:
 
 Does not:
 
-- Write directly to Feishu, Notion, Obsidian, or other knowledge bases in v1.
+- Write directly to Feishu, Notion, Obsidian, or other knowledge bases in v2.
 - Hide missing data for presentation polish.
 
-## v1 Flow
+## v2 Flow
 
 ```text
 User request

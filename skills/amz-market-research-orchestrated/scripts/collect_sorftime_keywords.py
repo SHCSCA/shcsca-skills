@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect paginated Sorftime keyword evidence into a v1 report Data Pack."""
+"""Collect paginated Sorftime keyword evidence into a generic report Data Pack."""
 
 from __future__ import annotations
 
@@ -15,20 +15,6 @@ from typing import Any
 
 
 ENTITY_KEY = "keywords"
-DEFAULT_SEEDS = [
-    "wall sconce",
-    "wall sconces",
-    "battery operated wall sconce",
-    "rechargeable wall sconce",
-    "outdoor wall light",
-    "outdoor wall lantern",
-    "picture lights for wall",
-    "vanity lights",
-    "bathroom light fixtures",
-    "wall lights",
-]
-
-
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -178,9 +164,6 @@ def infer_seeds(data_pack: dict[str, Any], provided: list[str]) -> list[str]:
         if len(seeds) >= 12:
             break
 
-    for seed in DEFAULT_SEEDS:
-        if seed not in seeds:
-            seeds.append(seed)
     return seeds[:20]
 
 

@@ -1,6 +1,6 @@
 # Acceptance Scenarios
 
-Use these scenarios when checking whether `amz-market-research-orchestrated` v1 was followed correctly on a real research run.
+Use these scenarios when checking whether `amz-market-research-orchestrated` v2 was followed correctly on a real research run.
 
 ## Scenario 1: New Market Entry
 
@@ -54,7 +54,7 @@ Required evidence:
 - Final decision confidence is reduced when the missing module affects the purpose
 - `validate_market_research_deliverables.py` still passes if lineage and required files are intact
 
-## Scenario 4: Executive HTML Report
+## Scenario 4: Three-Part Executive HTML Bundle
 
 Input:
 
@@ -64,18 +64,23 @@ Input:
 
 Required evidence:
 
-- `report.html` uses `data-report-style="strategic-dashboard-v1"`
-- HTML is a designed dashboard, not a Markdown wrapper
-- First viewport contains report title, market, depth, data quality, and Go / Watch / No-Go
-- Required modules remain visible: 数据覆盖、市场大盘、关键词需求、Top 竞品、竞品深挖、Review / VOC、TikTok 验证、1688 供应链、Web / 风险补充、机会矩阵、数据缺口、完整数据附录、数据血缘
-- Competitor, keyword, supplier, TikTok, web, appendix, and lineage evidence are rendered as HTML tables
+- `report.html` uses `data-report-style="three-report-index-v2"` and links to all three child reports
+- `market-depth-report.html` uses `data-report-style="market-depth-report-v2"`
+- `lifecycle-strategy-report.html` uses `data-report-style="lifecycle-strategy-report-v2"`
+- `demand-gap-report.html` uses `data-report-style="demand-gap-report-v2"`
+- HTML files are designed reports, not Markdown wrappers
+- Entry page contains report title, market, depth, data quality, data gaps, and Go / Watch / No-Go
+- Market report modules remain visible: 大盘仪表盘、关键词需求、Top 竞品、VOC 痛点/爽点、标杆竞品深挖、机会判断、TikTok 验证、1688 供应链、Web 风险、数据血缘
+- Lifecycle report modules remain visible: 战略仪表盘、用户画像、生命周期旅程、四维拓品生态、SKU 执行总表、Bundle 策略、30/60/90 天路线图、风险矩阵、市场数据验证
+- Demand-gap report modules remain visible: 目标 ASIN/研究对象锚点、决策看板、$APPEALS 痛点全景、满意度鸿沟、KANO × JTBD 机会矩阵、用户原声、需求优先级与证据表
+- Competitor, keyword, supplier, TikTok, web, SKU, KANO/JTBD, appendix, and lineage evidence are rendered as HTML tables
 - Keyword tables include `关键词中文`, `英文关键词`, `相关性`, `中文意图`, and `source_id`
 - Full keyword appendix shows at least 1000 deduped keyword samples for standard/deep reports
 - Competitor tables include `中文定位` and `英文标题`
 - Data coverage visibly shows cross-validation and dedupe counts
 - ASIN deep dives show image if available, traffic terms, trend, variation samples, and source IDs
 - VOC includes theme chart, star distribution, quote cards, and review evidence table
-- Full appendix exposes all renderable Data Pack entity groups with `<details>` blocks
+- Full appendix exposes renderable Data Pack entity groups with `<details>` blocks in the market report
 - Important conclusions cite `source_id` in visible content
 - Core content works offline without CDN
 
@@ -89,4 +94,4 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 
 Passing the validator does not prove the business conclusion is correct; it proves the report is structurally auditable.
 
-For HTML, passing the validator also proves the file is not a raw Markdown shell, contains the required dashboard modules, and meets the 1000-keyword minimum for standard/deep reports.
+For HTML, passing the validator also proves the bundle is not a raw Markdown shell, contains the required three-report modules, and meets the 1000-keyword minimum for standard/deep reports.

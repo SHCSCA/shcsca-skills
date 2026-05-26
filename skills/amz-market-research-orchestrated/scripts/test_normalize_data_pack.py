@@ -35,8 +35,8 @@ class NormalizeDataPackTest(unittest.TestCase):
                         {"source_id": "src_detail", "provider": "sorftime", "tool": "product_detail", "fetched_at": "now", "confidence": 0.9},
                     ],
                     "products": [
-                        {"asin": "B0ABC", "title": "Rechargeable Wall Sconce Set of 2", "price": 39.99, "source_id": "src_search", "provider": "sorftime"},
-                        {"asin": "B0ABC", "title": "Rechargeable Wall Sconce Set of 2 with Remote", "review_count": 120, "source_id": "src_detail", "provider": "sorftime"},
+                        {"asin": "B0ABC", "title": "Interactive AI Plush Toy with Voice Module", "price": 39.99, "source_id": "src_search", "provider": "sorftime"},
+                        {"asin": "B0ABC", "title": "Interactive AI Plush Toy with Voice Module and Parent App", "review_count": 120, "source_id": "src_detail", "provider": "sorftime"},
                     ],
                     "keywords": [],
                     "categories": [],
@@ -58,7 +58,8 @@ class NormalizeDataPackTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["source_ids"], ["src_search", "src_detail"])
             self.assertEqual(product["validation"]["evidence_source_count"], 2)
-            self.assertIn("充电式", product["title_cn"])
+            self.assertIn("Interactive AI Plush Toy", product["title_cn"])
+            self.assertNotIn("壁灯", product["title_cn"])
 
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -70,10 +71,11 @@ class NormalizeDataPackTest(unittest.TestCase):
                         {"source_id": "src_kw_1", "provider": "sorftime", "tool": "keyword_detail", "fetched_at": "now", "confidence": 0.8},
                         {"source_id": "src_kw_2", "provider": "sorftime", "tool": "category_keywords", "fetched_at": "now", "confidence": 0.8},
                     ],
+                    "research_object": {"type": "keyword", "value": "ai plush toy"},
                     "products": [],
                     "keywords": [
-                        {"keyword": "battery operated wall sconce", "monthly_search_volume": 1000, "source_id": "src_kw_1", "provider": "sorftime"},
-                        {"keyword": "Battery Operated Wall Sconce", "weekly_search_volume": 200, "recommended_cpc": 0.7, "source_id": "src_kw_2", "provider": "sorftime"},
+                        {"keyword": "ai plush toy", "monthly_search_volume": 1000, "source_id": "src_kw_1", "provider": "sorftime"},
+                        {"keyword": "AI Plush Toy", "weekly_search_volume": 200, "recommended_cpc": 0.7, "source_id": "src_kw_2", "provider": "sorftime"},
                     ],
                     "categories": [],
                     "reviews": [],
@@ -92,9 +94,10 @@ class NormalizeDataPackTest(unittest.TestCase):
             data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
             self.assertEqual(len(data_pack["keywords"]), 1)
             keyword = data_pack["keywords"][0]
-            self.assertEqual(keyword["keyword_cn"], "电池供电壁灯")
+            self.assertEqual(keyword["keyword_cn"], "ai plush toy")
             self.assertEqual(keyword["relevance_cn"], "高相关")
             self.assertTrue(keyword["is_core_relevant"])
+            self.assertNotIn("壁灯", keyword["keyword_cn"])
             self.assertEqual(keyword["source_ids"], ["src_kw_1", "src_kw_2"])
             self.assertTrue(data_pack["normalization"]["deduped"])
 
@@ -110,8 +113,8 @@ class NormalizeDataPackTest(unittest.TestCase):
                     ],
                     "products": [],
                     "keywords": [
-                        {"keyword": "wall sconce", "monthly_search_volume": 100, "source_id": "src_kw_1", "provider": "sorftime"},
-                        {"keyword": "Wall Sconce", "weekly_search_volume": 20, "source_id": "src_kw_2", "provider": "sorftime"},
+                        {"keyword": "ai plush toy", "monthly_search_volume": 100, "source_id": "src_kw_1", "provider": "sorftime"},
+                        {"keyword": "AI Plush Toy", "weekly_search_volume": 20, "source_id": "src_kw_2", "provider": "sorftime"},
                     ],
                     "categories": [],
                     "reviews": [],
@@ -146,8 +149,8 @@ class NormalizeDataPackTest(unittest.TestCase):
                     ],
                     "products": [],
                     "keywords": [
-                        {"keyword": "wall sconce", "source_type": "keyword_detail", "monthly_search_volume": 59322, "source_id": "src_kw", "provider": "sorftime"},
-                        {"keyword": "wall sconce", "source_type": "product_traffic_terms", "asin": "B0ABC", "traffic_position": "自然位", "source_id": "src_traffic", "provider": "sorftime"},
+                        {"keyword": "ai plush toy", "source_type": "keyword_detail", "monthly_search_volume": 59322, "source_id": "src_kw", "provider": "sorftime"},
+                        {"keyword": "ai plush toy", "source_type": "product_traffic_terms", "asin": "B0ABC", "traffic_position": "自然位", "source_id": "src_traffic", "provider": "sorftime"},
                     ],
                     "categories": [],
                     "reviews": [],

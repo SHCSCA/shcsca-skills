@@ -1,4 +1,4 @@
-# Research Scope Menu v1
+# Research Scope Menu v2
 
 Use this menu only when the user has not already specified purpose, market, depth, or output.
 
@@ -40,7 +40,7 @@ Choose one primary purpose and at most two secondary purposes.
 4. 为老板/客户汇报强化视觉和摘要
 ```
 
-v1 does not write to Feishu, Notion, or Obsidian. Keep those as future delivery targets.
+v2 does not write to Feishu, Notion, or Obsidian. Keep those as future delivery targets.
 
 ## Scope to DataNeed Mapping
 

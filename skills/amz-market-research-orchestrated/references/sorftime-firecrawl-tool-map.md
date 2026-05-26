@@ -1,6 +1,6 @@
 # Sorftime + Firecrawl Tool Map
 
-This file defines the v1 data-source map for `amz-market-research-orchestrated`.
+This file defines the v2 data-source map for `amz-market-research-orchestrated`.
 
 Do not store MCP keys in this repository. Use the MCP tools already configured in the runtime, or ask the user to configure Sorftime / Firecrawl only when the tools are unavailable.
 
@@ -11,6 +11,8 @@ Do not store MCP keys in this repository. Use the MCP tools already configured i
 | Sorftime MCP | Primary ecommerce data source | Amazon, TikTok Shop, 1688, and optional Walmart data. |
 | Firecrawl MCP | Public web evidence and fallback | Reports, brand sites, review media, policy pages, recalls, public retailer pages. |
 | User files | Optional supplemental evidence | Cost sheets, supplier quotes, internal ads data, exported reviews. |
+
+Runtime rule: use the Sorftime and Firecrawl MCP tools already configured in the active agent environment. Do not write API keys or MCP server URLs into this repository. If Firecrawl is unavailable in the runtime, keep `web_documents` empty and write a `data_gaps` entry instead of dropping the Web/risk section.
 
 ## Amazon Tools
 
@@ -33,13 +35,15 @@ For standard/deep keyword depth, page `category_keywords` and `keyword_extends` 
 | Product detail | `tiktok_product_detail`, `tiktok_product_trend` | TikTok product IDs are found. |
 | Video and creator evidence | `tiktok_product_video`, `tiktok_product_video_author`, `tiktok_author` | Deep reports and content/channel strategy. |
 
+For v2 three-report output, TikTok evidence feeds both `market-depth-report.html` and `demand-gap-report.html`: treat it as content/channel and scene evidence, not Amazon purchase proof.
+
 ## 1688 Tool
 
 | Need | Preferred Sorftime tool | Required when |
 |---|---|---|
 | Supplier and cost proxy | `ali1688_similar_product` | Standard/deep reports and supply/profit validation. |
 
-Use 1688 data as a cost and supply maturity proxy. Do not treat listed supplier prices as landed cost.
+Use 1688 data as a cost and supply maturity proxy. Do not treat listed supplier prices as landed cost. In v2, `ali1688_similar_product` also feeds the lifecycle report's SKU supply-chain and risk sections.
 
 ## Optional Walmart Tools
 
@@ -47,7 +51,7 @@ Use 1688 data as a cost and supply maturity proxy. Do not treat listed supplier 
 |---|---|
 | Retail channel comparison | `walmart_keyword_search_results`, `walmart_product_detail_by_product_id`, `walmart_product_trend_by_product_id`, `walmart_category_report_by_node_id` |
 
-Walmart is optional in v1. Use it when the category is strongly mass-retail driven or when Amazon evidence is ambiguous.
+Walmart is optional in v2. Use it when the category is strongly mass-retail driven or when Amazon evidence is ambiguous.
 
 ## Firecrawl Tools
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-validate, dedupe, and enrich a v1 market-research data_pack.json."""
+"""Cross-validate, dedupe, and enrich a generic market-research data_pack.json."""
 
 from __future__ import annotations
 
@@ -22,113 +22,20 @@ ENTITY_KEYS = [
     "web_documents",
 ]
 
-TITLE_TERMS = [
-    ("battery operated wall sconce", "电池供电壁灯"),
-    ("rechargeable wall sconce", "充电式壁灯"),
-    ("wall sconces", "壁灯"),
-    ("wall sconce", "壁灯"),
-    ("wall light", "墙面灯"),
-    ("wall lamp", "壁灯"),
-    ("picture light", "画作照明灯"),
-    ("gallery light", "画廊照明灯"),
-    ("art display light", "艺术展示灯"),
-    ("outdoor wall light", "户外壁灯"),
-    ("outdoor wall lantern", "户外墙灯"),
-    ("porch light", "门廊灯"),
-    ("vanity light", "浴室镜前灯"),
-    ("bathroom light", "浴室灯"),
-    ("set of 2", "两只装"),
-    ("2 pack", "两只装"),
-    ("remote", "遥控"),
-    ("dimmable", "可调光"),
-    ("cordless", "免布线"),
-    ("wireless", "无线"),
-    ("waterproof", "防水"),
-    ("glass shade", "玻璃灯罩"),
-    ("gold", "金色"),
-    ("black", "黑色"),
-    ("led", "LED"),
-    ("led lights", "LED灯"),
-    ("strip lights", "灯带"),
-    ("under cabinet lighting", "橱柜灯"),
-    ("closet lights", "衣柜灯"),
-    ("night light", "夜灯"),
-    ("motion sensor", "人体感应"),
-    ("warm white", "暖白光"),
-    ("color temperature", "色温"),
-    ("front door", "前门"),
-    ("hallway", "走廊"),
-    ("bedroom", "卧室"),
-    ("living room", "客厅"),
-]
-
-KEYWORD_MAP = {
-    "wall sconce": "壁灯",
-    "wall sconces": "壁灯",
-    "wall scones": "壁灯",
-    "sconce lights": "壁灯",
-    "light sconces": "壁灯",
-    "wall sconce set of two": "两只装壁灯",
-    "wall sconces set of two": "两只装壁灯",
-    "wall sconces set of 2": "两只装壁灯",
-    "sconces set of 2": "两只装壁灯",
-    "sconces wall decor set of 2": "两只装装饰壁灯",
-    "battery operated wall sconce": "电池供电壁灯",
-    "battery operated wall sconces": "电池供电壁灯",
-    "wall sconces battery operated": "电池供电壁灯",
-    "rechargeable wall sconce": "充电式壁灯",
-    "outdoor wall light": "户外壁灯",
-    "outdoor wall lantern": "户外墙灯",
-    "picture light": "画作照明灯",
-    "picture lights for wall": "画作照明灯",
-    "gallery light": "画廊照明灯",
-    "wall light": "墙面灯",
-    "wall lights": "墙面灯",
-    "wall sconce light": "壁灯",
-    "wall lamp": "壁灯",
-    "sconce": "壁灯",
-    "sconces": "壁灯",
-    "lampara de pared": "壁灯",
-    "bathroom light fixtures": "浴室灯具",
-    "bathroom lighting fixtures over mirror": "浴室镜前灯",
-    "bathroom vanity light": "浴室镜前灯",
-    "vanity lights for bathroom": "浴室镜前灯",
-    "vanity lights": "镜前灯",
-    "wall decor": "墙面装饰",
-    "wall decor for bedroom": "卧室墙面装饰",
-    "living room wall decor": "客厅墙面装饰",
-    "bedroom wall sconces": "卧室壁灯",
-    "wall sconces for bedroom": "卧室壁灯",
-    "room decor": "房间装饰",
-    "led lights": "LED灯",
-    "led strip lights": "LED灯带",
-    "strip lights": "灯带",
-    "night light": "夜灯",
-    "night lights": "夜灯",
-    "under cabinet lighting": "橱柜灯",
-    "closet lights": "衣柜灯",
-    "motion sensor light": "人体感应灯",
-}
-
-SEGMENT_CN = {
-    "picture/gallery light": "画作/画廊照明",
-    "outdoor wall light": "户外壁灯",
-    "vanity light": "浴室镜前灯",
-    "rechargeable wall sconce": "充电式壁灯",
-    "general wall sconce": "通用壁灯",
-    "night light": "夜灯",
-    "out-of-scope wall light": "非目标泛灯具",
-}
-
 THEME_CN = {
+    "performance": "性能/效果",
+    "privacy": "隐私/信任",
+    "quality": "质量/耐用",
+    "durability": "质量/耐用",
+    "usability": "易用性",
+    "price": "价格/订阅",
+    "shipping": "物流/包装",
+    "support": "售后/客服",
+    "safety": "安全/合规",
     "installation_mounting": "安装/固定",
     "battery_charging": "电池/充电",
-    "brightness_color": "亮度/色温",
-    "remote_timer_controls": "遥控/定时",
     "quality_durability": "质量/耐用",
     "size_finish_design": "尺寸/外观",
-    "outdoor_weather": "户外/耐候",
-    "glass_damage": "玻璃/破损",
 }
 
 
@@ -271,107 +178,123 @@ def keyword_dedupe_key(item: dict[str, Any]) -> str:
     return f"market|{keyword}"
 
 
+STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+    "set",
+    "pack",
+    "pcs",
+    "piece",
+    "pieces",
+}
+
+
+def tokens(value: Any) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized_key(value))
+        if len(token) > 1 and token not in STOP_WORDS
+    }
+
+
+def infer_seed_terms(data_pack: dict[str, Any]) -> list[str]:
+    seeds: list[str] = []
+
+    def add(value: Any) -> None:
+        text = normalized_key(value)
+        if text and text not in seeds:
+            seeds.append(text)
+
+    research_object = data_pack.get("research_object") or {}
+    if isinstance(research_object, dict):
+        add(research_object.get("value"))
+        for key in ("seed_keywords", "seed_asins"):
+            for value in research_object.get(key) or []:
+                add(value)
+    else:
+        add(research_object)
+
+    brief = data_pack.get("brief") or {}
+    brief_object = brief.get("research_object") if isinstance(brief, dict) else {}
+    if isinstance(brief_object, dict):
+        add(brief_object.get("value"))
+        for value in brief_object.get("seed_keywords") or []:
+            add(value)
+
+    for keyword in data_pack.get("keywords") or []:
+        if keyword.get("source_type") == "keyword_detail":
+            add(keyword.get("keyword"))
+    return seeds
+
+
 def keyword_cn(keyword: Any) -> str:
-    text = normalized_key(keyword)
-    if text in KEYWORD_MAP:
-        return KEYWORD_MAP[text]
-    translated = text
-    for source, target in sorted(KEYWORD_MAP.items(), key=lambda item: len(item[0]), reverse=True):
-        translated = translated.replace(source, target)
-    if translated != text:
-        return translated
-    for source, target in TITLE_TERMS:
-        translated = translated.replace(source, target)
-    return translated if translated != text else "待人工翻译"
+    text = normalize_text(keyword)
+    return text or "待补充关键词"
 
 
 def keyword_intent_cn(keyword: Any) -> str:
     text = normalized_key(keyword)
-    if any(term in text for term in ["battery", "rechargeable", "cordless", "wireless"]):
-        return "免布线/充电需求"
-    if any(term in text for term in ["outdoor", "porch", "lantern", "waterproof"]):
-        return "户外照明/耐候需求"
-    if any(term in text for term in ["picture", "gallery", "art"]):
-        return "画作/装饰照明需求"
-    if any(term in text for term in ["vanity", "bathroom"]):
-        return "浴室镜前灯需求"
-    if any(term in text for term in ["decor", "room"]):
-        return "家居装饰泛需求"
-    if any(term in text for term in ["led lights", "strip lights", "under cabinet", "night light", "closet"]):
-        return "相邻照明泛流量"
-    return "壁灯泛品类需求"
+    if any(term in text for term in ["gift", "bundle", "set", "kit", "starter"]):
+        return "礼品/组合购买需求"
+    if any(term in text for term in ["kids", "children", "baby", "pet", "adult", "women", "men"]):
+        return "人群/使用者需求"
+    if any(term in text for term in ["replacement", "refill", "accessory", "parts", "cover", "case"]):
+        return "配件/替换/复购需求"
+    if any(term in text for term in ["outdoor", "waterproof", "portable", "travel"]):
+        return "场景/耐用性需求"
+    if any(term in text for term in ["battery", "rechargeable", "cordless", "wireless", "usb"]):
+        return "供电/续航/便携需求"
+    if any(term in text for term in ["smart", "ai", "app", "bluetooth", "voice", "interactive"]):
+        return "智能/交互功能需求"
+    return "核心品类/功能需求"
 
 
-def keyword_relevance_cn(keyword: Any) -> str:
+def keyword_relevance_cn(keyword: Any, seed_terms: list[str]) -> str:
     text = normalized_key(keyword)
-    high_terms = [
-        "sconce",
-        "sconces",
-        "scones",
-        "wall light",
-        "wall lamp",
-        "wall mounted light",
-        "picture light",
-        "gallery light",
-        "art display light",
-        "outdoor wall light",
-        "outdoor wall lantern",
-        "porch light",
-        "vanity light",
-        "bathroom light",
-        "lampara de pared",
-    ]
-    adjacent_terms = [
-        "wall decor",
-        "room decor",
-        "living room decor",
-        "bedroom decor",
-        "battery operated lamp",
-        "cordless lamp",
-        "rechargeable light",
-    ]
-    noise_terms = [
-        "battery pack",
-        "led lights",
-        "strip lights",
-        "under cabinet",
-        "closet lights",
-        "night light",
-        "motion sensor light",
-    ]
-    if any(term in text for term in high_terms):
-        return "高相关"
-    if any(term in text for term in noise_terms):
-        return "噪声/泛流量"
-    if any(term in text for term in adjacent_terms):
+    if not text:
+        return "待判断"
+    for seed in seed_terms:
+        if seed and (seed in text or text in seed):
+            return "高相关"
+    seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
+    keyword_tokens = tokens(text)
+    if not seed_tokens or not keyword_tokens:
+        return "待判断"
+    overlap = len(seed_tokens & keyword_tokens)
+    if overlap >= max(1, min(len(seed_tokens), len(keyword_tokens)) // 2):
         return "相邻相关"
     return "待判断"
 
 
 def title_cn(title: Any, segment: Any = None) -> str:
-    text = normalized_key(title)
-    pieces: list[str] = []
-    if segment and SEGMENT_CN.get(str(segment)):
-        pieces.append(SEGMENT_CN[str(segment)])
-    for source, target in TITLE_TERMS:
-        if source in text and target not in pieces:
-            pieces.append(target)
-    if not pieces:
-        return "英文标题待人工精翻"
-    return " / ".join(pieces[:8])
+    text = normalize_text(title)
+    return text or normalize_text(segment) or "产品标题待补充"
 
 
 def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
-    product["title_cn"] = title_cn(product.get("title"), product.get("segment"))
-    product["segment_cn"] = SEGMENT_CN.get(str(product.get("segment")), "未分层")
-    product["positioning_cn"] = product["title_cn"]
+    product["title_cn"] = product.get("title_cn") or title_cn(product.get("title"), product.get("segment"))
+    product["segment_cn"] = product.get("segment_cn") or normalize_text(product.get("segment")) or "未分层"
+    product["positioning_cn"] = product.get("positioning_cn") or product["title_cn"]
     return product
 
 
-def enrich_keyword(keyword: dict[str, Any]) -> dict[str, Any]:
+def enrich_keyword(keyword: dict[str, Any], seed_terms: list[str]) -> dict[str, Any]:
     keyword["keyword_cn"] = keyword_cn(keyword.get("keyword"))
     keyword["intent_cn"] = keyword_intent_cn(keyword.get("keyword"))
-    keyword["relevance_cn"] = keyword_relevance_cn(keyword.get("keyword"))
+    keyword["relevance_cn"] = keyword.get("relevance_cn") or keyword_relevance_cn(keyword.get("keyword"), seed_terms)
     keyword["is_core_relevant"] = keyword["relevance_cn"] == "高相关"
     keyword["recommended_use_cn"] = "主词验证" if keyword.get("source_type") == "keyword_detail" else "长尾/内容/广告拓词"
     return keyword
@@ -389,9 +312,10 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     source_index = {source.get("source_id"): source for source in data_pack.get("sources", [])}
     current_counts = {key: len(data_pack.get(key) or []) for key in ENTITY_KEYS}
     before_counts = baseline_counts(report_dir, data_pack, current_counts)
+    seed_terms = infer_seed_terms(data_pack)
 
     data_pack["products"] = [enrich_product(product) for product in dedupe(data_pack.get("products") or [], lambda item: normalized_key(item.get("asin")), source_index)]
-    data_pack["keywords"] = [enrich_keyword(keyword) for keyword in dedupe(data_pack.get("keywords") or [], keyword_dedupe_key, source_index)]
+    data_pack["keywords"] = [enrich_keyword(keyword, seed_terms) for keyword in dedupe(data_pack.get("keywords") or [], keyword_dedupe_key, source_index)]
     data_pack["reviews"] = [enrich_review(review) for review in dedupe(data_pack.get("reviews") or [], lambda item: "|".join([normalized_key(item.get("asin")), normalized_key(item.get("review_date")), normalized_key(item.get("title")), normalized_key(item.get("text"))[:90]]), source_index)]
     data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], lambda item: normalized_key(item.get("product_id")), source_index)
     data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], lambda item: normalized_key(item.get("url")) or "|".join([normalized_key(item.get("product_id")), normalized_key(item.get("title"))]), source_index)
@@ -418,7 +342,7 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "tiktok_products deduped by product_id",
             "tiktok_videos and web_documents deduped by URL",
             "suppliers deduped by product_id, URL, or title+store",
-            "English keyword/title fields enriched with Chinese mapping fields",
+            "English keyword/title fields copied into audit-friendly display fields; relevance is inferred from research_object/seed keyword overlap",
         ],
     }
 

@@ -1,6 +1,6 @@
 # Data Pack Contract
 
-`data_pack.json` is the audit layer for the v1 market research skill. The final report is only trusted when its key claims can be traced back to this file.
+`data_pack.json` is the audit layer for the v2 market research skill. The final report bundle is only trusted when its key claims can be traced back to this file.
 
 ## Required Top-Level Shape
 
@@ -169,7 +169,7 @@ The validator checks:
 - normalization, dedupe, and cross-validation metadata,
 - method-chain source references,
 - report quality phrases,
-- standalone strategic-dashboard HTML shape,
+- standalone v2 HTML bundle shape,
 - `delivery_result.json`.
 
-`report.html` is validated against `html-report-design-contract.md`: it must include `data-report-style="strategic-dashboard-v1"`, semantic sections, HTML evidence tables, visible source IDs, and the required report modules.
+The HTML bundle is validated against `html-report-design-contract.md`: `report.html` must be the `three-report-index-v2` entry page, and the three child reports must include semantic sections, HTML evidence tables, visible source IDs, and their required report modules.

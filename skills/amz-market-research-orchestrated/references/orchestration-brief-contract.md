@@ -1,4 +1,4 @@
-# Orchestration Brief Contract v1
+# Orchestration Brief Contract v2
 
 The brief is the top-level contract for one market research run. It is generated after the agent parses the user's intent and confirms only the missing high-impact details.
 

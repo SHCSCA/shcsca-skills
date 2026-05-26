@@ -20,6 +20,29 @@ def write_text(path, text):
     path.write_text(text, encoding="utf-8")
 
 
+def child_html(style, title, sections, extra_terms=""):
+    section_html = "\n".join(
+        f'<section id="{slug}"><span class="section-number">{idx:02d}</span><h2>{name}</h2>'
+        f'<div class="chart-container"><div class="mini-chart"></div></div>'
+        f'<table class="evidence-table"><tr><th>source_id</th><th>证据</th></tr><tr><td>src_001</td><td>{name}</td></tr></table></section>'
+        for idx, (slug, name) in enumerate(sections, 1)
+    )
+    return f"""<!doctype html>
+<html lang="zh-CN" data-report-style="{style}">
+<head><meta charset="utf-8"><style>.report-header{{}}.kpi-grid{{}}.section-number{{}}.evidence-table{{}}.chart-container{{}}.mini-chart{{}}.insight-box{{}}.conclusion{{}}.deep-dive-grid{{}}.comp-deep-card{{}}.appendix-table{{}}.opportunity-matrix{{}}.data-lineage{{}}</style></head>
+<body>
+<header class="report-header"><h1>{title}</h1><div class="kpi-grid"><article>Go / Watch / No-Go</article><article>估算月销量（Sorftime）</article></div></header>
+<main>
+{section_html}
+<section><div class="deep-dive-grid"><div class="comp-deep-card">src_001</div></div></section>
+<section><div class="insight-box">src_001</div><div class="conclusion">结论</div></section>
+<details><summary>完整数据附录</summary><table class="evidence-table appendix-table"><tr><td>src_001</td></tr></table></details>
+<details><summary>数据血缘</summary><div class="data-lineage"><table class="evidence-table"><tr><td>src_001</td></tr></table></div></details>
+{extra_terms}
+</main>
+</body></html>"""
+
+
 def make_valid_report(root):
     write_json(
         root / "data" / "data_pack.json",
@@ -42,7 +65,7 @@ def make_valid_report(root):
                     "confidence": "medium",
                 },
             ],
-            "products": [{"asin": "B0TEST1234", "source_id": "src_001", "provider": "sorftime"}],
+            "products": [{"asin": "B0TEST1234", "title": "AI Plush Toy", "source_id": "src_001", "provider": "sorftime"}],
             "keywords": [
                 {"keyword": f"ai plush keyword {idx}", "source_id": "src_001", "provider": "sorftime"}
                 for idx in range(1000)
@@ -53,7 +76,7 @@ def make_valid_report(root):
             "tiktok_videos": [{"video_id": "v_1", "source_id": "src_001", "provider": "sorftime"}],
             "suppliers": [{"name": "supplier", "source_id": "src_001", "provider": "sorftime"}],
             "web_documents": [{"url": "https://example.com/report", "source_id": "src_002", "provider": "firecrawl"}],
-            "data_gaps": ["Keepa not used in v1"],
+            "data_gaps": ["Keepa not used in this run"],
             "quality": {"overall_score": 0.82, "grade": "decision_grade"},
             "normalization": {
                 "deduped": True,
@@ -91,46 +114,85 @@ def make_valid_report(root):
     write_text(
         root / "output" / "report.html",
         """<!doctype html>
-<html lang="zh-CN" data-report-style="strategic-dashboard-v1">
-<head><meta charset="utf-8"><style>.report-header{}.kpi-grid{}.section-number{}.evidence-table{}.chart-container{}.insight-box{}.conclusion{}.comp-deep-card{}</style></head>
-<body>
-<header class="report-header"><h1>Report</h1></header>
-<main>
-  <section id="executive-dashboard"><span class="section-number">00</span>Go / Watch / No-Go src_001</section>
-  <section id="data-coverage"><span class="section-number">01</span>数据覆盖 交叉验证 去重 <div class="chart-container"><div class="mini-chart"></div></div></section>
-  <section id="market-dashboard"><span class="section-number">02</span>市场大盘</section>
-  <section id="keyword-demand"><span class="section-number">03</span>关键词需求</section>
-  <section id="competitor-landscape"><span class="section-number">04</span>Top 竞品</section>
-  <section id="competitor-deep-dive"><span class="section-number">05</span>竞品深挖 <div class="deep-dive-grid"><div class="comp-deep-card"></div></div></section>
-  <section id="voc"><span class="section-number">06</span>Review / VOC</section>
-  <section id="tiktok-validation"><span class="section-number">07</span>TikTok 验证</section>
-  <section id="supply-chain"><span class="section-number">08</span>1688 供应链</section>
-  <section id="web-risk"><span class="section-number">09</span>Web / 风险补充</section>
-  <section id="opportunity-matrix"><span class="section-number">10</span>机会矩阵</section>
-  <section id="decision-roadmap"><span class="section-number">11</span>Go / Watch / No-Go</section>
-  <section id="data-gaps"><span class="section-number">12</span>数据缺口</section>
-  <section id="full-data-appendix"><span class="section-number">13</span>完整数据附录 <table class="evidence-table appendix-table"><tr><td>src_001</td></tr></table></section>
-  <section id="lineage"><span class="section-number">14</span>数据血缘</section>
-  <div class="kpi-grid"><article>估算月销量（Sorftime）</article></div>
-  <div class="conclusion"><div class="insight-box">结论</div></div>
-  <table class="evidence-table"><tr><th>关键词中文</th><th>英文关键词</th><th>相关性</th><th>中文定位</th><th>英文标题</th></tr><tr><td>AI 毛绒</td><td>ai plush</td><td>高相关</td><td>智能玩具</td><td>AI Plush Toy</td></tr></table>
-  <table class="evidence-table"><tr><td>src_001</td></tr></table>
-  <table class="evidence-table"><tr><td>1</td></tr></table>
-  <table class="evidence-table"><tr><td>2</td></tr></table>
-  <table class="evidence-table"><tr><td>3</td></tr></table>
-  <table class="evidence-table"><tr><td>4</td></tr></table>
-  <table class="evidence-table"><tr><td>5</td></tr></table>
-  <table class="evidence-table"><tr><td>6</td></tr></table>
-  <table class="evidence-table"><tr><td>7</td></tr></table>
-  <table class="evidence-table"><tr><td>8</td></tr></table>
-  <table class="evidence-table"><tr><td>9</td></tr></table>
-  <details><summary>关键词</summary>detail</details>
-  <details><summary>评论</summary>detail</details>
-  <details><summary>来源</summary>detail</details>
-</main>
-</body></html>""",
+<html lang="zh-CN" data-report-style="three-report-index-v2">
+<head><meta charset="utf-8"><style>.report-index{}.report-card{}</style></head>
+<body><main class="report-index">
+<h1>三合一市场研究报告</h1>
+<a href="market-depth-report.html">市场深度调研报告</a>
+<a href="lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
+<a href="demand-gap-report.html">用户心智断层与需求机会报告</a>
+<p>Go / Watch / No-Go src_001</p>
+</main></body></html>""",
     )
-    write_json(root / "output" / "delivery_result.json", {"status": "complete", "formats": ["html", "markdown", "json"]})
+    write_text(
+        root / "output" / "market-depth-report.html",
+        child_html(
+            "market-depth-report-v2",
+            "市场深度调研报告",
+            [
+                ("market-dashboard", "大盘仪表盘"),
+                ("keyword-demand", "关键词需求"),
+                ("competitor-landscape", "Top 竞品"),
+                ("voc", "VOC 痛点/爽点"),
+                ("competitor-deep-dive", "标杆竞品深挖"),
+                ("opportunity", "机会判断"),
+                ("tiktok-validation", "TikTok 验证"),
+                ("supply-chain", "1688 供应链"),
+                ("web-risk", "Web 风险"),
+                ("lineage", "数据血缘"),
+            ],
+            "关键词中文 英文关键词 相关性 中文定位 英文标题 去重",
+        ),
+    )
+    write_text(
+        root / "output" / "lifecycle-strategy-report.html",
+        child_html(
+            "lifecycle-strategy-report-v2",
+            "产品全生命周期拓品战略报告",
+            [
+                ("strategy-dashboard", "战略仪表盘"),
+                ("personas", "用户画像"),
+                ("lifecycle-journey", "生命周期旅程"),
+                ("ecosystem", "四维拓品生态"),
+                ("sku-table", "SKU 执行总表"),
+                ("bundle-strategy", "Bundle 策略"),
+                ("roadmap", "30/60/90 天路线图"),
+                ("risk-matrix", "风险矩阵"),
+                ("market-intelligence", "市场数据验证"),
+            ],
+            "SKU Bundle 供应链 复购",
+        ),
+    )
+    write_text(
+        root / "output" / "demand-gap-report.html",
+        child_html(
+            "demand-gap-report-v2",
+            "用户心智断层与需求机会报告",
+            [
+                ("target-anchor", "目标 ASIN/研究对象锚点"),
+                ("decision-board", "决策看板"),
+                ("appeals-map", "$APPEALS 痛点全景"),
+                ("gap-analysis", "满意度鸿沟"),
+                ("kano-jtbd", "KANO × JTBD 机会矩阵"),
+                ("voice-theater", "用户原声"),
+                ("priority-table", "需求优先级与证据表"),
+            ],
+            "KANO JTBD source_id",
+        ),
+    )
+    write_json(
+        root / "output" / "delivery_result.json",
+        {
+            "status": "complete",
+            "formats": ["html", "markdown", "json"],
+            "html_reports": {
+                "index": "output/report.html",
+                "market_depth": "output/market-depth-report.html",
+                "lifecycle_strategy": "output/lifecycle-strategy-report.html",
+                "demand_gap": "output/demand-gap-report.html",
+            },
+        },
+    )
 
 
 class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
@@ -142,7 +204,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             check=False,
         )
 
-    def test_valid_report_passes(self):
+    def test_valid_three_report_bundle_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
@@ -151,6 +213,53 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertIn("validate_ok", result.stdout)
+
+    def test_rejects_missing_child_html_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            (report_dir / "output" / "demand-gap-report.html").unlink()
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("demand-gap-report.html", result.stderr + result.stdout)
+
+    def test_rejects_index_without_child_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "report.html"
+            write_text(html_path, html_path.read_text(encoding="utf-8").replace("lifecycle-strategy-report.html", "lifecycle.html"))
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("lifecycle-strategy-report.html", result.stderr + result.stdout)
+
+    def test_rejects_child_report_missing_required_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "market-depth-report.html"
+            write_text(html_path, html_path.read_text(encoding="utf-8").replace("TikTok 验证", "TikTok"))
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TikTok 验证", result.stderr + result.stdout)
+
+    def test_rejects_child_report_without_source_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "demand-gap-report.html"
+            write_text(html_path, html_path.read_text(encoding="utf-8").replace("src_001", "source-one"))
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("source_id", result.stderr + result.stdout)
 
     def test_rejects_keyword_samples_below_1000(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,12 +301,12 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("delivery_result.json", result.stderr + result.stdout)
 
-    def test_markdown_wrapped_html_fails(self):
+    def test_markdown_wrapped_child_html_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
             write_text(
-                report_dir / "output" / "report.html",
+                report_dir / "output" / "market-depth-report.html",
                 """<!doctype html><html><body><pre># Report
 
 | 关键词 | 月销量 |
@@ -212,33 +321,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             result = self.run_validator(report_dir)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("strategic-dashboard-v1", result.stderr + result.stdout)
-
-    def test_html_missing_required_dashboard_section_fails(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            report_dir = Path(tmp)
-            make_valid_report(report_dir)
-            html_path = report_dir / "output" / "report.html"
-            report_html = html_path.read_text(encoding="utf-8").replace("TikTok 验证", "TikTok")
-            write_text(html_path, report_html)
-
-            result = self.run_validator(report_dir)
-
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TikTok 验证", result.stderr + result.stdout)
-
-    def test_html_missing_full_data_appendix_fails(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            report_dir = Path(tmp)
-            make_valid_report(report_dir)
-            html_path = report_dir / "output" / "report.html"
-            report_html = html_path.read_text(encoding="utf-8").replace("完整数据附录", "数据附录")
-            write_text(html_path, report_html)
-
-            result = self.run_validator(report_dir)
-
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("完整数据附录", result.stderr + result.stdout)
+            self.assertIn("market-depth-report.html", result.stderr + result.stdout)
 
 
 if __name__ == "__main__":
