@@ -1,8 +1,6 @@
-# Analysis Module Contracts
+# Analysis Module Contracts v1
 
-Each analysis module consumes Data Pack fields and returns structured findings. Modules must not call raw data APIs directly.
-
-In the four-plane architecture, this file is the legacy module contract. For method-chain selection, prefer `market-method-orchestrator/references/analysis-plan-contract.md` and `market-method-orchestrator/references/methodology-library.md`. Keep this file for compatibility with existing report modules.
+Analysis modules consume the normalized `data_pack.json` fields and return structured findings. They must not call MCP tools directly; data access happens before analysis.
 
 ## Common Input
 
@@ -10,13 +8,22 @@ In the four-plane architecture, this file is the legacy module contract. For met
 {
   "task_id": "",
   "module": "amazon_competitor",
-  "method_ids": ["competitor.feature_benchmark", "competitor.review_gap"],
+  "method_ids": ["competitor.price_value_matrix", "competitor.review_gap"],
   "data_pack_path": "reports/task/data/data_pack.json",
-  "allowed_entities": ["products", "reviews"],
-  "question": "What competitor weaknesses create a product opportunity?",
-  "output_path": "reports/task/analysis/amazon_competitors.json"
+  "allowed_entities": ["products", "reviews", "keywords"],
+  "question": "What competitor weaknesses create an opportunity?",
+  "output_path": "reports/task/analysis/competitors.json"
 }
 ```
+
+Before any module runs, `data_pack.json` must have:
+
+- `normalization.deduped = true`
+- stable `before_counts`, `after_counts`, `removed_counts`, and `cross_validated_counts`
+- at least 1000 deduped keyword rows for standard/deep reports
+- keyword Chinese mapping fields: `keyword_cn`, `intent_cn`, `relevance_cn`
+- product Chinese mapping fields: `title_cn`, `segment_cn`, `positioning_cn`
+- `source_ids` and `validation` on deduped entities where cross-source evidence exists
 
 ## Common Output
 
@@ -35,109 +42,73 @@ In the four-plane architecture, this file is the legacy module contract. For met
 }
 ```
 
-## Market Size Module
+Every module output must include `used_source_ids`. If a module is blocked or partial, it must include a limitation and the missing evidence.
 
-Consumes:
+Module outputs should also expose report-ready blocks for `report.html`:
 
-- `categories`
-- `keywords`
-- `products`
-- trend fields from Sorftime, Keepa, or web reports
+- `kpis`: short label/value/subtext cards.
+- `tables`: evidence rows with source IDs.
+- `cards`: opportunities, VOC clusters, risks, or competitor layers.
+- `charts`: simple series that can be rendered as CSS/SVG or kept as tables offline.
+- `html_section_hint`: the target section id from `html-report-design-contract.md`.
 
-Returns:
+## Required v1 Modules
 
-- Market size and trend estimate.
-- Price-band opportunity.
-- Concentration and maturity.
-- Seasonality and growth signals.
-- Confidence by metric.
+| Module | Consumes | Returns |
+|---|---|---|
+| `market_size` | `categories`, `keywords`, `products`, `web_documents` | Market size proxy, demand trend, price bands, concentration, seasonality, confidence. |
+| `keyword_demand` | `keywords`, `products` | Core terms, extensions, natural search competitors, search intent, Chinese keyword mapping, relevance/noise split, content/listing implications. |
+| `amazon_competitors` | `products`, `reviews`, `keywords`, `categories` | Top competitor matrix, price/rating/review/sales estimates, feature map, listing promises, gaps. |
+| `voc` | `reviews`, `web_documents`, `tiktok_videos` | Complaint clusters, positive motives, objections, emotional language, sample limitations. |
+| `tiktok_validation` | `tiktok_products`, `tiktok_videos` | Similar-product heat, trend, content hooks, creator/channel evidence, Amazon relevance limits. |
+| `supply_chain` | `suppliers`, `products` | 1688 cost proxy, MOQ/copyability signal, target landed-cost ceiling, supply risks. |
+| `opportunity` | All module outputs | Opportunity matrix, recommended wedge, target segment, experiments, Go/Watch/No-Go. |
 
-Do not:
+## HTML Section Mapping
 
-- Treat third-party estimates as official platform sales.
-- Merge category-level and keyword-level markets without explaining the difference.
+| HTML section | Primary module | Required visual block |
+|---|---|---|
+| `executive-dashboard` | `opportunity`, `market_size` | KPI grid + decision insight. |
+| `market-dashboard` | `market_size` | KPI cards + price/volume/concentration chart or table. |
+| `keyword-demand` | `keyword_demand` | Keyword evidence table + intent cards. |
+| `competitor-landscape` | `amazon_competitors` | Top competitor table + segment cards. |
+| `voc` | `voc` | Pain/joy cards + theme frequency table. |
+| `tiktok-validation` | `tiktok_validation` | Product/video table + relevance limitation card. |
+| `supply-chain` | `supply_chain` | Supplier table + cost threshold cards. |
+| `opportunity-matrix` | `opportunity` | Opportunity cards with recommendation, evidence, risk. |
+| `decision-roadmap` | `opportunity` | Enter/stop conditions + next validation actions. |
+| `lineage` | All sources | Source appendix table. |
 
-## Amazon Competitor Module
+## Guardrails
 
-Consumes:
+- Do not treat Sorftime monthly sales estimates as official Amazon sales.
+- Do not treat TikTok sold counts or video engagement as Amazon purchase validation.
+- Do not write precise percentages from small review samples.
+- Do not recommend an opportunity supported by only one weak source unless labeled speculative.
+- Do not rank keyword opportunities until high-relevance terms are separated from adjacent/noisy category terms and ASIN traffic terms.
+- Do not write a P&L without landed cost, FBA fees, return rate, referral fee, and ad cost. Use threshold models instead.
 
-- `products`
-- `reviews` where `platform=amazon`
-- keyword/search result entities
-- Keepa historical fields when available
+## Analysis Plan
 
-Returns:
+`analysis_plan.json` must contain:
 
-- Top competitor table.
-- Price/rating/review/sales matrix.
-- Listing promise and feature map.
-- Common complaint clusters.
-- Defensible gaps and imitation risks.
+```json
+{
+  "task_id": "",
+  "research_object": "",
+  "primary_purpose": "",
+  "secondary_purposes": [],
+  "method_chain": [
+    {
+      "method_id": "market.top100_competitor_scan",
+      "name": "Top100 竞品扫描",
+      "used_source_ids": ["src_001"],
+      "output": "价格/评分/月销估算/评论/卖点矩阵"
+    }
+  ],
+  "confidence": {},
+  "limitations": []
+}
+```
 
-Do not:
-
-- Fabricate ASIN links.
-- Use title-only data for deep product claims when details are missing.
-
-## Social VOC Module
-
-Consumes:
-
-- `social_posts`
-- `videos`
-- `reviews` where `platform in [reddit, youtube, tiktok]`
-- transcripts when available
-
-Returns:
-
-- Use cases.
-- Complaints and objections.
-- Desired outcomes.
-- Emotional vocabulary.
-- Content and creator signals.
-
-Do not:
-
-- Treat viral content as purchase validation without marketplace evidence.
-- Quote user comments without URL or platform context.
-
-## Opportunity Module
-
-Consumes:
-
-- Market module output.
-- Amazon competitor module output.
-- Social VOC module output.
-
-Returns:
-
-- Opportunity matrix.
-- Differentiation pillars.
-- Product wedge.
-- Validation experiments.
-
-Do not:
-
-- Recommend opportunities that only appear in one weak source unless labeled speculative.
-
-## Profitability and Supply Chain Module
-
-Consumes:
-
-- product prices and estimated sales.
-- Keepa price/offer history.
-- supplier listings from 1688, Jimu, or user files.
-- user-provided cost assumptions.
-
-Returns:
-
-- Target price band.
-- Cost ceiling.
-- Contribution pool.
-- Risk gates.
-- Go / Watch / No-Go finance view.
-
-Do not:
-
-- Write a fake P&L when FBA fees, landed cost, return rate, or ad cost are unknown.
-Use threshold models instead.
+The validator requires `method_chain`, `confidence`, and `limitations`.
