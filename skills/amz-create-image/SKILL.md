@@ -313,6 +313,8 @@ No Hardwiring Needed Screw-Mounted Base Clean Wireless Look
 
 ## 输出文件结构
 
+生成或修订 Excel 前，必须遵守 `references/output_spec.md`。该文件定义输出物类型、阻断输出、Excel 工作簿必备 Sheet/列、最终回复格式、质量门禁和不得交付场景。
+
 标准交付：
 
 ```text

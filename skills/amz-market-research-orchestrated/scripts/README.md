@@ -20,10 +20,12 @@ reports/<task_id>/
   analysis/
     analysis_plan.json
   output/
-    report.html
-    market-depth-report.html
-    lifecycle-strategy-report.html
-    demand-gap-report.html
+    report.html                  # compatibility entry, links into html_reports/
+    html_reports/
+      report.html                # portable bundle entry
+      market-depth-report.html
+      lifecycle-strategy-report.html
+      demand-gap-report.html
     report.md
     delivery_result.json
 ```
@@ -39,7 +41,7 @@ python skills/amz-market-research-orchestrated/scripts/test_render_dashboard_htm
 python skills/amz-market-research-orchestrated/scripts/test_validate_market_research_deliverables.py
 ```
 
-These tests build temporary report directories and verify that Sorftime keyword pagination parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, the renderer writes `report.html` plus three child reports, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, Markdown-wrapped HTML, low keyword sample depth, missing child reports, missing child links, and incomplete report sections.
+These tests build temporary report directories and verify that Sorftime keyword pagination parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, the renderer writes the portable `output/html_reports/` bundle plus a compatibility entry, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, and incomplete report sections.
 
 ## collect_sorftime_keywords.py
 
@@ -73,9 +75,12 @@ Use it after generating the Data Pack and analysis artifacts, then run the valid
 
 ```text
 output/report.html
-output/market-depth-report.html
-output/lifecycle-strategy-report.html
-output/demand-gap-report.html
+output/html_reports/report.html
+output/html_reports/market-depth-report.html
+output/html_reports/lifecycle-strategy-report.html
+output/html_reports/demand-gap-report.html
 ```
 
-It also updates `output/delivery_result.json.html_reports`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
+`output/html_reports/` is the portable folder: move or download that folder as a unit and its `report.html` will link to the three child reports with same-folder relative links. `output/report.html` is retained as a compatibility entry that links into `html_reports/`.
+
+The renderer also updates `output/delivery_result.json.html_reports` and `output/delivery_result.json.html_bundle_dir`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.

@@ -64,10 +64,11 @@ Input:
 
 Required evidence:
 
-- `report.html` uses `data-report-style="three-report-index-v2"` and links to all three child reports
-- `market-depth-report.html` uses `data-report-style="market-depth-report-v2"`
-- `lifecycle-strategy-report.html` uses `data-report-style="lifecycle-strategy-report-v2"`
-- `demand-gap-report.html` uses `data-report-style="demand-gap-report-v2"`
+- `output/html_reports/report.html` uses `data-report-style="three-report-index-v2"` and links to all three child reports with same-folder relative links
+- `output/report.html` uses `data-report-style="three-report-index-v2"` and links into `html_reports/`
+- `output/html_reports/market-depth-report.html` uses `data-report-style="market-depth-report-v2"`
+- `output/html_reports/lifecycle-strategy-report.html` uses `data-report-style="lifecycle-strategy-report-v2"`
+- `output/html_reports/demand-gap-report.html` uses `data-report-style="demand-gap-report-v2"`
 - HTML files are designed reports, not Markdown wrappers
 - Entry page contains report title, market, depth, data quality, data gaps, and Go / Watch / No-Go
 - Market report modules remain visible: 大盘仪表盘、关键词需求、Top 竞品、VOC 痛点/爽点、标杆竞品深挖、机会判断、TikTok 验证、1688 供应链、Web 风险、数据血缘

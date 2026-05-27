@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 *.tar.gz
 *.xlsx
+~$*.xlsx
 !skills/**/templates/*.xlsx
+skills/**/templates/~$*.xlsx
 output/
 skills/**/reports/

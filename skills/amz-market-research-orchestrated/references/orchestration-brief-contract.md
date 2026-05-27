@@ -84,7 +84,7 @@ The agent turns the brief into a run plan:
   ],
   "normalization_targets": ["products", "keywords", "reviews"],
   "analysis_modules": ["market_size", "competitors", "voc", "opportunity", "profitability"],
-  "output_artifacts": ["report.html", "report.md", "data_pack.json", "analysis_plan.json", "lineage.md", "delivery_result.json"]
+  "output_artifacts": ["html_reports/report.html", "html_reports/market-depth-report.html", "html_reports/lifecycle-strategy-report.html", "html_reports/demand-gap-report.html", "report.html", "report.md", "data_pack.json", "analysis_plan.json", "lineage.md", "delivery_result.json"]
 }
 ```
 

@@ -34,7 +34,7 @@ amz-create-image/
     ├── copy_line_break_rules.md
     ├── amazon_operation_capabilities.md
     ├── excel_style_spec.md
-    ├── output_spec.md
+    ├── output_spec.md      # 输出物类型、Excel必备Sheet/列、最终回复和质量门禁
     └── checklist.md
 ```
 

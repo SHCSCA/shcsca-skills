@@ -11,14 +11,19 @@ from pathlib import Path
 from typing import Any
 
 
+HTML_BUNDLE_DIR = "output/html_reports"
+BUNDLE_INDEX_REPORT = f"{HTML_BUNDLE_DIR}/report.html"
+COMPAT_INDEX_REPORT = "output/report.html"
+
 REQUIRED_FILES = [
     "data/data_pack.json",
     "data/lineage.md",
     "analysis/analysis_plan.json",
-    "output/report.html",
-    "output/market-depth-report.html",
-    "output/lifecycle-strategy-report.html",
-    "output/demand-gap-report.html",
+    COMPAT_INDEX_REPORT,
+    BUNDLE_INDEX_REPORT,
+    f"{HTML_BUNDLE_DIR}/market-depth-report.html",
+    f"{HTML_BUNDLE_DIR}/lifecycle-strategy-report.html",
+    f"{HTML_BUNDLE_DIR}/demand-gap-report.html",
     "output/report.md",
     "output/delivery_result.json",
 ]
@@ -63,7 +68,8 @@ MIN_KEYWORD_SAMPLE_COUNT = 1000
 
 CHILD_REPORTS = {
     "market_depth": {
-        "path": "output/market-depth-report.html",
+        "path": f"{HTML_BUNDLE_DIR}/market-depth-report.html",
+        "filename": "market-depth-report.html",
         "style": "market-depth-report-v2",
         "sections": [
             "大盘仪表盘",
@@ -80,7 +86,8 @@ CHILD_REPORTS = {
         "terms": ["关键词中文", "英文关键词", "中文定位", "英文标题", "相关性", "去重"],
     },
     "lifecycle_strategy": {
-        "path": "output/lifecycle-strategy-report.html",
+        "path": f"{HTML_BUNDLE_DIR}/lifecycle-strategy-report.html",
+        "filename": "lifecycle-strategy-report.html",
         "style": "lifecycle-strategy-report-v2",
         "sections": [
             "战略仪表盘",
@@ -96,7 +103,8 @@ CHILD_REPORTS = {
         "terms": ["SKU", "Bundle", "供应链", "复购"],
     },
     "demand_gap": {
-        "path": "output/demand-gap-report.html",
+        "path": f"{HTML_BUNDLE_DIR}/demand-gap-report.html",
+        "filename": "demand-gap-report.html",
         "style": "demand-gap-report-v2",
         "sections": [
             "目标 ASIN/研究对象锚点",
@@ -111,7 +119,8 @@ CHILD_REPORTS = {
     },
 }
 
-INDEX_REQUIRED_LINKS = [spec["path"].removeprefix("output/") for spec in CHILD_REPORTS.values()]
+BUNDLE_INDEX_REQUIRED_LINKS = [spec["filename"] for spec in CHILD_REPORTS.values()]
+COMPAT_INDEX_REQUIRED_LINKS = [f"html_reports/{spec['filename']}" for spec in CHILD_REPORTS.values()]
 
 HTML_REQUIRED_CLASSES = [
     "report-header",
@@ -217,13 +226,14 @@ def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) 
 
 def validate_text_artifacts(report_dir: Path, source_ids: set[str]) -> None:
     report_md = (report_dir / "output/report.md").read_text(encoding="utf-8")
-    index_html = (report_dir / "output/report.html").read_text(encoding="utf-8")
+    compat_index_html = (report_dir / COMPAT_INDEX_REPORT).read_text(encoding="utf-8")
+    bundle_index_html = (report_dir / BUNDLE_INDEX_REPORT).read_text(encoding="utf-8")
     child_htmls = {
         key: (report_dir / spec["path"]).read_text(encoding="utf-8")
         for key, spec in CHILD_REPORTS.items()
     }
     lineage = (report_dir / "data/lineage.md").read_text(encoding="utf-8")
-    all_report_text = "\n".join([report_md, index_html, *child_htmls.values()])
+    all_report_text = "\n".join([report_md, compat_index_html, bundle_index_html, *child_htmls.values()])
 
     for phrase in BANNED_REPORT_PHRASES:
         require(phrase not in all_report_text, f"Report contains banned phrase: {phrase}")
@@ -232,7 +242,8 @@ def validate_text_artifacts(report_dir: Path, source_ids: set[str]) -> None:
         require("估算月销量" in all_report_text, "Monthly sales must be labeled as estimated monthly sales")
 
     require("Go / Watch / No-Go" in report_md or "Go/Watch/No-Go" in report_md, "report.md missing Go / Watch / No-Go section")
-    validate_index_report(index_html)
+    validate_index_report(bundle_index_html, BUNDLE_INDEX_REPORT, BUNDLE_INDEX_REQUIRED_LINKS, require_same_folder=True)
+    validate_index_report(compat_index_html, COMPAT_INDEX_REPORT, COMPAT_INDEX_REQUIRED_LINKS)
     for key, html_doc in child_htmls.items():
         validate_child_report(CHILD_REPORTS[key]["path"], html_doc, CHILD_REPORTS[key], source_ids)
 
@@ -240,7 +251,7 @@ def validate_text_artifacts(report_dir: Path, source_ids: set[str]) -> None:
     require(not missing_lineage, f"lineage.md missing source_id entries: {', '.join(missing_lineage)}")
 
     if source_ids:
-        report_texts = [report_md, index_html, *child_htmls.values()]
+        report_texts = [report_md, compat_index_html, bundle_index_html, *child_htmls.values()]
         require(any(any(source_id in text for text in report_texts) for source_id in source_ids), "Report does not cite any source_id")
 
 
@@ -256,15 +267,21 @@ def validate_html_basics(rel_path: str, html_doc: str) -> None:
     require("<style" in html_lower, f"{rel_path} must include self-contained CSS")
 
 
-def validate_index_report(report_html: str) -> None:
-    validate_html_basics("output/report.html", report_html)
+def validate_index_report(report_html: str, rel_path: str, required_links: list[str], require_same_folder: bool = False) -> None:
+    validate_html_basics(rel_path, report_html)
     require(
         re.search(r"data-report-style=['\"]three-report-index-v2['\"]", report_html) is not None,
-        f"output/report.html missing data-report-style=\"{INDEX_STYLE_MARKER}\"",
+        f"{rel_path} missing data-report-style=\"{INDEX_STYLE_MARKER}\"",
     )
-    require("三合一" in report_html, "output/report.html must describe the three-report bundle")
-    for link in INDEX_REQUIRED_LINKS:
-        require(link in report_html, f"output/report.html missing child report link: {link}")
+    require("三合一" in report_html, f"{rel_path} must describe the three-report bundle")
+    if require_same_folder:
+        require('href="output/' not in report_html and "href='output/" not in report_html, f"{rel_path} child links must be same-folder relative links")
+        require('href="html_reports/' not in report_html and "href='html_reports/" not in report_html, f"{rel_path} child links must be same-folder relative links")
+    for link in required_links:
+        require(
+            re.search(rf"href=['\"]{re.escape(link)}['\"]", report_html) is not None,
+            f"{rel_path} missing child report link: {link}",
+        )
 
 
 def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any], source_ids: set[str]) -> None:
@@ -297,7 +314,9 @@ def validate_delivery(report_dir: Path) -> None:
     require(delivery.get("status") in {"complete", "partial"}, "delivery_result.json status must be complete or partial")
     html_reports = delivery.get("html_reports")
     require(isinstance(html_reports, dict), "delivery_result.json missing html_reports mapping")
-    require(html_reports.get("index") == "output/report.html", "delivery_result.json html_reports.index must be output/report.html")
+    require(html_reports.get("index") == BUNDLE_INDEX_REPORT, f"delivery_result.json html_reports.index must be {BUNDLE_INDEX_REPORT}")
+    require(html_reports.get("compat_index") == COMPAT_INDEX_REPORT, f"delivery_result.json html_reports.compat_index must be {COMPAT_INDEX_REPORT}")
+    require(delivery.get("html_bundle_dir") == HTML_BUNDLE_DIR, f"delivery_result.json html_bundle_dir must be {HTML_BUNDLE_DIR}")
     for key, spec in CHILD_REPORTS.items():
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
 

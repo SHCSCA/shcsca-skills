@@ -118,6 +118,19 @@ def make_valid_report(root):
 <head><meta charset="utf-8"><style>.report-index{}.report-card{}</style></head>
 <body><main class="report-index">
 <h1>三合一市场研究报告</h1>
+<a href="html_reports/market-depth-report.html">市场深度调研报告</a>
+<a href="html_reports/lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
+<a href="html_reports/demand-gap-report.html">用户心智断层与需求机会报告</a>
+<p>Go / Watch / No-Go src_001</p>
+</main></body></html>""",
+    )
+    write_text(
+        root / "output" / "html_reports" / "report.html",
+        """<!doctype html>
+<html lang="zh-CN" data-report-style="three-report-index-v2">
+<head><meta charset="utf-8"><style>.report-index{}.report-card{}</style></head>
+<body><main class="report-index">
+<h1>三合一市场研究报告</h1>
 <a href="market-depth-report.html">市场深度调研报告</a>
 <a href="lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
 <a href="demand-gap-report.html">用户心智断层与需求机会报告</a>
@@ -125,7 +138,7 @@ def make_valid_report(root):
 </main></body></html>""",
     )
     write_text(
-        root / "output" / "market-depth-report.html",
+        root / "output" / "html_reports" / "market-depth-report.html",
         child_html(
             "market-depth-report-v2",
             "市场深度调研报告",
@@ -145,7 +158,7 @@ def make_valid_report(root):
         ),
     )
     write_text(
-        root / "output" / "lifecycle-strategy-report.html",
+        root / "output" / "html_reports" / "lifecycle-strategy-report.html",
         child_html(
             "lifecycle-strategy-report-v2",
             "产品全生命周期拓品战略报告",
@@ -164,7 +177,7 @@ def make_valid_report(root):
         ),
     )
     write_text(
-        root / "output" / "demand-gap-report.html",
+        root / "output" / "html_reports" / "demand-gap-report.html",
         child_html(
             "demand-gap-report-v2",
             "用户心智断层与需求机会报告",
@@ -186,11 +199,13 @@ def make_valid_report(root):
             "status": "complete",
             "formats": ["html", "markdown", "json"],
             "html_reports": {
-                "index": "output/report.html",
-                "market_depth": "output/market-depth-report.html",
-                "lifecycle_strategy": "output/lifecycle-strategy-report.html",
-                "demand_gap": "output/demand-gap-report.html",
+                "index": "output/html_reports/report.html",
+                "compat_index": "output/report.html",
+                "market_depth": "output/html_reports/market-depth-report.html",
+                "lifecycle_strategy": "output/html_reports/lifecycle-strategy-report.html",
+                "demand_gap": "output/html_reports/demand-gap-report.html",
             },
+            "html_bundle_dir": "output/html_reports",
         },
     )
 
@@ -218,7 +233,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            (report_dir / "output" / "demand-gap-report.html").unlink()
+            (report_dir / "output" / "html_reports" / "demand-gap-report.html").unlink()
 
             result = self.run_validator(report_dir)
 
@@ -229,7 +244,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            html_path = report_dir / "output" / "report.html"
+            html_path = report_dir / "output" / "html_reports" / "report.html"
             write_text(html_path, html_path.read_text(encoding="utf-8").replace("lifecycle-strategy-report.html", "lifecycle.html"))
 
             result = self.run_validator(report_dir)
@@ -237,11 +252,24 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("lifecycle-strategy-report.html", result.stderr + result.stdout)
 
+    def test_rejects_bundle_index_with_output_prefixed_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "report.html"
+            html_doc = html_path.read_text(encoding="utf-8").replace('href="market-depth-report.html"', 'href="output/market-depth-report.html"')
+            write_text(html_path, html_doc)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("same-folder relative links", result.stderr + result.stdout)
+
     def test_rejects_child_report_missing_required_section(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            html_path = report_dir / "output" / "market-depth-report.html"
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
             write_text(html_path, html_path.read_text(encoding="utf-8").replace("TikTok 验证", "TikTok"))
 
             result = self.run_validator(report_dir)
@@ -253,7 +281,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            html_path = report_dir / "output" / "demand-gap-report.html"
+            html_path = report_dir / "output" / "html_reports" / "demand-gap-report.html"
             write_text(html_path, html_path.read_text(encoding="utf-8").replace("src_001", "source-one"))
 
             result = self.run_validator(report_dir)
@@ -306,7 +334,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             report_dir = Path(tmp)
             make_valid_report(report_dir)
             write_text(
-                report_dir / "output" / "market-depth-report.html",
+                report_dir / "output" / "html_reports" / "market-depth-report.html",
                 """<!doctype html><html><body><pre># Report
 
 | 关键词 | 月销量 |

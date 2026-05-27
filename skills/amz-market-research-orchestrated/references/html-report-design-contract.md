@@ -3,17 +3,18 @@
 Use this contract when generating the v2 HTML bundle. The executive-facing output is no longer one large dashboard. It is one entry page plus three standalone reports:
 
 ```text
-output/report.html                         # entry / navigation
-output/market-depth-report.html            # 市场深度调研报告
-output/lifecycle-strategy-report.html      # 产品全生命周期拓品战略报告
-output/demand-gap-report.html              # 用户心智断层与需求机会报告
+output/report.html                         # compatibility entry, links into html_reports/
+output/html_reports/report.html            # portable bundle entry / navigation
+output/html_reports/market-depth-report.html
+output/html_reports/lifecycle-strategy-report.html
+output/html_reports/demand-gap-report.html
 ```
 
 Do not copy the provided sample reports verbatim. Reuse their structure pattern: dark report header, KPI dashboard, numbered modules, dense cards, evidence tables, matrices, roadmap, risk section, and source-linked appendix.
 
 ## Hard Requirements
 
-All four HTML files must:
+The four files inside `output/html_reports/` must:
 
 - Be standalone HTML documents with inline CSS.
 - Work offline for core content; do not depend on external CDN for layout, tables, text, decisions, or charts.
@@ -27,17 +28,20 @@ Required `data-report-style` markers:
 | File | Marker |
 |---|---|
 | `output/report.html` | `three-report-index-v2` |
-| `output/market-depth-report.html` | `market-depth-report-v2` |
-| `output/lifecycle-strategy-report.html` | `lifecycle-strategy-report-v2` |
-| `output/demand-gap-report.html` | `demand-gap-report-v2` |
+| `output/html_reports/report.html` | `three-report-index-v2` |
+| `output/html_reports/market-depth-report.html` | `market-depth-report-v2` |
+| `output/html_reports/lifecycle-strategy-report.html` | `lifecycle-strategy-report-v2` |
+| `output/html_reports/demand-gap-report.html` | `demand-gap-report-v2` |
 
 ## Entry Page
 
-`output/report.html` is only the compatibility entry page. It must:
+`output/html_reports/report.html` is the portable bundle entry page. It must:
 
-- Link to the three child reports by filename.
+- Link to the three child reports by same-folder filename only: `market-depth-report.html`, `lifecycle-strategy-report.html`, and `demand-gap-report.html`.
 - Show report object, target market, data depth, Go / Watch / No-Go, source count, quality grade, data coverage, and data gaps.
 - Avoid duplicating the full report body.
+
+`output/report.html` is a compatibility entry for older callers. It must link into the portable folder with `html_reports/market-depth-report.html`, `html_reports/lifecycle-strategy-report.html`, and `html_reports/demand-gap-report.html`.
 
 ## Required Child Sections
 

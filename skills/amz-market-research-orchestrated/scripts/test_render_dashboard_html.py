@@ -127,15 +127,22 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 "lifecycle-strategy-report.html",
                 "demand-gap-report.html",
             ]:
-                self.assertTrue((report_dir / "output" / name).exists(), name)
+                self.assertTrue((report_dir / "output" / "html_reports" / name).exists(), name)
+            self.assertTrue((report_dir / "output" / "report.html").exists(), "compat report.html")
 
-            index = (report_dir / "output" / "report.html").read_text(encoding="utf-8")
+            index = (report_dir / "output" / "html_reports" / "report.html").read_text(encoding="utf-8")
+            compat_index = (report_dir / "output" / "report.html").read_text(encoding="utf-8")
             self.assertIn('data-report-style="three-report-index-v2"', index)
-            self.assertIn("market-depth-report.html", index)
-            self.assertIn("lifecycle-strategy-report.html", index)
-            self.assertIn("demand-gap-report.html", index)
+            self.assertIn('href="market-depth-report.html"', index)
+            self.assertIn('href="lifecycle-strategy-report.html"', index)
+            self.assertIn('href="demand-gap-report.html"', index)
+            self.assertNotIn('href="output/', index)
+            self.assertNotIn('href="html_reports/', index)
+            self.assertIn('href="html_reports/market-depth-report.html"', compat_index)
+            self.assertIn('href="html_reports/lifecycle-strategy-report.html"', compat_index)
+            self.assertIn('href="html_reports/demand-gap-report.html"', compat_index)
             rendered_text = "\n".join(
-                (report_dir / "output" / name).read_text(encoding="utf-8")
+                (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
                 for name in [
                     "report.html",
                     "market-depth-report.html",
@@ -149,9 +156,12 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertNotIn("{{", rendered_text)
 
             delivery = json.loads((report_dir / "output" / "delivery_result.json").read_text(encoding="utf-8"))
-            self.assertEqual(delivery["html_reports"]["market_depth"], "output/market-depth-report.html")
-            self.assertEqual(delivery["html_reports"]["lifecycle_strategy"], "output/lifecycle-strategy-report.html")
-            self.assertEqual(delivery["html_reports"]["demand_gap"], "output/demand-gap-report.html")
+            self.assertEqual(delivery["html_bundle_dir"], "output/html_reports")
+            self.assertEqual(delivery["html_reports"]["index"], "output/html_reports/report.html")
+            self.assertEqual(delivery["html_reports"]["compat_index"], "output/report.html")
+            self.assertEqual(delivery["html_reports"]["market_depth"], "output/html_reports/market-depth-report.html")
+            self.assertEqual(delivery["html_reports"]["lifecycle_strategy"], "output/html_reports/lifecycle-strategy-report.html")
+            self.assertEqual(delivery["html_reports"]["demand_gap"], "output/html_reports/demand-gap-report.html")
 
             validation = self.run_validator(report_dir)
             self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)

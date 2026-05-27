@@ -52,7 +52,7 @@ Built into this skill for v2.
 
 Responsibilities:
 
-- Generate `report.html`, `report.md`, `data_pack.json`, `analysis_plan.json`, `lineage.md`, and `delivery_result.json`.
+- Generate the portable `output/html_reports/` HTML bundle, compatibility `output/report.html`, `report.md`, `data_pack.json`, `analysis_plan.json`, `lineage.md`, and `delivery_result.json`.
 - Preserve data lineage, quality score, method chain, limitations, and next validation actions.
 - Run `validate_market_research_deliverables.py`.
 

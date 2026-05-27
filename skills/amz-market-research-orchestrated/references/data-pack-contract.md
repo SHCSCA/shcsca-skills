@@ -172,4 +172,4 @@ The validator checks:
 - standalone v2 HTML bundle shape,
 - `delivery_result.json`.
 
-The HTML bundle is validated against `html-report-design-contract.md`: `report.html` must be the `three-report-index-v2` entry page, and the three child reports must include semantic sections, HTML evidence tables, visible source IDs, and their required report modules.
+The HTML bundle is validated against `html-report-design-contract.md`: `output/html_reports/report.html` must be the portable `three-report-index-v2` entry page with same-folder child links, `output/report.html` must remain a compatibility entry into `html_reports/`, and the three child reports must include semantic sections, HTML evidence tables, visible source IDs, and their required report modules.

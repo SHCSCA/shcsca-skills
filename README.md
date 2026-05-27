@@ -58,7 +58,7 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 Amazon / 电商市场调研 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链和交付规范的市场研究报告。
 
-v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的三报告交付包，不是 Markdown 套壳：`report.html` 为入口页，另外生成市场深度调研、产品全生命周期拓品战略、用户心智断层与需求机会三份独立 HTML，并提供 `validate_market_research_deliverables.py` 校验数据血缘、方法链、输出文件、HTML 深度和关键质量规则。
+v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的三报告交付包，不是 Markdown 套壳：四个可交付 HTML 统一放在 `output/html_reports/`，其中 `report.html` 为便携入口页，另外三份是市场深度调研、产品全生命周期拓品战略、用户心智断层与需求机会报告；`output/report.html` 只保留为兼容入口。`validate_market_research_deliverables.py` 校验数据血缘、方法链、输出文件、HTML 深度和关键质量规则。
 
 计划覆盖的调研任务：
 

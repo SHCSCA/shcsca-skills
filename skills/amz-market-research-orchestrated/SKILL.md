@@ -66,7 +66,7 @@ description: "Amazon / 电商市场调研可执行 v2 Skill。用户要求调研
 - 目标市场：Amazon US。
 - TikTok Shop：US。
 - 1688：CN 供应端。
-- 输出：`三份 HTML + Markdown + Data Pack`，入口页为 `output/report.html`。
+- 输出：`三份 HTML + Markdown + Data Pack`，便携 HTML 入口为 `output/html_reports/report.html`；`output/report.html` 仅作兼容入口。
 - 语言和风格：中文、本土化、老练直接、面向跨境卖家决策。
 - `primary purpose` 只能有一个，`secondary purposes` 最多两个。
 
@@ -255,16 +255,18 @@ reports/{task_id}/
     demand_gap.json
   output/
     report.html
-    market-depth-report.html
-    lifecycle-strategy-report.html
-    demand-gap-report.html
+    html_reports/
+      report.html
+      market-depth-report.html
+      lifecycle-strategy-report.html
+      demand-gap-report.html
     report.md
     delivery_result.json
 ```
 
 报告默认要求：
 
-- HTML 必须按 [html-report-design-contract.md](references/html-report-design-contract.md) 生成三报告交付包：`report.html` 是入口页，三份子报告分别是 `market-depth-report.html`、`lifecycle-strategy-report.html`、`demand-gap-report.html`。
+- HTML 必须按 [html-report-design-contract.md](references/html-report-design-contract.md) 生成三报告交付包：四个可交付 HTML 必须放在 `output/html_reports/` 同一文件夹内，其中 `report.html` 是便携入口页，三份子报告分别是 `market-depth-report.html`、`lifecycle-strategy-report.html`、`demand-gap-report.html`；`output/report.html` 是兼容入口，链接到 `html_reports/`。
 - HTML 优先使用 `assets/report-index-template.html`、`assets/market-depth-template.html`、`assets/lifecycle-strategy-template.html`、`assets/demand-gap-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
 - HTML 可离线打开，不依赖外部 CDN 才能显示核心内容、布局、表格和关键判断。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
@@ -276,7 +278,7 @@ HTML 主体必须使用真实结构化组件：
 - 四个 HTML 都必须是 standalone HTML document，并带对应 `data-report-style`。
 - 三份子报告必须使用 `<section>` 编号章节、KPI cards、CSS mini charts、evidence tables、cards、risk/roadmap/timeline 等结构化组件。
 - 竞品、关键词、1688、TikTok、Web、SKU、KANO/JTBD、数据血缘和附录必须用 `<table>`，不能用 Markdown 表格文本。
-- 关键结论旁必须显示 `source_id`；入口页必须链接三份子报告。
+- 关键结论旁必须显示 `source_id`；`output/html_reports/report.html` 必须用同文件夹相对链接打开三份子报告，不能写 `output/` 前缀。
 - 能展示的数据尽量进入 HTML：主报告展示重点和分析，长表进入 `<details>` 折叠附录；不要只展示 Top 几条后把其余数据藏在 JSON 里。
 
 推荐生成顺序：
@@ -320,7 +322,7 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 - 不因为 TikTok、1688 或 Firecrawl 失败就删除模块；保留模块并说明缺口。
 - 所有关键结论必须能追溯到 `source_id`。
 - 所有关键方法必须能追溯到 `method_chain`。
-- `report.html` 必须包含 `data-report-style="three-report-index-v2"`，并链接三份子报告。
+- `output/html_reports/report.html` 必须包含 `data-report-style="three-report-index-v2"`，并用同文件夹相对链接打开三份子报告；`output/report.html` 必须作为兼容入口链接到 `html_reports/`。
 - 三份子报告必须分别包含 `data-report-style="market-depth-report-v2"`、`data-report-style="lifecycle-strategy-report-v2"`、`data-report-style="demand-gap-report-v2"`。
 - 四个 HTML 都不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
 - 输出默认全中文，仅保留品牌名、ASIN、平台名、工具名和必要英文专有名词。
@@ -328,7 +330,8 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 ## 结束语模板
 
 ```text
-报告入口已生成：/absolute/path/to/report.html
+报告入口已生成：/absolute/path/to/output/html_reports/report.html
+兼容入口：/absolute/path/to/output/report.html
 
 核心判断：Go / Watch / No-Go
 任务目的：
@@ -339,9 +342,9 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 最大风险：
 数据质量：
 输出文件：
-- /absolute/path/to/market-depth-report.html
-- /absolute/path/to/lifecycle-strategy-report.html
-- /absolute/path/to/demand-gap-report.html
+- /absolute/path/to/output/html_reports/market-depth-report.html
+- /absolute/path/to/output/html_reports/lifecycle-strategy-report.html
+- /absolute/path/to/output/html_reports/demand-gap-report.html
 ```
 
 不要在聊天中粘贴完整 HTML。
