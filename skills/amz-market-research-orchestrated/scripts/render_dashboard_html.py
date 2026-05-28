@@ -27,6 +27,7 @@ TEMPLATE_PATHS = {
 
 HTML_BUNDLE_DIR = "output/html_reports"
 COMPAT_INDEX_REPORT = "output/report.html"
+ASSET_DIR = f"{HTML_BUNDLE_DIR}/assets"
 HTML_REPORT_FILENAMES = {
     "index": "report.html",
     "market_depth": "market-depth-report.html",
@@ -34,6 +35,94 @@ HTML_REPORT_FILENAMES = {
     "demand_gap": "demand-gap-report.html",
 }
 HTML_REPORTS = {key: f"{HTML_BUNDLE_DIR}/{filename}" for key, filename in HTML_REPORT_FILENAMES.items()}
+SITE_ASSETS = {
+    "css": f"{ASSET_DIR}/report.css",
+    "js": f"{ASSET_DIR}/report.js",
+    "data": f"{ASSET_DIR}/report-data.json",
+}
+CHILD_SKILLS = {
+    "market_depth": "amz-market-depth-report",
+    "lifecycle_strategy": "amz-lifecycle-strategy-report",
+    "demand_gap": "amz-demand-gap-report",
+}
+INTERACTIVE_FEATURES = [
+    "table_filter",
+    "table_sort",
+    "tabs",
+    "evidence_drawer",
+    "chart_linking",
+    "mobile_nav",
+]
+
+REPORT_CSS = """
+:root{--site-bg:#f6f7f9;--site-ink:#172033;--site-muted:#667085;--site-line:#d7dde7;--site-accent:#2f6f8f;--site-accent-2:#b7791f;--site-danger:#b42318;--site-ok:#2f7d55}
+.site-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 22px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--site-line);backdrop-filter:blur(10px)}
+.site-nav a{color:var(--site-ink);text-decoration:none;font-size:13px;font-weight:800}.site-nav-links{display:flex;gap:8px;flex-wrap:wrap}.site-nav-links a{padding:7px 10px;border:1px solid transparent}.site-nav-links a:hover,.site-nav-links a:focus{border-color:var(--site-line);background:#f0f4f8}.site-nav-toggle{display:none}
+.table-tools{display:flex;justify-content:flex-end;margin:8px 0}.table-tools input{width:min(320px,100%);border:1px solid var(--site-line);padding:9px 11px;font:13px/1.4 inherit;background:#fff;color:var(--site-ink)}
+th[data-sortable]{cursor:pointer;user-select:none}th[data-sortable]::after{content:" ↕";color:rgba(255,255,255,.65);font-size:11px}.is-filtered-out{display:none!important}
+.chart-container,.mini-chart,.evidence-table,.insight-table,.kpi-grid,.deep-dive-grid,.comp-deep-card,.opportunity-matrix{scroll-margin-top:76px}
+.bar-row{transition:background .18s ease}.bar-row:hover{background:rgba(47,111,143,.08)}.bar-row.is-linked{outline:2px solid rgba(47,111,143,.22)}
+.tab-list{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}.tab-button{border:1px solid var(--site-line);background:#fff;color:var(--site-ink);padding:8px 12px;font-weight:800;cursor:pointer}.tab-button[aria-selected=true]{background:var(--site-ink);color:#fff}
+.evidence-drawer{border:1px solid var(--site-line);background:#fff;margin:14px 0}.evidence-drawer summary{cursor:pointer;padding:12px 14px;font-weight:900;color:var(--site-ink)}.evidence-drawer .drawer-body{padding:0 14px 14px;color:var(--site-muted)}
+@media(max-width:760px){.site-nav{align-items:flex-start}.site-nav-toggle{display:block;border:1px solid var(--site-line);background:#fff;padding:7px 10px;font-weight:800}.site-nav-links{display:none;width:100%;padding-top:8px}.site-nav.is-open{flex-wrap:wrap}.site-nav.is-open .site-nav-links{display:flex;flex-direction:column}.table-tools{justify-content:stretch}.site-nav a{font-size:12px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+""".strip()
+
+REPORT_JS = """
+(function(){
+  const nav=document.querySelector('.site-nav');
+  const toggle=document.querySelector('.site-nav-toggle');
+  if(toggle&&nav){toggle.addEventListener('click',()=>nav.classList.toggle('is-open'));}
+  document.querySelectorAll('table').forEach((table,idx)=>{
+    if(table.dataset.enhanced)return;
+    table.dataset.enhanced='true';
+    const wrap=document.createElement('div');
+    wrap.className='table-tools';
+    const input=document.createElement('input');
+    input.type='search';
+    input.placeholder='筛选当前表格';
+    input.setAttribute('aria-label','筛选当前表格');
+    wrap.appendChild(input);
+    table.parentNode.insertBefore(wrap,table);
+    input.addEventListener('input',()=>{
+      const q=input.value.trim().toLowerCase();
+      table.querySelectorAll('tbody tr').forEach(row=>{
+        row.classList.toggle('is-filtered-out',q&&!row.textContent.toLowerCase().includes(q));
+      });
+    });
+    table.querySelectorAll('th').forEach((th,col)=>{
+      th.dataset.sortable='true';
+      th.addEventListener('click',()=>{
+        const tbody=table.tBodies[0];
+        if(!tbody)return;
+        const dir=th.dataset.sortDir==='asc'?'desc':'asc';
+        th.dataset.sortDir=dir;
+        [...tbody.rows].sort((a,b)=>{
+          const av=a.cells[col]?.textContent.trim()||'';
+          const bv=b.cells[col]?.textContent.trim()||'';
+          const an=parseFloat(av.replace(/[^0-9.-]/g,''));
+          const bn=parseFloat(bv.replace(/[^0-9.-]/g,''));
+          const cmp=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:av.localeCompare(bv,'zh-CN');
+          return dir==='asc'?cmp:-cmp;
+        }).forEach(row=>tbody.appendChild(row));
+      });
+    });
+  });
+  document.querySelectorAll('[data-tabs]').forEach(group=>{
+    const buttons=[...group.querySelectorAll('[data-tab-target]')];
+    buttons.forEach(button=>button.addEventListener('click',()=>{
+      buttons.forEach(btn=>btn.setAttribute('aria-selected',String(btn===button)));
+      group.querySelectorAll('[data-tab-panel]').forEach(panel=>{
+        panel.hidden=panel.dataset.tabPanel!==button.dataset.tabTarget;
+      });
+    }));
+  });
+  document.querySelectorAll('.mini-chart .bar-row').forEach(row=>{
+    row.addEventListener('mouseenter',()=>row.classList.add('is-linked'));
+    row.addEventListener('mouseleave',()=>row.classList.remove('is-linked'));
+  });
+})();
+""".strip()
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -924,6 +1013,87 @@ def render_template(template_key: str, replacements: dict[str, Any]) -> str:
     return html_doc
 
 
+def attach_site_chrome(html_doc: str, asset_prefix: str = "") -> str:
+    css_href = f"{asset_prefix}assets/report.css"
+    js_src = f"{asset_prefix}assets/report.js"
+    nav = (
+        "<nav class=\"site-nav\" aria-label=\"报告导航\">"
+        "<button class=\"site-nav-toggle\" type=\"button\">目录</button>"
+        "<a class=\"site-nav-brand\" href=\"" + asset_prefix + "report.html\">三合一报告</a>"
+        "<div class=\"site-nav-links\">"
+        "<a href=\"" + asset_prefix + "market-depth-report.html\">市场深度</a>"
+        "<a href=\"" + asset_prefix + "lifecycle-strategy-report.html\">生命周期拓品</a>"
+        "<a href=\"" + asset_prefix + "demand-gap-report.html\">需求断层</a>"
+        "</div></nav>"
+    )
+    if "assets/report.css" not in html_doc:
+        html_doc = html_doc.replace("</head>", f"<link rel=\"stylesheet\" href=\"{css_href}\">\n</head>")
+    if "site-nav" not in html_doc:
+        html_doc = html_doc.replace("<body>", "<body>\n" + nav, 1)
+    if "assets/report.js" not in html_doc:
+        html_doc = html_doc.replace("</body>", f"<script src=\"{js_src}\" defer></script>\n</body>")
+    return html_doc
+
+
+def site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> dict[str, Any]:
+    normalization = data_pack.get("normalization") or data_pack.get("cleaning_summary") or {}
+    return {
+        "report_files": {key: filename for key, filename in HTML_REPORT_FILENAMES.items()},
+        "child_skills": CHILD_SKILLS,
+        "interactive_features": INTERACTIVE_FEATURES,
+        "decision": decision,
+        "quality": data_pack.get("quality") or {},
+        "cleaning_summary": {
+            "deduped": normalization.get("deduped"),
+            "before_counts": normalization.get("before_counts") or {},
+            "after_counts": normalization.get("after_counts") or {},
+            "removed_counts": normalization.get("removed_counts") or {},
+            "cross_validated_counts": normalization.get("cross_validated_counts") or {},
+        },
+        "coverage": {
+            "products": len(data_pack.get("products") or []),
+            "keywords": len(data_pack.get("keywords") or []),
+            "reviews": len(data_pack.get("reviews") or []),
+            "tiktok_products": len(data_pack.get("tiktok_products") or []),
+            "suppliers": len(data_pack.get("suppliers") or []),
+            "web_documents": len(data_pack.get("web_documents") or []),
+            "method_chain": len(analysis_plan.get("method_chain") or []),
+        },
+        "data_gaps": [clean(gap.get("gap") if isinstance(gap, dict) else gap) for gap in (data_pack.get("data_gaps") or [])],
+    }
+
+
+def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> None:
+    asset_dir = report_dir / ASSET_DIR
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    (asset_dir / "report.css").write_text(REPORT_CSS + "\n", encoding="utf-8")
+    (asset_dir / "report.js").write_text(REPORT_JS + "\n", encoding="utf-8")
+    (asset_dir / "report-data.json").write_text(
+        json.dumps(site_data(data_pack, analysis_plan, decision), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> None:
+    brief = data_pack.get("brief") or {}
+    report_brief = {
+        "task_id": data_pack.get("task_id") or analysis_plan.get("task_id"),
+        "research_object": brief.get("research_object") or data_pack.get("research_object") or {},
+        "decision": decision,
+        "child_skills": CHILD_SKILLS,
+        "static_site": {
+            "bundle_dir": HTML_BUNDLE_DIR,
+            "assets": SITE_ASSETS,
+            "interactive_features": INTERACTIVE_FEATURES,
+        },
+        "data_inputs": {
+            "normalized_data_pack": "data/normalized/normalized_data_pack.json",
+            "analysis_plan": "analysis/analysis_plan.json",
+        },
+    }
+    (report_dir / "report_brief.json").write_text(json.dumps(report_brief, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def primary_source_id(data_pack: dict[str, Any]) -> str:
     sources = data_pack.get("sources") or []
     return str(first(*(source.get("source_id") for source in sources), default="src_gap"))
@@ -1333,6 +1503,9 @@ def write_delivery_result(report_dir: Path, delivery: dict[str, Any]) -> None:
     html_reports["compat_index"] = COMPAT_INDEX_REPORT
     delivery["html_reports"] = html_reports
     delivery["html_bundle_dir"] = HTML_BUNDLE_DIR
+    delivery["child_skills"] = CHILD_SKILLS
+    delivery["site_assets"] = SITE_ASSETS
+    delivery["interactive_features"] = INTERACTIVE_FEATURES
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(delivery, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1463,16 +1636,19 @@ def render(report_dir: Path) -> Path:
     bundle_dir = report_dir / HTML_BUNDLE_DIR
     bundle_dir.mkdir(parents=True, exist_ok=True)
     rendered_docs = {
-        "index": render_template("index", index_replacements),
-        "market_depth": render_template("market_depth", market_replacements),
-        "lifecycle_strategy": render_template("lifecycle_strategy", lifecycle_replacements),
-        "demand_gap": render_template("demand_gap", demand_replacements),
+        "index": attach_site_chrome(render_template("index", index_replacements)),
+        "market_depth": attach_site_chrome(render_template("market_depth", market_replacements)),
+        "lifecycle_strategy": attach_site_chrome(render_template("lifecycle_strategy", lifecycle_replacements)),
+        "demand_gap": attach_site_chrome(render_template("demand_gap", demand_replacements)),
     }
     rendered_docs = {key: redact_customer_html(html_doc, data_pack) for key, html_doc in rendered_docs.items()}
     for key, html_doc in rendered_docs.items():
         (report_dir / HTML_REPORTS[key]).parent.mkdir(parents=True, exist_ok=True)
         (report_dir / HTML_REPORTS[key]).write_text(html_doc, encoding="utf-8")
-    (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(render_template("index", compat_index_replacements), data_pack), encoding="utf-8")
+    (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(attach_site_chrome(render_template("index", compat_index_replacements), "html_reports/"), data_pack), encoding="utf-8")
+    write_site_assets(report_dir, data_pack, analysis_plan, str(decision))
+    write_report_brief(report_dir, data_pack, analysis_plan, str(decision))
+    delivery["cleaning_summary"] = site_data(data_pack, analysis_plan, str(decision))["cleaning_summary"]
     write_delivery_result(report_dir, delivery)
     return report_dir / HTML_REPORTS["index"]
 

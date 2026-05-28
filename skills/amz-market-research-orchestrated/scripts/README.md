@@ -14,8 +14,11 @@ Expected report shape:
 
 ```text
 reports/<task_id>/
+  report_brief.json
   data/
     data_pack.json
+    normalized/
+      normalized_data_pack.json
     lineage.md
   analysis/
     analysis_plan.json
@@ -26,6 +29,10 @@ reports/<task_id>/
       market-depth-report.html
       lifecycle-strategy-report.html
       demand-gap-report.html
+      assets/
+        report.css
+        report.js
+        report-data.json
     report.md
     delivery_result.json
 ```
@@ -38,10 +45,11 @@ The script prints `validate_ok` on success and `validate_failed: ...` on failure
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_keywords.py
 python skills/amz-market-research-orchestrated/scripts/test_normalize_data_pack.py
 python skills/amz-market-research-orchestrated/scripts/test_render_dashboard_html.py
+python skills/amz-market-research-orchestrated/scripts/test_child_skill_split.py
 python skills/amz-market-research-orchestrated/scripts/test_validate_market_research_deliverables.py
 ```
 
-These tests build temporary report directories and verify that Sorftime keyword pagination parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, the renderer writes the portable `output/html_reports/` bundle plus a compatibility entry, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, and incomplete report sections.
+These tests build temporary report directories and verify that Sorftime keyword pagination parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, the three child skills exist, the renderer writes the portable static site bundle plus a compatibility entry, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, and incomplete report sections.
 
 ## collect_sorftime_keywords.py
 
@@ -61,7 +69,7 @@ Cross-validates, dedupes, and enriches `data/data_pack.json`:
 python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir reports/<task_id>
 ```
 
-It adds `normalization`, `source_ids`, `validation`, Chinese keyword/title fields, keyword relevance labels, and Chinese review fields (`title_cn`, `summary_cn`, `themes_cn`), then writes `data/normalized/cross_validated_data_pack.json`. It also writes `data/normalized/normalization_baseline.json` on the first run so repeated rendering does not reset raw sample counts.
+It adds `normalization`, `cleaning_summary`, `source_ids`, `validation`, canonical URLs, Chinese keyword/title fields, keyword relevance labels, and Chinese review fields (`title_cn`, `summary_cn`, `themes_cn`), then writes `data/normalized/normalized_data_pack.json` and `data/normalized/cross_validated_data_pack.json`. It also writes `data/normalized/normalization_baseline.json` on the first run so repeated rendering does not reset raw sample counts.
 
 ## render_dashboard_html.py
 
@@ -79,11 +87,14 @@ output/html_reports/report.html
 output/html_reports/market-depth-report.html
 output/html_reports/lifecycle-strategy-report.html
 output/html_reports/demand-gap-report.html
+output/html_reports/assets/report.css
+output/html_reports/assets/report.js
+output/html_reports/assets/report-data.json
 ```
 
-`output/html_reports/` is the portable folder: move or download that folder as a unit and its `report.html` will link to the three child reports with same-folder relative links. `output/report.html` is retained as a compatibility entry that links into `html_reports/`.
+`output/html_reports/` is the portable static site folder: move or download that folder as a unit and its `report.html` will link to the three child reports and shared assets with same-folder relative links. `output/report.html` is retained as a compatibility entry that links into `html_reports/`.
 
-The renderer also updates `output/delivery_result.json.html_reports` and `output/delivery_result.json.html_bundle_dir`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
+The renderer also updates `output/delivery_result.json.html_reports`, `html_bundle_dir`, `child_skills`, `site_assets`, `interactive_features`, and `cleaning_summary`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
 
 Customer HTML is Chinese-facing by default. Raw English reviews and English review titles remain in `data_pack.json` for audit, while HTML uses Chinese summaries, themes, sentiment labels, and suggested actions.
 

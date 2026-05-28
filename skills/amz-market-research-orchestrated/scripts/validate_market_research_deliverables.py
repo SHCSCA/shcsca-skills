@@ -14,10 +14,23 @@ from typing import Any
 HTML_BUNDLE_DIR = "output/html_reports"
 BUNDLE_INDEX_REPORT = f"{HTML_BUNDLE_DIR}/report.html"
 COMPAT_INDEX_REPORT = "output/report.html"
+SITE_ASSETS = {
+    "css": f"{HTML_BUNDLE_DIR}/assets/report.css",
+    "js": f"{HTML_BUNDLE_DIR}/assets/report.js",
+    "data": f"{HTML_BUNDLE_DIR}/assets/report-data.json",
+}
+CHILD_SKILLS = {
+    "market_depth": "amz-market-depth-report",
+    "lifecycle_strategy": "amz-lifecycle-strategy-report",
+    "demand_gap": "amz-demand-gap-report",
+}
+INTERACTIVE_FEATURES = {"table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"}
 
 REQUIRED_FILES = [
     "data/data_pack.json",
+    "data/normalized/normalized_data_pack.json",
     "data/lineage.md",
+    "report_brief.json",
     "analysis/analysis_plan.json",
     COMPAT_INDEX_REPORT,
     BUNDLE_INDEX_REPORT,
@@ -26,6 +39,9 @@ REQUIRED_FILES = [
     f"{HTML_BUNDLE_DIR}/demand-gap-report.html",
     "output/report.md",
     "output/delivery_result.json",
+    SITE_ASSETS["css"],
+    SITE_ASSETS["js"],
+    SITE_ASSETS["data"],
 ]
 
 DATA_PACK_KEYS = [
@@ -401,6 +417,23 @@ def validate_delivery(report_dir: Path) -> None:
     require(delivery.get("html_bundle_dir") == HTML_BUNDLE_DIR, f"delivery_result.json html_bundle_dir must be {HTML_BUNDLE_DIR}")
     for key, spec in CHILD_REPORTS.items():
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
+    require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare the three report skills")
+    require(delivery.get("site_assets") == SITE_ASSETS, "delivery_result.json site_assets must declare static site assets")
+    features = set(delivery.get("interactive_features") or [])
+    require(INTERACTIVE_FEATURES.issubset(features), "delivery_result.json missing required interactive_features")
+    cleaning = delivery.get("cleaning_summary")
+    require(isinstance(cleaning, dict), "delivery_result.json missing cleaning_summary")
+    require(isinstance(cleaning.get("removed_counts"), dict), "delivery_result.json cleaning_summary missing removed_counts")
+
+    site_data = load_json(report_dir / SITE_ASSETS["data"])
+    require(site_data.get("child_skills") == CHILD_SKILLS, "report-data.json child_skills mismatch")
+    require(INTERACTIVE_FEATURES.issubset(set(site_data.get("interactive_features") or [])), "report-data.json missing interactive features")
+    for key in ["before_counts", "after_counts", "removed_counts"]:
+        require(isinstance((site_data.get("cleaning_summary") or {}).get(key), dict), f"report-data.json cleaning_summary missing {key}")
+
+    report_brief = load_json(report_dir / "report_brief.json")
+    require(report_brief.get("child_skills") == CHILD_SKILLS, "report_brief.json child_skills mismatch")
+    require((report_brief.get("static_site") or {}).get("bundle_dir") == HTML_BUNDLE_DIR, "report_brief.json static_site.bundle_dir mismatch")
 
 
 def validate(report_dir: Path) -> None:

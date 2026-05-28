@@ -173,6 +173,52 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertNotIn("asin", market_keyword)
             self.assertEqual(traffic_keyword["asin"], "B0ABC")
 
+    def test_strengthens_global_cleaning_for_titles_suppliers_and_canonical_urls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [
+                        {"source_id": "src_a", "provider": "sorftime", "tool": "product_search", "fetched_at": "now", "confidence": 0.8},
+                        {"source_id": "src_b", "provider": "firecrawl", "tool": "scrape", "fetched_at": "now", "confidence": 0.8},
+                    ],
+                    "products": [
+                        {"title": "AI Plush Toy - Parent App", "price": 89, "source_id": "src_a", "provider": "sorftime"},
+                        {"title": " ai plush toy parent app ", "review_count": 22, "source_id": "src_b", "provider": "firecrawl"},
+                    ],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [
+                        {"title": "AI Plush Shell", "store_name": "Shenzhen Toy Co.", "url": "https://detail.1688.com/offer/1.html?spm=a", "source_id": "src_a", "provider": "sorftime"},
+                        {"title": "ai plush shell", "store_name": "shenzhen toy co.", "url": "https://detail.1688.com/offer/1.html?foo=bar", "source_id": "src_b", "provider": "firecrawl"},
+                    ],
+                    "web_documents": [
+                        {"url": "https://example.com/report?utm_source=ad#section", "title": "Report A", "source_id": "src_a", "provider": "sorftime"},
+                        {"url": "https://example.com/report/", "title": "Report B", "source_id": "src_b", "provider": "firecrawl"},
+                    ],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            normalized = json.loads((report_dir / "data" / "normalized" / "normalized_data_pack.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(data_pack["products"]), 1)
+            self.assertEqual(len(data_pack["suppliers"]), 1)
+            self.assertEqual(len(data_pack["web_documents"]), 1)
+            self.assertEqual(normalized["normalization"]["removed_counts"]["products"], 1)
+            self.assertEqual(normalized["normalization"]["removed_counts"]["suppliers"], 1)
+            self.assertEqual(normalized["normalization"]["removed_counts"]["web_documents"], 1)
+            self.assertEqual(data_pack["web_documents"][0]["canonical_url"], "https://example.com/report")
+            self.assertEqual(data_pack["cleaning_summary"], data_pack["normalization"])
+
 
 if __name__ == "__main__":
     unittest.main()

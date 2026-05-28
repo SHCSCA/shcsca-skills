@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit, urlunsplit
 
 
 ENTITY_KEYS = [
@@ -78,6 +79,35 @@ def normalize_text(value: Any) -> str:
 
 def normalized_key(value: Any) -> str:
     return normalize_text(value).casefold()
+
+
+def fingerprint(value: Any) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", normalized_key(value)))
+
+
+def canonical_url(value: Any) -> str:
+    text = normalize_text(value)
+    if not text:
+        return ""
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return normalized_key(text)
+    scheme = (parts.scheme or "https").lower()
+    netloc = parts.netloc.lower()
+    path = re.sub(r"/+$", "", parts.path or "")
+    if not netloc:
+        return re.sub(r"/+$", "", text.split("#", 1)[0].split("?", 1)[0]).casefold()
+    return urlunsplit((scheme, netloc, path, "", ""))
+
+
+def product_dedupe_key(item: dict[str, Any]) -> str:
+    asin = normalized_key(item.get("asin"))
+    if asin:
+        return f"asin|{asin}"
+    title = fingerprint(item.get("title") or item.get("title_cn"))
+    brand = fingerprint(item.get("brand"))
+    return f"title|{brand}|{title}" if title else ""
 
 
 def has_cjk(value: Any) -> bool:
@@ -180,6 +210,36 @@ def keyword_dedupe_key(item: dict[str, Any]) -> str:
     if source_type == "product_traffic_terms" or asin:
         return f"traffic|{asin}|{keyword}" if asin else f"traffic|{keyword}"
     return f"market|{keyword}"
+
+
+def review_dedupe_key(item: dict[str, Any]) -> str:
+    text = first_existing(item.get("text"), item.get("content"), item.get("body"), item.get("comment"))
+    return "|".join(
+        [
+            normalized_key(item.get("asin")),
+            normalized_key(item.get("review_date") or item.get("date")),
+            fingerprint(item.get("title")),
+            fingerprint(text)[:120],
+        ]
+    )
+
+
+def supplier_dedupe_key(item: dict[str, Any]) -> str:
+    url = canonical_url(item.get("url"))
+    if url:
+        return f"url|{url}"
+    product_id = normalized_key(item.get("product_id"))
+    if product_id:
+        return f"id|{product_id}"
+    return "|".join(["title_store", fingerprint(item.get("title") or item.get("name")), fingerprint(item.get("store_name") or item.get("supplier_name"))])
+
+
+def web_document_dedupe_key(item: dict[str, Any]) -> str:
+    url = canonical_url(item.get("url"))
+    if url:
+        item["canonical_url"] = url
+        return f"url|{url}"
+    return f"title|{fingerprint(item.get('title'))}"
 
 
 STOP_WORDS = {
@@ -415,13 +475,20 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     before_counts = baseline_counts(report_dir, data_pack, current_counts)
     seed_terms = infer_seed_terms(data_pack)
 
-    data_pack["products"] = [enrich_product(product) for product in dedupe(data_pack.get("products") or [], lambda item: normalized_key(item.get("asin")), source_index)]
+    for item in data_pack.get("web_documents") or []:
+        if item.get("url"):
+            item["canonical_url"] = canonical_url(item.get("url"))
+    for item in data_pack.get("suppliers") or []:
+        if item.get("url"):
+            item["canonical_url"] = canonical_url(item.get("url"))
+
+    data_pack["products"] = [enrich_product(product) for product in dedupe(data_pack.get("products") or [], product_dedupe_key, source_index)]
     data_pack["keywords"] = [enrich_keyword(keyword, seed_terms) for keyword in dedupe(data_pack.get("keywords") or [], keyword_dedupe_key, source_index)]
-    data_pack["reviews"] = [enrich_review(review) for review in dedupe(data_pack.get("reviews") or [], lambda item: "|".join([normalized_key(item.get("asin")), normalized_key(item.get("review_date")), normalized_key(item.get("title")), normalized_key(item.get("text"))[:90]]), source_index)]
+    data_pack["reviews"] = [enrich_review(review) for review in dedupe(data_pack.get("reviews") or [], review_dedupe_key, source_index)]
     data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], lambda item: normalized_key(item.get("product_id")), source_index)
-    data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], lambda item: normalized_key(item.get("url")) or "|".join([normalized_key(item.get("product_id")), normalized_key(item.get("title"))]), source_index)
-    data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], lambda item: normalized_key(item.get("product_id")) or normalized_key(item.get("url")) or "|".join([normalized_key(item.get("title")), normalized_key(item.get("store_name"))]), source_index)
-    data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], lambda item: normalized_key(item.get("url")), source_index)
+    data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], lambda item: canonical_url(item.get("url")) or "|".join([normalized_key(item.get("product_id")), fingerprint(item.get("title"))]), source_index)
+    data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)
+    data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], web_document_dedupe_key, source_index)
 
     after_counts = {key: len(data_pack.get(key) or []) for key in ENTITY_KEYS}
     cross_validated = {
@@ -437,17 +504,21 @@ def normalize(report_dir: Path) -> dict[str, Any]:
         "cross_validated_counts": cross_validated,
         "rules": [
             "products deduped by ASIN",
+            "products without ASIN deduped by normalized title fingerprint",
             "market keywords deduped by normalized English keyword",
             "ASIN traffic keywords deduped by ASIN + normalized English keyword",
             "reviews deduped by ASIN/date/title/text fingerprint",
             "tiktok_products deduped by product_id",
-            "tiktok_videos and web_documents deduped by URL",
-            "suppliers deduped by product_id, URL, or title+store",
+            "tiktok_videos deduped by canonical URL or product_id+title",
+            "web_documents deduped by canonical URL with query and fragment removed",
+            "suppliers deduped by canonical URL, product_id, or title+store",
             "English keyword/title fields copied into audit-friendly display fields; relevance is inferred from research_object/seed keyword overlap",
         ],
     }
+    data_pack["cleaning_summary"] = data_pack["normalization"]
 
     write_json(data_path, data_pack)
+    write_json(report_dir / "data" / "normalized" / "normalized_data_pack.json", data_pack)
     write_json(report_dir / "data" / "normalized" / "cross_validated_data_pack.json", data_pack)
     return data_pack
 

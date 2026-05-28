@@ -8,6 +8,9 @@ output/html_reports/report.html            # portable bundle entry / navigation
 output/html_reports/market-depth-report.html
 output/html_reports/lifecycle-strategy-report.html
 output/html_reports/demand-gap-report.html
+output/html_reports/assets/report.css
+output/html_reports/assets/report.js
+output/html_reports/assets/report-data.json
 ```
 
 Do not copy the provided sample reports verbatim. Reuse their structure pattern: dark report header, KPI dashboard, numbered modules, dense cards, insight tables, matrices, roadmap, risk section, and executive summary cards. HTML is the client-facing analysis layer; source audit details stay in JSON/Markdown artifacts.
@@ -18,11 +21,13 @@ The four files inside `output/html_reports/` must:
 
 - Be standalone HTML documents with inline CSS.
 - Work offline for core content; do not depend on external CDN for layout, tables, text, decisions, or charts.
+- Load shared static site assets from `assets/` for the common design system, table interactions, report navigation, and sanitized report metadata.
 - Use semantic sections in child reports, not a single Markdown blob.
 - Never wrap Markdown in `<pre>`, `.markdown-body`, or raw Markdown tables.
 - Render analysis as real HTML tables, cards, score grids, timelines, or CSS/SVG charts.
 - Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, `product_id`, or ASIN values.
 - Use client-readable credibility language: `证据强度`, `样本覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
+- Support static-site interactions without CDN: top navigation, mobile directory, table search, table sorting, collapsible evidence drawers, and lightweight chart hover/link states.
 - Use Chinese-facing content by default. English review text, English review titles, raw scraped comments, and raw field values must be mapped into Chinese summaries, themes, sentiment labels, business meaning, and suggested actions before appearing in client HTML.
 
 Required `data-report-style` markers:
