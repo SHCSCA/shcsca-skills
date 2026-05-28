@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>客户版三报告 · 贴近样例原样风格预览</title>
+  <style>
+    :root{
+      --primary:#1a2744;
+      --primary-light:#243460;
+      --accent:#3d6b9e;
+      --accent2:#5b8db8;
+      --success:#6a9a7a;
+      --warning:#c9a05a;
+      --danger:#c4705a;
+      --bg:#f4f2ef;
+      --bg-card:#ffffff;
+      --text-primary:#1a2744;
+      --text-secondary:#5a6a7a;
+      --text-muted:#8a9aaa;
+      --border:#e0ddd8;
+      --morandi-blue:#8fa5b8;
+      --morandi-sage:#9aab9f;
+      --morandi-rose:#b89a9a;
+      --morandi-lavender:#9a8fb5;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text-primary);
+      font-family:"PingFang SC","Microsoft YaHei","Segoe UI",Arial,sans-serif;
+      line-height:1.62;
+    }
+    .prototype-note{
+      background:#111827;
+      color:rgba(255,255,255,.72);
+      padding:10px 24px;
+      font-size:12px;
+      letter-spacing:.2px;
+    }
+    .report-page{border-bottom:1px solid var(--border)}
+    .report-header{
+      background:var(--primary);
+      color:#fff;
+      padding:56px 60px 48px;
+      position:relative;
+      overflow:hidden;
+    }
+    .report-header::before{
+      content:"";
+      position:absolute;
+      right:-92px;
+      top:-92px;
+      width:330px;
+      height:330px;
+      border-radius:50%;
+      background:rgba(91,141,184,.12);
+    }
+    .header-badge{
+      display:inline-block;
+      background:rgba(91,141,184,.3);
+      border:1px solid rgba(91,141,184,.5);
+      color:#a8c8e8;
+      font-size:11px;
+      letter-spacing:2px;
+      padding:4px 12px;
+      margin-bottom:20px;
+      text-transform:uppercase;
+      position:relative;
+      z-index:1;
+    }
+    .report-header h1{
+      margin:0 0 12px;
+      font-size:38px;
+      font-weight:700;
+      letter-spacing:0;
+      line-height:1.16;
+      position:relative;
+      z-index:1;
+    }
+    .report-header h1 span{color:#a8c8e8}
+    .subtitle{
+      margin:0 0 32px;
+      color:rgba(255,255,255,.62);
+      max-width:1040px;
+      font-size:15px;
+      position:relative;
+      z-index:1;
+    }
+    .header-meta{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:24px;
+      position:relative;
+      z-index:1;
+    }
+    .header-meta-item .label{
+      display:block;
+      color:rgba(255,255,255,.4);
+      font-size:11px;
+      letter-spacing:1px;
+      text-transform:uppercase;
+    }
+    .header-meta-item .value{
+      display:block;
+      margin-top:4px;
+      color:rgba(255,255,255,.88);
+      font-size:14px;
+      font-weight:700;
+    }
+    .container{max-width:1280px;margin:0 auto;padding:0 40px 58px}
+    .section{padding:48px 0 0}
+    .section-header{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:28px;
+    }
+    .section-number{
+      width:32px;
+      height:32px;
+      background:var(--primary);
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:13px;
+      font-weight:700;
+      flex-shrink:0;
+    }
+    .section-title{
+      font-size:22px;
+      font-weight:700;
+      color:var(--primary);
+      letter-spacing:0;
+    }
+    .section-desc{
+      font-size:13px;
+      color:var(--text-muted);
+      margin-left:auto;
+    }
+    .kpi-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:16px;
+      margin-bottom:24px;
+    }
+    .kpi-grid.five{grid-template-columns:repeat(5,minmax(0,1fr))}
+    .kpi-card{
+      background:var(--bg-card);
+      border:1px solid var(--border);
+      padding:24px 20px;
+      position:relative;
+      overflow:hidden;
+      min-height:122px;
+    }
+    .kpi-card::before{
+      content:"";
+      position:absolute;
+      top:0;
+      left:0;
+      width:3px;
+      height:100%;
+      background:var(--accent);
+    }
+    .kpi-card.success::before{background:var(--success)}
+    .kpi-card.warning::before{background:var(--warning)}
+    .kpi-card.danger::before{background:var(--danger)}
+    .kpi-card.lavender::before{background:var(--morandi-lavender)}
+    .kpi-label{
+      font-size:11px;
+      color:var(--text-muted);
+      letter-spacing:1px;
+      text-transform:uppercase;
+      margin-bottom:8px;
+    }
+    .kpi-value{
+      font-size:28px;
+      font-weight:800;
+      color:var(--primary);
+      letter-spacing:0;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .kpi-sub{font-size:12px;color:var(--text-muted)}
+    .card,.chart-container,.visual-card,.bundle-card,.risk-card,.persona-card,.timeline-card{
+      background:var(--bg-card);
+      border:1px solid var(--border);
+    }
+    .card{padding:28px;margin-bottom:20px}
+    .card-title,.chart-title{
+      font-size:14px;
+      font-weight:700;
+      color:var(--text-secondary);
+      letter-spacing:.5px;
+      text-transform:uppercase;
+      margin-bottom:16px;
+      padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .chart-container{padding:24px;margin-bottom:20px}
+    .chart-subtitle{font-size:12px;color:var(--text-muted);margin-top:-8px;margin-bottom:16px}
+    .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+    .bar-row{display:grid;grid-template-columns:150px 1fr 56px;gap:10px;align-items:center;font-size:12px;margin:10px 0;color:var(--text-secondary)}
+    .bar{height:8px;background:#edf1f5}
+    .bar span{display:block;height:100%;width:var(--w);background:var(--accent)}
+    .bar.success span{background:var(--success)}
+    .bar.warning span{background:var(--warning)}
+    .insight-box{
+      background:#eef4fb;
+      border-left:4px solid var(--accent);
+      padding:16px 20px;
+      margin:16px 0 20px;
+      font-size:13px;
+      color:var(--primary);
+      line-height:1.7;
+    }
+    .insight-box strong{color:var(--accent)}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
+    th{
+      background:var(--primary);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;
+      text-align:left;
+      font-size:11px;
+      letter-spacing:.5px;
+      font-weight:600;
+      text-transform:uppercase;
+    }
+    td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-secondary)}
+    .comp-grid,.visual-grid,.persona-grid,.bundle-grid,.risk-grid,.roadmap-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:16px;
+    }
+    .comp-card,.visual-card,.persona-card,.bundle-card,.risk-card,.timeline-card{
+      overflow:hidden;
+      background:#fff;
+      border:1px solid var(--border);
+    }
+    .comp-head,.persona-head,.bundle-head,.timeline-head{
+      background:var(--primary);
+      color:#fff;
+      padding:15px 16px;
+      font-size:14px;
+      font-weight:700;
+    }
+    .comp-body,.visual-body,.persona-body,.bundle-body,.timeline-body{padding:18px}
+    .comp-section-title,.visual-item-title{
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.8px;
+      color:var(--accent);
+      text-transform:uppercase;
+      margin-bottom:6px;
+    }
+    .comp-text,.visual-item-text,.persona-body p,.bundle-body p,.timeline-body p,.risk-card p{
+      color:var(--text-secondary);
+      font-size:12px;
+      line-height:1.75;
+      margin:0 0 12px;
+    }
+    .supply-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:16px;
+    }
+    .supply-card{
+      background:#fff;
+      border:1px solid var(--border);
+      padding:20px;
+    }
+    .supply-label{font-size:12px;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase}
+    .supply-value{font-size:30px;font-weight:800;color:var(--primary);line-height:1.1;margin:8px 0}
+    .supply-note{font-size:12px;color:var(--text-secondary);line-height:1.6}
+    .conclusion{
+      background:var(--primary);
+      color:#fff;
+      padding:48px 52px;
+      margin-top:36px;
+    }
+    .conclusion-title{
+      font-size:11px;
+      letter-spacing:2px;
+      color:rgba(255,255,255,.42);
+      text-transform:uppercase;
+      margin-bottom:20px;
+    }
+    .conclusion-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:24px;
+    }
+    .conclusion-item-title{font-size:13px;font-weight:700;color:#7ab8e8;margin-bottom:8px}
+    .conclusion-item-text{font-size:12px;color:rgba(255,255,255,.68);line-height:1.75}
+
+    /* R3 dark report, matching the supplied mental-gap sample more closely */
+    .r3{
+      --r3-bg:#0b1220;
+      --r3-paper:#101a2e;
+      --r3-card:#f8fafc;
+      --r3-line:rgba(148,163,184,.24);
+      --r3-primary:#69b7ff;
+      --r3-primary-deep:#a9d6ff;
+      background:var(--r3-bg);
+      color:#e5eefb;
+      padding:24px;
+    }
+    .r3 .wrap{max-width:1360px;margin:0 auto}
+    .r3 .hero{
+      position:relative;
+      overflow:hidden;
+      background:#111827;
+      border:1px solid var(--r3-line);
+      padding:24px;
+    }
+    .r3 .hero .eyebrow{
+      display:inline-block;
+      border:1px solid rgba(105,183,255,.45);
+      color:var(--r3-primary-deep);
+      padding:4px 10px;
+      font-size:11px;
+      letter-spacing:2px;
+      text-transform:uppercase;
+    }
+    .r3 .hero h1{
+      margin:8px 0 0;
+      font-family:"Noto Serif SC","Songti SC",serif;
+      color:#fff;
+      font-size:30px;
+      line-height:1.25;
+      font-weight:700;
+    }
+    .r3 .sub{margin-top:10px;font-size:15px;color:#8a9aaa}
+    .r3 .lead{margin-top:10px;font-size:13px;color:#9fb0c3;line-height:1.65}
+    .r3 .sec{
+      margin-top:16px;
+      border:1px solid var(--r3-line);
+      background:var(--r3-paper);
+      padding:16px;
+      position:relative;
+    }
+    .r3 .sec h2{
+      margin:0 0 12px;
+      font-family:"Noto Serif SC","Songti SC",serif;
+      font-size:22px;
+      color:var(--r3-primary-deep);
+      line-height:1.3;
+      border-left:4px solid var(--r3-primary);
+      padding-left:10px;
+    }
+    .r3 .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:0}
+    .r3 .kpi{
+      border:1px solid var(--r3-line);
+      background:var(--r3-card);
+      padding:12px;
+    }
+    .r3 .kpi .k{font-size:12px;color:#5a6a7a}
+    .r3 .kpi .v{margin-top:6px;color:#1a2744;font-size:30px;font-weight:800;line-height:1.05}
+    .r3 .card{
+      border:1px solid var(--r3-line);
+      background:var(--r3-card);
+      color:#1a2744;
+      padding:12px;
+      margin-bottom:10px;
+    }
+    .r3 .focus{border-left:4px solid var(--r3-primary)}
+    .r3 .warn{border-left:4px solid #fb7185}
+    .r3 .ok{border-left:4px solid #22c55e}
+    .r3 .chart{
+      height:250px;
+      display:grid;
+      place-items:center;
+      border:1px dashed #7da9cf;
+      background:linear-gradient(135deg,#14243f,#0e1a2e);
+      color:#b9dcff;
+      font-size:13px;
+      margin-bottom:10px;
+    }
+    .r3 .chart-interpretation{
+      margin-top:10px;
+      border:1px solid var(--r3-line);
+      background:rgba(255,255,255,.05);
+      padding:10px;
+      font-size:13px;
+      line-height:1.6;
+      color:#9fb0c3;
+    }
+    .r3 table{background:var(--r3-card);color:#1a2744}
+    .r3 th{background:#eaf3ff;color:#1d3a63}
+    .r3 td{color:#384a60;border-color:#d9e2ee}
+    .kano-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:12px;
+    }
+    .report-footer{
+      background:#111827;
+      color:rgba(255,255,255,.48);
+      padding:18px 60px;
+      font-size:12px;
+    }
+    @media(max-width:1000px){
+      .report-header{padding:38px 24px}
+      .container{padding:0 24px 40px}
+      .header-meta,.kpi-grid,.kpi-grid.five,.chart-grid,.comp-grid,.visual-grid,.persona-grid,.bundle-grid,.risk-grid,.roadmap-grid,.supply-grid,.conclusion-grid,.r3 .kpi-grid,.kano-grid{grid-template-columns:1fr}
+      .section-header{align-items:flex-start}
+      .section-desc{margin-left:0}
+      .conclusion{padding:32px 24px}
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-note">贴近原样风格预览：市场/生命周期沿用深蓝商务报告布局，R3 沿用深色需求分析布局；内容仍隐藏审计字段。</div>
+
+  <article class="report-page">
+    <header class="report-header">
+      <div class="header-badge">Three Report Bundle</div>
+      <h1>AI 产品赛道 · <span>三合一市场研究</span>报告</h1>
+      <p class="subtitle">客户版入口页。不是数据目录，而是先给决策，再进入三份独立报告：市场深度调研、生命周期拓品战略、用户心智断层。</p>
+      <div class="header-meta">
+        <div class="header-meta-item"><span class="label">核心判断</span><span class="value">Watch，先小样本验证</span></div>
+        <div class="header-meta-item"><span class="label">证据强度</span><span class="value">中高</span></div>
+        <div class="header-meta-item"><span class="label">样本覆盖</span><span class="value">关键词 · 竞品 · 评论 · 供应端</span></div>
+        <div class="header-meta-item"><span class="label">建议动作</span><span class="value">30 天验证主卖点</span></div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="section">
+        <div class="section-header"><div class="section-number">01</div><div class="section-title">决策总览 · Executive Dashboard</div><div class="section-desc">Go / Watch / No-Go</div></div>
+        <div class="kpi-grid">
+          <div class="kpi-card warning"><div class="kpi-label">核心判断</div><div class="kpi-value">Watch</div><div class="kpi-sub">有机会，但需要先验证信任卖点</div></div>
+          <div class="kpi-card success"><div class="kpi-label">最大机会</div><div class="kpi-value">体验信任</div><div class="kpi-sub">把用户犹豫点转成页面承诺</div></div>
+          <div class="kpi-card danger"><div class="kpi-label">最大风险</div><div class="kpi-value">同质化</div><div class="kpi-sub">只拼功能会落入价格战</div></div>
+          <div class="kpi-card lavender"><div class="kpi-label">下一步动作</div><div class="kpi-value">打样验证</div><div class="kpi-sub">先验证主图、卖点、Bundle</div></div>
+        </div>
+        <div class="comp-grid">
+          <div class="comp-card"><div class="comp-head">市场深度调研报告</div><div class="comp-body"><div class="comp-section-title">Market Depth</div><div class="comp-text">看大盘、需求、竞品、内容信号和供应链风险，回答能不能进。</div></div></div>
+          <div class="comp-card"><div class="comp-head">全生命周期拓品战略报告</div><div class="comp-body"><div class="comp-section-title">Lifecycle Strategy</div><div class="comp-text">把市场结论转成 SKU、Bundle、AOV 与 LTV 和 90 天路线图。</div></div></div>
+          <div class="comp-card"><div class="comp-head">用户心智断层报告</div><div class="comp-body"><div class="comp-section-title">Demand Gap</div><div class="comp-text">把评论和搜索意图转成心智缺口、负面触发点和转化机会。</div></div></div>
+        </div>
+      </section>
+    </main>
+  </article>
+
+  <article class="report-page">
+    <header class="report-header">
+      <div class="header-badge">Market Depth</div>
+      <h1>AI 产品赛道<span>深度市场调研</span>报告</h1>
+      <p class="subtitle">贴近第一份样例：深蓝报告头、KPI 仪表盘、编号 section、图表容器、标杆竞品拆解、视觉与供应链模块、战略总结。</p>
+      <div class="header-meta">
+        <div class="header-meta-item"><span class="label">市场判断</span><span class="value">中高价带有体验空白</span></div>
+        <div class="header-meta-item"><span class="label">价格带机会</span><span class="value">$69-$99</span></div>
+        <div class="header-meta-item"><span class="label">竞争强度</span><span class="value">中高</span></div>
+        <div class="header-meta-item"><span class="label">关键切入口</span><span class="value">信任承诺 + 场景包装</span></div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="section">
+        <div class="section-header"><div class="section-number">01</div><div class="section-title">大盘仪表盘 · Market Dashboard</div><div class="section-desc">市场规模 · 价格带 · 销量结构</div></div>
+        <div class="kpi-grid">
+          <div class="kpi-card success"><div class="kpi-label">可进入性评分</div><div class="kpi-value">72</div><div class="kpi-sub">适合小步验证，不建议直接重仓</div></div>
+          <div class="kpi-card"><div class="kpi-label">主攻价格带</div><div class="kpi-value">$89</div><div class="kpi-sub">兼顾价值感和转化门槛</div></div>
+          <div class="kpi-card warning"><div class="kpi-label">竞品密度</div><div class="kpi-value">中高</div><div class="kpi-sub">低价段拥挤，中高价仍有空位</div></div>
+          <div class="kpi-card lavender"><div class="kpi-label">第一卖点</div><div class="kpi-value">可靠</div><div class="kpi-sub">比功能堆叠更能降低犹豫</div></div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-container">
+            <div class="chart-title">价格带机会分布</div>
+            <div class="chart-subtitle">用条形图替代复杂图表，保留样例的 chart-container 视觉。</div>
+            <div class="bar-row"><span>$39 以下</span><div class="bar"><span style="--w:42%"></span></div><b>拥挤</b></div>
+            <div class="bar-row"><span>$69-$99</span><div class="bar success"><span style="--w:84%"></span></div><b>机会</b></div>
+            <div class="bar-row"><span>$129+</span><div class="bar warning"><span style="--w:56%"></span></div><b>谨慎</b></div>
+          </div>
+          <div class="chart-container">
+            <div class="chart-title">产品功能维度分布</div>
+            <div class="bar-row"><span>基础功能</span><div class="bar"><span style="--w:78%"></span></div><b>高</b></div>
+            <div class="bar-row"><span>信任承诺</span><div class="bar warning"><span style="--w:38%"></span></div><b>低</b></div>
+            <div class="bar-row"><span>场景包装</span><div class="bar success"><span style="--w:64%"></span></div><b>中</b></div>
+          </div>
+        </div>
+        <div class="insight-box"><strong>核心判断：</strong>这个市场不是“源数据越多越好”的报告，而是要把需求、竞品和供应端证据压缩成一个可执行切入口。</div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">04</div><div class="section-title">标杆竞品狙击拆解</div><div class="section-desc">溢价逻辑 · 未解决痛点 · 我们的机会</div></div>
+        <div class="comp-grid">
+          <div class="comp-card"><div class="comp-head">标杆样本 A</div><div class="comp-body"><div class="comp-section-title">溢价逻辑</div><div class="comp-text">靠强场景表达和礼品感建立价值锚点。</div><div class="comp-section-title">未解决的痛点</div><div class="comp-text">可靠性承诺不够清晰，售后预期弱。</div><div class="comp-section-title">我们的机会</div><div class="comp-text">把可信、可维护和开箱体验打成组合卖点。</div></div></div>
+          <div class="comp-card"><div class="comp-head">标杆样本 B</div><div class="comp-body"><div class="comp-section-title">溢价逻辑</div><div class="comp-text">功能参数表达完整，但情绪价值弱。</div><div class="comp-section-title">未解决的痛点</div><div class="comp-text">主图偏技术化，用户难以感知真实场景。</div><div class="comp-section-title">我们的机会</div><div class="comp-text">用生活化场景和承诺文案降低购买阻力。</div></div></div>
+          <div class="comp-card"><div class="comp-head">标杆样本 C</div><div class="comp-body"><div class="comp-section-title">溢价逻辑</div><div class="comp-text">靠套装和包装提升客单。</div><div class="comp-section-title">未解决的痛点</div><div class="comp-text">复购路径不足，长期使用理由不清晰。</div><div class="comp-section-title">我们的机会</div><div class="comp-text">用维护包、补给包和内容权益延长生命周期。</div></div></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">06</div><div class="section-title">视觉与包装指导 · Visual Direction</div><div class="section-desc">主图策略 · 包装策略 · 内容策略</div></div>
+        <div class="visual-grid">
+          <div class="visual-card"><div class="visual-body"><div class="visual-item-title">竞品现状</div><div class="visual-item-text">大部分竞品用参数和功能表达，用户看完仍然不知道为什么值得信任。</div><div class="visual-item-title">我们的主图策略</div><div class="visual-item-text">把“可靠、可维护、场景适配”放在视觉第一层，而不是堆满功能点。</div></div></div>
+          <div class="visual-card"><div class="visual-body"><div class="visual-item-title">包装策略</div><div class="visual-item-text">采用礼品化开箱层次，强化高客单价值感。</div><div class="visual-item-title">内容策略</div><div class="visual-item-text">围绕使用前疑虑和使用后惊喜设计短视频脚本。</div></div></div>
+          <div class="visual-card"><div class="visual-body"><div class="visual-item-title">页面表达</div><div class="visual-item-text">首屏先解决“我为什么敢买”，再讲功能和参数。</div><div class="visual-item-title">转化动作</div><div class="visual-item-text">把痛点修复写成五点、A+ 和 FAQ 的固定模块。</div></div></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">07</div><div class="section-title">供应链成本估算 · 1688 大盘数据</div><div class="section-desc">成本结构 · 毛利率测算</div></div>
+        <div class="supply-grid">
+          <div class="supply-card"><div class="supply-label">核心部件成本</div><div class="supply-value">¥80-120</div><div class="supply-note">用成本带展示判断，不展示供应商 ID。</div></div>
+          <div class="supply-card"><div class="supply-label">包装配件成本</div><div class="supply-value">¥25-40</div><div class="supply-note">礼盒、卡片、内衬会影响价值感。</div></div>
+          <div class="supply-card"><div class="supply-label">综合出厂成本</div><div class="supply-value">¥140-215</div><div class="supply-note">仅用于价格红线和毛利区间。</div></div>
+          <div class="supply-card"><div class="supply-label">打样难度</div><div class="supply-value">中</div><div class="supply-note">先做可控版本，再扩展复杂 SKU。</div></div>
+        </div>
+      </section>
+
+      <div class="conclusion">
+        <div class="conclusion-title">Strategic Summary · 战略总结</div>
+        <div class="conclusion-grid">
+          <div><div class="conclusion-item-title">核心机会</div><div class="conclusion-item-text">中高价带存在体验与信任表达空白。</div></div>
+          <div><div class="conclusion-item-title">核心差异化</div><div class="conclusion-item-text">可靠承诺、可维护结构、礼品化场景。</div></div>
+          <div><div class="conclusion-item-title">财务逻辑</div><div class="conclusion-item-text">用 Bundle 和补给包提升客单与复购。</div></div>
+          <div><div class="conclusion-item-title">下一步行动</div><div class="conclusion-item-text">打样、主图测试、详情页承诺、KOL 场景验证。</div></div>
+        </div>
+      </div>
+    </main>
+    <div class="report-footer">市场深度调研报告 · 客户版样式预览 · 技术审计字段不进入 HTML</div>
+  </article>
+
+  <article class="report-page">
+    <header class="report-header">
+      <div class="header-badge">Lifecycle Strategy</div>
+      <h1>AI 产品 · <span>全生命周期拓品战略</span>报告</h1>
+      <p class="subtitle">贴近第二份样例：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、SKU/Bundle/路线图/风险矩阵。</p>
+      <div class="header-meta">
+        <div class="header-meta-item"><span class="label">拓品主线</span><span class="value">首购信任 → 体验升级 → 复购补给</span></div>
+        <div class="header-meta-item"><span class="label">AOV 机会</span><span class="value">+18%-35%</span></div>
+        <div class="header-meta-item"><span class="label">LTV 机会</span><span class="value">维护包 + 内容权益</span></div>
+        <div class="header-meta-item"><span class="label">90 天节奏</span><span class="value">打样 / 验证 / 扩展</span></div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="section">
+        <div class="section-header"><div class="section-number">01</div><div class="section-title">战略仪表盘 · Strategy Dashboard</div><div class="section-desc">拓品全局概览</div></div>
+        <div class="kpi-grid five">
+          <div class="kpi-card success"><div class="kpi-label">P1 SKU</div><div class="kpi-value">4</div><div class="kpi-sub">先做强关联、可控供应链</div></div>
+          <div class="kpi-card"><div class="kpi-label">Bundle 数</div><div class="kpi-value">3</div><div class="kpi-sub">首购、礼品、补给</div></div>
+          <div class="kpi-card warning"><div class="kpi-label">复购触点</div><div class="kpi-value">60-90 天</div><div class="kpi-sub">维护与替换需求</div></div>
+          <div class="kpi-card lavender"><div class="kpi-label">供应难度</div><div class="kpi-value">中</div><div class="kpi-sub">先控制复杂度</div></div>
+          <div class="kpi-card"><div class="kpi-label">优先策略</div><div class="kpi-value">套装化</div><div class="kpi-sub">提高客单而非堆 SKU</div></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">02</div><div class="section-title">目标用户画像 · User Personas</div><div class="section-desc">人群 · 场景 · 价格接受带</div></div>
+        <div class="persona-grid">
+          <div class="persona-card"><div class="persona-head">首次购买用户</div><div class="persona-body"><p>需要看懂价值、降低踩坑风险。</p><span class="kpi-sub">策略：信任说明卡 + 快速启动卡</span></div></div>
+          <div class="persona-card"><div class="persona-head">礼品购买用户</div><div class="persona-body"><p>希望产品显得体面，有开箱仪式。</p><span class="kpi-sub">策略：礼盒套装 + 场景配件</span></div></div>
+          <div class="persona-card"><div class="persona-head">长期使用用户</div><div class="persona-body"><p>关心维护、替换、持续体验。</p><span class="kpi-sub">策略：补给包 + 内容权益</span></div></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">04</div><div class="section-title">四维拓品生态 · 4D Ecosystem</div><div class="section-desc">主品增强 · 场景扩展 · 内容权益 · 维护补给</div></div>
+        <div class="chart-container">
+          <div class="chart-title">四维拓品生态全景</div>
+          <div class="chart-grid">
+            <table>
+              <tr><th>维度</th><th>代表方向</th><th>商业含义</th></tr>
+              <tr><td>A 核心体验增强</td><td>说明卡、备用配件</td><td>降低首购疑虑</td></tr>
+              <tr><td>B 场景扩展</td><td>礼品配件、场景包</td><td>提升客单</td></tr>
+              <tr><td>C 内容权益</td><td>任务卡、玩法内容</td><td>增加持续使用理由</td></tr>
+              <tr><td>D 维护补给</td><td>清洁、替换、耗材</td><td>创造复购触点</td></tr>
+            </table>
+            <div>
+              <div class="bar-row"><span>A 核心增强</span><div class="bar success"><span style="--w:92%"></span></div><b>P1</b></div>
+              <div class="bar-row"><span>B 场景扩展</span><div class="bar"><span style="--w:76%"></span></div><b>P1</b></div>
+              <div class="bar-row"><span>C 内容权益</span><div class="bar warning"><span style="--w:54%"></span></div><b>P2</b></div>
+              <div class="bar-row"><span>D 维护补给</span><div class="bar"><span style="--w:68%"></span></div><b>P2</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">06</div><div class="section-title">四组 Bundle 策略 · AOV 提升引擎</div><div class="section-desc">组合 · 建议价 · 目标</div></div>
+        <div class="bundle-grid">
+          <div class="bundle-card"><div class="bundle-head">新手启航套装</div><div class="bundle-body"><p>主品 + 欢迎卡 + 信任说明 + 基础配件。</p><div class="kpi-value">$99-$119</div><div class="kpi-sub">降低首次购买犹豫</div></div></div>
+          <div class="bundle-card"><div class="bundle-head">豪华礼品套装</div><div class="bundle-body"><p>主品 + 礼盒 + 场景配件 + 价值说明卡。</p><div class="kpi-value">$129-$159</div><div class="kpi-sub">提升礼品场景客单</div></div></div>
+          <div class="bundle-card"><div class="bundle-head">续航补给包</div><div class="bundle-body"><p>维护件 + 替换件 + 耗材。</p><div class="kpi-value">$19-$29</div><div class="kpi-sub">创造复购理由</div></div></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header"><div class="section-number">07</div><div class="section-title">优先级路线图 · Implementation Roadmap</div><div class="section-desc">30 / 60 / 90 天</div></div>
+        <div class="roadmap-grid">
+          <div class="timeline-card"><div class="timeline-head">30 天</div><div class="timeline-body"><p>确认 P1 SKU、包装层级和页面承诺。</p></div></div>
+          <div class="timeline-card"><div class="timeline-head">60 天</div><div class="timeline-body"><p>完成打样、供应链询价、首轮转化测试。</p></div></div>
+          <div class="timeline-card"><div class="timeline-head">90 天</div><div class="timeline-body"><p>根据评论和转化数据扩展 P2 SKU。</p></div></div>
+        </div>
+      </section>
+
+      <div class="conclusion">
+        <div class="conclusion-title">Strategic Summary · 战略总结</div>
+        <div class="conclusion-grid">
+          <div><div class="conclusion-item-title">拓品原则</div><div class="conclusion-item-text">先强关联，再扩场景，最后做复购。</div></div>
+          <div><div class="conclusion-item-title">AOV 引擎</div><div class="conclusion-item-text">礼品套装和新手套装优先。</div></div>
+          <div><div class="conclusion-item-title">LTV 引擎</div><div class="conclusion-item-text">维护补给和内容权益承接长期使用。</div></div>
+          <div><div class="conclusion-item-title">风险控制</div><div class="conclusion-item-text">避免复杂 SKU 过早拖慢供应链。</div></div>
+        </div>
+      </div>
+    </main>
+    <div class="report-footer">全生命周期拓品战略报告 · 客户版样式预览</div>
+  </article>
+
+  <article class="r3">
+    <div class="wrap">
+      <section class="hero">
+        <div class="eyebrow">Cross-Border Intelligence Brief</div>
+        <h1>R3-需求分析师｜用户心智断层与需求机会报告</h1>
+        <div class="sub">目标：用 $APPEALS + KANO + JTBD 把评论转成可执行需求洞察。</div>
+        <div class="lead">主题基调：能源科技深空蓝。采用深空蓝与电光青，突出专业、可靠与性能感；布局贴近你给的 R3 样例。</div>
+      </section>
+
+      <section class="sec">
+        <h2>研究对象概述</h2>
+        <div class="card focus"><strong>研究边界：</strong>围绕一个目标产品想法与竞品评论样本，提炼用户真正犹豫、劝退和愿意付费的点。</div>
+        <div class="chart-interpretation">分析口径：只展示用户能理解的研究边界、样本量级和判断，不展示内部审计字段。</div>
+      </section>
+
+      <section class="sec">
+        <h2>决策看板（执行摘要）</h2>
+        <div class="card focus"><strong>最大机会：</strong>围绕“可靠性与信任感”重构购买理由，把高频抱怨转化成可感知卖点。</div>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="k">评论样本</div><div class="v">64</div></div>
+          <div class="kpi"><div class="k">负面触发点</div><div class="v">不可靠</div></div>
+          <div class="kpi"><div class="k">最高机会维度</div><div class="v">Performance</div></div>
+          <div class="kpi"><div class="k">建议优先级</div><div class="v">P0</div></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>市场痛点全景图（$APPEALS）</h2>
+        <div class="chart">Sankey / Rose Chart Placeholder · 维度 → 痛点 → 动作</div>
+        <div class="chart-interpretation">算法与结论：链路宽度做视觉压缩，避免极端值淹没细分信号。当前痛点最集中在性能与信任，应优先投入修复与页面教育资源。</div>
+      </section>
+
+      <section class="sec">
+        <h2>满意度鸿沟雷达（Gap Analysis 差距分析）</h2>
+        <div class="chart">Radar Placeholder · 用户心理期望 vs 竞品表现</div>
+        <div class="chart-interpretation">算法与结论：两条曲线间差距越大，越值得优先投入研发与页面教育资源。</div>
+      </section>
+
+      <section class="sec">
+        <h2>场景化机会矩阵（KANO × JTBD）</h2>
+        <div class="kano-grid">
+          <div class="card warn"><strong>Must-be（基础项）</strong><div class="muted">做不好会直接导致差评和退款。</div></div>
+          <div class="card focus"><strong>Performance（绩效项）</strong><div class="muted">直接影响“值不值得买”的感知和复购。</div></div>
+          <div class="card ok"><strong>Attractive（惊喜项）</strong><div class="muted">用于详情页制造“我就要这款”的理由。</div></div>
+        </div>
+        <div class="chart-interpretation">阅读方式：先看 KANO 属性判断优先级，再看场景还原确认用户真实语境，最后执行创新机会。</div>
+      </section>
+
+      <section class="sec">
+        <h2>真实原声剧场（用户原声）</h2>
+        <div class="kano-grid">
+          <div class="card warn"><strong>劝退瞬间</strong><div class="muted">“不可靠”“使用时间短”“售后不清楚”这类表达会直接拉低转化。</div></div>
+          <div class="card ok"><strong>真香时刻</strong><div class="muted">用户愿意推荐的瞬间，通常来自解决真实场景问题。</div></div>
+          <div class="card focus"><strong>页面机会</strong><div class="muted">把用户原声改写为主图、五点、A+ 和 FAQ 的卖点模块。</div></div>
+        </div>
+      </section>
+    </div>
+  </article>
+</body>
+</html>

@@ -193,7 +193,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 
 - 交叉验证和去重：Amazon 产品按 ASIN，关键词按“全局词 / ASIN 反查词”分桶，Review 按 ASIN+日期+标题+正文指纹，TikTok / Web 按 URL，1688 按商品/URL/标题+店铺。
 - 数据血缘合并：保留 `source_ids`、`validation.evidence_source_count`、`validation.cross_validated`、`validation.conflicts`。
-- 中文映射：关键词新增 `keyword_cn`、`intent_cn`、`relevance_cn`；产品新增 `title_cn`、`segment_cn`、`positioning_cn`。
+- 中文映射：关键词新增 `keyword_cn`、`intent_cn`、`relevance_cn`；产品新增 `title_cn`、`segment_cn`、`positioning_cn`；评论新增 `title_cn`、`summary_cn`、`themes_cn`，客户版 HTML 不直接展示英文原评。
 - 噪声分层：核心关键词、相邻泛流量、ASIN 反查流量词必须分开展示，不能把泛词流量当成品类机会。
 - 幂等 baseline：首次归一化写入 `data/normalized/normalization_baseline.json`，后续反复渲染不得冲掉原始样本数和去重收益。
 - 样本门槛：标准版和深度版归一化后关键词不得少于 1000 条；不足时继续分页采集或在 `data_gaps` 标注为未达交付标准。
@@ -208,9 +208,9 @@ reports/{task_id}/data/normalized/cross_validated_data_pack.json
 
 按任务目的组合方法链，输出 `analysis_plan.json`。v2 固定为三条报告方法链：
 
-1. 市场深度调研：大盘仪表盘、关键词需求、Top 竞品、VOC 痛点/爽点、标杆竞品深挖、机会判断、TikTok 验证、1688 供应链、Web 风险、数据血缘。
-2. 产品全生命周期拓品战略：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、SKU 执行总表、Bundle 策略、30/60/90 天路线图、风险矩阵、市场数据验证。
-3. 用户心智断层与需求机会：目标 ASIN/研究对象锚点、决策看板、`$APPEALS` 痛点全景、满意度鸿沟、`KANO × JTBD` 机会矩阵、用户原声、需求优先级与证据表。
+1. 市场深度调研：大盘结论、需求结构、竞品格局、VOC 洞察、标杆打法、机会定义、TikTok 内容信号、1688 供应链判断、风险与行动摘要。
+2. 产品全生命周期拓品战略：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要。
+3. 用户心智断层与需求机会：研究对象概述、决策看板、`$APPEALS` 痛点图、满意度鸿沟、`KANO × JTBD`、用户原声、需求优先级。
 
 推荐额外写入：
 
@@ -270,16 +270,17 @@ reports/{task_id}/
 - HTML 优先使用 `assets/report-index-template.html`、`assets/market-depth-template.html`、`assets/lifecycle-strategy-template.html`、`assets/demand-gap-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
 - HTML 可离线打开，不依赖外部 CDN 才能显示核心内容、布局、表格和关键判断。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
-- HTML 和 Markdown 都要有数据范围、质量评分、缺口和限制。
+- HTML 要有客户可读的证据强度、样本覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
 - 聊天里只给摘要和路径，不粘贴完整报告。
 
 HTML 主体必须使用真实结构化组件：
 
 - 四个 HTML 都必须是 standalone HTML document，并带对应 `data-report-style`。
 - 三份子报告必须使用 `<section>` 编号章节、KPI cards、CSS mini charts、evidence tables、cards、risk/roadmap/timeline 等结构化组件。
-- 竞品、关键词、1688、TikTok、Web、SKU、KANO/JTBD、数据血缘和附录必须用 `<table>`，不能用 Markdown 表格文本。
-- 关键结论旁必须显示 `source_id`；`output/html_reports/report.html` 必须用同文件夹相对链接打开三份子报告，不能写 `output/` 前缀。
-- 能展示的数据尽量进入 HTML：主报告展示重点和分析，长表进入 `<details>` 折叠附录；不要只展示 Top 几条后把其余数据藏在 JSON 里。
+- 竞品、需求、1688、TikTok、Web、SKU、KANO/JTBD 等必须用客户可读的 insight table / card / matrix 表达，不能用 Markdown 表格文本。
+- 客户版 HTML 禁止展示 `source_id`、`source_ids`、provider/tool、raw_path/path、Product ID、product_id、ASIN 值或“来源”字段；`output/html_reports/report.html` 必须用同文件夹相对链接打开三份子报告，不能写 `output/` 前缀。
+- 能展示的数据要先转成 AI 深度分析后的结论、商业含义和建议动作；原始长表、数据血缘和完整来源细节只保留在 `data_pack.json`、`lineage.md`、`report.md`、`delivery_result.json` 中。
+- 评论/VOC 必须先做中文化映射：用户原声展示中文摘要、星级、情绪、主题和需求含义；英文评论原文、英文标题、抓取字段原值只留在审计文件。
 
 推荐生成顺序：
 
@@ -320,12 +321,13 @@ python skills/amz-market-research-orchestrated/scripts/validate_market_research_
 - 不用少量评论写精确百分比；样本小则写频次、主题和代表证据。
 - 不在缺成本时写伪利润表；改写价格红线和成本门槛。
 - 不因为 TikTok、1688 或 Firecrawl 失败就删除模块；保留模块并说明缺口。
-- 所有关键结论必须能追溯到 `source_id`。
+- 所有关键结论必须能在审计文件中追溯到 `source_id`，但客户版 HTML 不展示这些技术标识。
 - 所有关键方法必须能追溯到 `method_chain`。
 - `output/html_reports/report.html` 必须包含 `data-report-style="three-report-index-v2"`，并用同文件夹相对链接打开三份子报告；`output/report.html` 必须作为兼容入口链接到 `html_reports/`。
 - 三份子报告必须分别包含 `data-report-style="market-depth-report-v2"`、`data-report-style="lifecycle-strategy-report-v2"`、`data-report-style="demand-gap-report-v2"`。
 - 四个 HTML 都不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
-- 输出默认全中文，仅保留品牌名、ASIN、平台名、工具名和必要英文专有名词。
+- 输出默认全中文；客户版 HTML 仅保留品牌名、平台名和必要英文专有名词，ASIN / Product ID / source_id 等技术标识只留在审计文件。
+- 客户版 HTML 不直接展示英文评论原文或英文评论标题；必须转成中文摘要、中文主题、情绪标签和建议动作。
 
 ## 结束语模板
 

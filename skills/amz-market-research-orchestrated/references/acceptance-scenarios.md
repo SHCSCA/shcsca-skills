@@ -71,18 +71,19 @@ Required evidence:
 - `output/html_reports/demand-gap-report.html` uses `data-report-style="demand-gap-report-v2"`
 - HTML files are designed reports, not Markdown wrappers
 - Entry page contains report title, market, depth, data quality, data gaps, and Go / Watch / No-Go
-- Market report modules remain visible: 大盘仪表盘、关键词需求、Top 竞品、VOC 痛点/爽点、标杆竞品深挖、机会判断、TikTok 验证、1688 供应链、Web 风险、数据血缘
-- Lifecycle report modules remain visible: 战略仪表盘、用户画像、生命周期旅程、四维拓品生态、SKU 执行总表、Bundle 策略、30/60/90 天路线图、风险矩阵、市场数据验证
-- Demand-gap report modules remain visible: 目标 ASIN/研究对象锚点、决策看板、$APPEALS 痛点全景、满意度鸿沟、KANO × JTBD 机会矩阵、用户原声、需求优先级与证据表
-- Competitor, keyword, supplier, TikTok, web, SKU, KANO/JTBD, appendix, and lineage evidence are rendered as HTML tables
-- Keyword tables include `关键词中文`, `英文关键词`, `相关性`, `中文意图`, and `source_id`
-- Full keyword appendix shows at least 1000 deduped keyword samples for standard/deep reports
-- Competitor tables include `中文定位` and `英文标题`
+- Market report modules remain visible: 大盘结论、需求结构、竞品格局、VOC 洞察、标杆打法、机会定义、TikTok 内容信号、1688 供应链判断、风险与行动摘要
+- Lifecycle report modules remain visible: 战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要
+- Demand-gap report modules remain visible: 研究对象概述、决策看板、$APPEALS 痛点图、满意度鸿沟、KANO × JTBD、用户原声、需求优先级
+- Competitor, demand, supplier, TikTok, web, SKU, and KANO/JTBD evidence are rendered as customer-readable insight tables
+- Customer HTML includes `证据强度`, `样本覆盖`, `数据缺口`, and `建议动作`
+- Customer HTML does not display `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables
+- Data Pack still contains at least 1000 deduped keyword samples for standard/deep reports
+- Competitor and VOC tables use Chinese-facing positioning, review summaries, themes, sentiment, and recommended actions rather than raw English titles/comments
 - Data coverage visibly shows cross-validation and dedupe counts
-- ASIN deep dives show image if available, traffic terms, trend, variation samples, and source IDs
+- Competitor deep dives show image if available, positioning, trend, unmet need, and suggested action without exposing technical IDs
 - VOC includes theme chart, star distribution, quote cards, and review evidence table
-- Full appendix exposes renderable Data Pack entity groups with `<details>` blocks in the market report
-- Important conclusions cite `source_id` in visible content
+- Full source appendix stays in JSON/Markdown audit artifacts, not client HTML
+- Important conclusions are traceable to `source_id` in audit artifacts, not visible HTML
 - Core content works offline without CDN
 
 ## Universal Gate

@@ -10,7 +10,7 @@ output/html_reports/lifecycle-strategy-report.html
 output/html_reports/demand-gap-report.html
 ```
 
-Do not copy the provided sample reports verbatim. Reuse their structure pattern: dark report header, KPI dashboard, numbered modules, dense cards, evidence tables, matrices, roadmap, risk section, and source-linked appendix.
+Do not copy the provided sample reports verbatim. Reuse their structure pattern: dark report header, KPI dashboard, numbered modules, dense cards, insight tables, matrices, roadmap, risk section, and executive summary cards. HTML is the client-facing analysis layer; source audit details stay in JSON/Markdown artifacts.
 
 ## Hard Requirements
 
@@ -20,8 +20,10 @@ The four files inside `output/html_reports/` must:
 - Work offline for core content; do not depend on external CDN for layout, tables, text, decisions, or charts.
 - Use semantic sections in child reports, not a single Markdown blob.
 - Never wrap Markdown in `<pre>`, `.markdown-body`, or raw Markdown tables.
-- Render evidence as real HTML tables, cards, score grids, timelines, or CSS/SVG charts.
-- Include visible `source_id` evidence in child reports.
+- Render analysis as real HTML tables, cards, score grids, timelines, or CSS/SVG charts.
+- Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, `product_id`, or ASIN values.
+- Use client-readable credibility language: `证据强度`, `样本覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
+- Use Chinese-facing content by default. English review text, English review titles, raw scraped comments, and raw field values must be mapped into Chinese summaries, themes, sentiment labels, business meaning, and suggested actions before appearing in client HTML.
 
 Required `data-report-style` markers:
 
@@ -38,7 +40,7 @@ Required `data-report-style` markers:
 `output/html_reports/report.html` is the portable bundle entry page. It must:
 
 - Link to the three child reports by same-folder filename only: `market-depth-report.html`, `lifecycle-strategy-report.html`, and `demand-gap-report.html`.
-- Show report object, target market, data depth, Go / Watch / No-Go, source count, quality grade, data coverage, and data gaps.
+- Show report object, target market, data depth, Go / Watch / No-Go, evidence strength, sample coverage, quality grade, data gaps, and suggested actions.
 - Avoid duplicating the full report body.
 
 `output/report.html` is a compatibility entry for older callers. It must link into the portable folder with `html_reports/market-depth-report.html`, `html_reports/lifecycle-strategy-report.html`, and `html_reports/demand-gap-report.html`.
@@ -49,18 +51,17 @@ Required `data-report-style` markers:
 
 Required visible sections:
 
-1. 大盘仪表盘
-2. 关键词需求
-3. Top 竞品
-4. VOC 痛点/爽点
-5. 标杆竞品深挖
-6. 机会判断
-7. TikTok 验证
-8. 1688 供应链
-9. Web 风险
-10. 数据血缘
+1. 大盘结论
+2. 需求结构
+3. 竞品格局
+4. VOC 洞察
+5. 标杆打法
+6. 机会定义
+7. TikTok 内容信号
+8. 1688 供应链判断
+9. 风险与行动摘要
 
-Required mapped-data terms: `关键词中文`, `英文关键词`, `相关性`, `中文定位`, `英文标题`, `去重`.
+Required client-analysis terms: `可进入性评分`, `价格带机会`, `竞争强度`, `关键切入口`, `商业含义`.
 
 ### 产品全生命周期拓品战略报告
 
@@ -70,42 +71,43 @@ Required visible sections:
 2. 用户画像
 3. 生命周期旅程
 4. 四维拓品生态
-5. SKU 执行总表
+5. 拓品方案池
 6. Bundle 策略
 7. 30/60/90 天路线图
 8. 风险矩阵
-9. 市场数据验证
+9. 市场验证摘要
 
-Required mapped-data terms: `SKU`, `Bundle`, `供应链`, `复购`.
+Required client-analysis terms: `SKU`, `Bundle`, `供应链`, `复购`, `AOV`, `LTV`.
 
 ### 用户心智断层与需求机会报告
 
 Required visible sections:
 
-1. 目标 ASIN/研究对象锚点
+1. 研究对象概述
 2. 决策看板
-3. `$APPEALS` 痛点全景
+3. `$APPEALS` 痛点图
 4. 满意度鸿沟
-5. `KANO × JTBD` 机会矩阵
-6. 用户原声
-7. 需求优先级与证据表
+5. `KANO × JTBD`
+6. 用户原声（中文摘要，不展示英文原评）
+7. 需求优先级
 
-Required mapped-data terms: `KANO`, `JTBD`, `source_id`.
+Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点`, `转化机会`.
 
 ## Visual System
 
 - Market and lifecycle reports use the restrained executive palette: deep navy header, warm off-white background, white cards, thin borders, muted blue accent, sage/rose/warm accents for opportunity and risk.
 - Demand-gap report may keep a darker analytical style, but tables and text must remain legible and printable.
 - No decorative CDN charts are required. Use CSS mini bars, tables, and cards as offline-first chart fallbacks.
-- Required reusable hooks in child reports: `report-header`, `kpi-grid`, `section-number`, `evidence-table`, `mini-chart`, `chart-container`, `insight-box`, `conclusion`, `deep-dive-grid`, `comp-deep-card`, `appendix-table`.
+- Required reusable hooks in child reports: `report-header`, `kpi-grid`, `section-number`, `evidence-table`, `insight-table`, `mini-chart`, `chart-container`, `insight-box`, `conclusion`, `deep-dive-grid`, `comp-deep-card`.
 
 ## Content Depth Rules
 
-- Every major module must include evidence counts or at least one visible `source_id`.
-- Market report must preserve competitor, keyword, TikTok, 1688, web, appendix, and lineage evidence as tables.
-- Keyword content must separate core demand, adjacent/noisy category terms, and ASIN reverse traffic terms.
+- Every major module must lead with conclusion, evidence strength, business meaning, and suggested action.
+- Market report must preserve competitor, demand, TikTok, 1688, web, and risk evidence as client-readable insight tables.
+- Keyword content must summarize demand structure and intent clusters; raw reverse-traffic details stay in audit artifacts.
 - Lifecycle report must turn market evidence into SKU, bundle, supply-chain, and roadmap decisions rather than repeating the market scan.
-- Demand-gap report must turn reviews/VOC into `$APPEALS`, Gap Analysis, KANO, JTBD, and priority actions.
+- Demand-gap report must turn reviews/VOC into Chinese `$APPEALS`, Gap Analysis, KANO, JTBD, representative voice summaries, and priority actions.
+- User voice cards may show star rating, sentiment, Chinese summary, short translated phrase, theme, and action implication. Do not display raw English comments or raw English review titles.
 - Missing lifecycle or demand-gap analysis JSON may be filled from Data Pack defaults, but the limitation must remain visible in `data_gaps` or `analysis_plan.limitations`.
 
 ## Anti-Patterns
@@ -114,6 +116,7 @@ Reject these outputs:
 
 - A `<pre>` block containing the Markdown report.
 - A generic article page with only headings and paragraphs.
-- A report with no evidence table or no visible `source_id`.
-- A child report that silently drops TikTok, 1688, data gaps, lineage, SKU strategy, or demand-gap sections.
+- A report that exposes `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables in client HTML.
+- A report that copies raw English reviews, English review titles, or scraped comment text directly into client HTML.
+- A child report that silently drops TikTok, 1688, data gaps, SKU strategy, or demand-gap sections.
 - Any CDN-dependent chart-only report that cannot be audited offline.

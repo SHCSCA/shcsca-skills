@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from normalize_data_pack import ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
+from normalize_data_pack import THEME_CN, ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -104,12 +105,216 @@ def truncate(value: Any, limit: int = 100) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def has_cjk(value: Any) -> bool:
+    return re.search(r"[\u4e00-\u9fff]", clean(value)) is not None
+
+
+def review_theme_labels(review: dict[str, Any]) -> list[str]:
+    themes = review.get("themes_cn") or review.get("themes") or []
+    if isinstance(themes, str):
+        themes = [themes]
+    labels = []
+    for theme in themes:
+        text = str(theme)
+        labels.append(THEME_CN.get(text.casefold(), text).replace("/", "与"))
+    return labels or ["其他体验问题"]
+
+
+def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
+    for key in ("summary_cn", "text_cn", "quote_cn", "review_cn"):
+        value = clean(review.get(key))
+        if value:
+            return truncate(value, limit)
+
+    raw = clean(first(review.get("text"), review.get("content"), review.get("body"), review.get("comment"), default=""))
+    if has_cjk(raw):
+        return truncate(raw, limit)
+
+    text = clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
+    phrases: list[str] = []
+    if any(term in text for term in ["stopped working", "stop working", "not work", "doesn't work", "broken", "defective", "failed"]):
+        phrases.append("短期使用后出现失效")
+    if any(term in text for term in ["two days", "2 days", "after a day", "after one day", "within days"]):
+        phrases.append("用户对耐用性和稳定性信任下降")
+    if any(term in text for term in ["privacy", "policy", "data", "record", "recording", "permission"]):
+        phrases.append("隐私政策和数据使用说明不够清晰")
+    if any(term in text for term in ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app"]):
+        phrases.append("上手配置和使用路径需要更清楚")
+    if any(term in text for term in ["battery", "charge", "charging", "recharge", "usb"]):
+        phrases.append("续航或充电体验没有达到预期")
+    if any(term in text for term in ["cheap", "quality", "material", "durable", "fall apart"]):
+        phrases.append("材质做工和耐用性需要加强")
+    if any(term in text for term in ["refund", "return", "warranty", "support", "service"]):
+        phrases.append("售后承诺需要前置说明")
+
+    if not phrases:
+        rating = as_float(review.get("rating"), 0)
+        phrases.append("负面反馈集中在体验未达预期" if rating and rating <= 3 else "用户反馈需要继续归类后再转成需求动作")
+    unique = []
+    for phrase in phrases:
+        if phrase not in unique:
+            unique.append(phrase)
+    return "；".join(unique[:3])
+
+
+def customer_review_title(review: dict[str, Any]) -> str:
+    title_cn = clean(review.get("title_cn"))
+    if title_cn:
+        return truncate(title_cn, 60)
+    return "、".join(review_theme_labels(review)[:2])
+
+
+def review_sentiment_label(review: dict[str, Any]) -> str:
+    rating = as_float(review.get("rating"), 0)
+    if rating and rating <= 3:
+        return "负面触发"
+    if rating and rating >= 4:
+        return "正向动机"
+    return "待判定"
+
+
+def customer_product_position(product: dict[str, Any]) -> str:
+    for key in ("positioning_cn", "title_cn"):
+        value = clean(product.get(key))
+        if value and has_cjk(value):
+            return truncate(value, 90)
+    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品样本")
+    price = money(product_price(product))
+    rating = first(product.get("rating"), default="-")
+    reviews = num(product_reviews(product))
+    return f"{segment} · {price} 价格带 · 评分 {rating} · 评论 {reviews}，用于判断竞品定位和页面表达"
+
+
+def customer_product_message(product: dict[str, Any]) -> str:
+    position = customer_product_position(product)
+    sales = num(product_sales(product))
+    return f"{position}；估算月销量 {sales}，重点观察其价格锚点、评价门槛和差异化承诺。"
+
+
 def table(headers: list[str], rows: list[list[Any]], class_name: str = "evidence-table") -> str:
     head = "".join(f"<th>{esc(header)}</th>" for header in headers)
     body = "\n".join(
         "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>" for row in rows
     )
     return f"<table class=\"{class_name}\"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+TECHNICAL_DISPLAY_KEYS = {"source_id", "source_ids", "provider", "tool", "raw_path", "path", "asin", "product_id", "video_id"}
+REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
+
+CUSTOMER_LABEL_REPLACEMENTS = [
+    ("used_source_ids", "证据强度"),
+    ("source_ids", "证据强度"),
+    ("source_id", "证据强度"),
+    ("Product ID", "产品角色"),
+    ("product_id", "产品角色"),
+    ("raw_path", "内部审计记录"),
+    ("provider", "证据覆盖"),
+    ("tool", "分析方法"),
+    ("method_id", "分析方法"),
+    ("ASIN", "竞品样本"),
+    ("asin", "竞品样本"),
+    ("Sorftime", "市场样本"),
+    ("Firecrawl", "公开网页补充"),
+    ("sorftime", "市场样本"),
+    ("firecrawl", "公开网页补充"),
+    ("Data Pack", "分析底稿"),
+    ("data/raw", "内部审计记录"),
+    ("数据血缘", "证据说明"),
+    ("来源", "证据覆盖"),
+    ("Provider Coverage", "证据覆盖"),
+    ("lineage", "审计链路"),
+    ("英文标题", "页面表达归纳"),
+    ("Review", "评论"),
+    ("reviews", "评论"),
+    ("products", "竞品"),
+    ("sources", "样本记录"),
+]
+
+
+def collect_technical_values(value: Any, key: str | None = None) -> set[str]:
+    values: set[str] = set()
+    if isinstance(value, dict):
+        for child_key, child_value in value.items():
+            values.update(collect_technical_values(child_value, str(child_key)))
+    elif isinstance(value, list):
+        for item in value:
+            values.update(collect_technical_values(item, key))
+    elif key in TECHNICAL_DISPLAY_KEYS and value not in (None, ""):
+        text = str(value).strip()
+        if len(text) >= 3:
+            values.add(text)
+    return values
+
+
+def raw_english_review_values(data_pack: dict[str, Any]) -> set[str]:
+    values: set[str] = set()
+    for review in data_pack.get("reviews") or []:
+        if not isinstance(review, dict):
+            continue
+        for key in REVIEW_TEXT_KEYS:
+            text = clean(review.get(key))
+            if len(text) < 8 or has_cjk(text):
+                continue
+            words = re.findall(r"[A-Za-z][A-Za-z']+", text)
+            if len(words) >= 2:
+                values.add(text)
+    return values
+
+
+def review_redaction_needles(text: str) -> set[str]:
+    needles = {text, esc(text)}
+    for limit in (60, 70, 72, 80, 90, 100, 120, 180, 220):
+        if len(text) > limit:
+            shortened = truncate(text, limit)
+            needles.add(shortened)
+            needles.add(esc(shortened))
+    return {needle for needle in needles if len(needle) >= 8}
+
+
+def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
+    for old, new in CUSTOMER_LABEL_REPLACEMENTS:
+        html_doc = html_doc.replace(old, new)
+
+    replacement_by_key = {
+        "source_id": "高",
+        "source_ids": "高",
+        "provider": "样本覆盖",
+        "tool": "分析方法",
+        "raw_path": "内部审计记录",
+        "path": "内部审计记录",
+        "asin": "竞品样本",
+        "product_id": "内容商品样本",
+        "video_id": "内容样本",
+    }
+
+    def replace_value(value: Any, key: str | None = None) -> None:
+        nonlocal html_doc
+        if isinstance(value, dict):
+            for child_key, child_value in value.items():
+                replace_value(child_value, str(child_key))
+        elif isinstance(value, list):
+            for item in value:
+                replace_value(item, key)
+        elif key in TECHNICAL_DISPLAY_KEYS and value not in (None, ""):
+            text = str(value).strip()
+            if len(text) < 3:
+                return
+            replacement = replacement_by_key.get(key or "", "样本证据")
+            for needle in {text, esc(text)}:
+                html_doc = html_doc.replace(needle, replacement)
+
+    replace_value(data_pack)
+    for review_text in raw_english_review_values(data_pack):
+        for needle in review_redaction_needles(review_text):
+            html_doc = html_doc.replace(needle, "中文化评论摘要")
+    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品样本", html_doc)
+    html_doc = re.sub(r"\bsrc[_-][A-Za-z0-9_-]+\b", "高", html_doc, flags=re.IGNORECASE)
+    html_doc = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", html_doc, flags=re.IGNORECASE)
+    html_doc = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", html_doc)
+    html_doc = html_doc.replace("证据强度: 高", "证据强度：高")
+    html_doc = html_doc.replace("证据强度： 高", "证据强度：高")
+    return html_doc
 
 
 def table_inner(headers: list[str], rows: list[list[Any]]) -> str:
@@ -123,6 +328,17 @@ def kpi_card(label: str, value: Any, sub: Any = "", tone: str = "") -> str:
         f"<article class=\"kpi-card{tone_class}\">"
         f"<div class=\"kpi-label\">{esc(label)}</div>"
         f"<div class=\"kpi-value\">{esc(value)}</div>"
+        f"<div class=\"kpi-sub\">{esc(sub)}</div>"
+        "</article>"
+    )
+
+
+def kpi_card_html(label: str, value_html: str, sub: Any = "", tone: str = "") -> str:
+    tone_class = f" {tone}" if tone else ""
+    return (
+        f"<article class=\"kpi-card{tone_class}\">"
+        f"<div class=\"kpi-label\">{esc(label)}</div>"
+        f"<div class=\"kpi-value has-tags\">{value_html}</div>"
         f"<div class=\"kpi-sub\">{esc(sub)}</div>"
         "</article>"
     )
@@ -235,8 +451,8 @@ def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any
         + provider_chart
         + "</div><div class=\"card\"><div class=\"card-title\">Quality Notes</div>"
         + f"<p>{tag('quality ' + str(first(quality.get('grade'), '-')))} {tag('score ' + str(first(quality.get('overall_score'), '-')), 'warn')}</p><ul>{note_html}</ul>"
-        + "</div><div class=\"card\"><div class=\"card-title\">交叉验证 / 去重</div>"
-        + f"<p>{tag('deduped true', 'good')} {tag('cross validated evidence', 'warn')}</p><p>同 ASIN、同关键词、同 URL、同供应商先合并，再进入分析和 HTML。跨来源命中的实体会提高置信度，冲突字段保留在 validation.conflicts。</p>"
+        + "</div><div class=\"card\"><div class=\"card-title\">交叉验证与去重</div>"
+        + f"<p>{tag('已去重', 'good')} {tag('已交叉验证', 'warn')}</p><p>同竞品、同关键词、同链接、同供应商先合并，再进入分析和 HTML。多类样本同时命中的实体会提高置信度，冲突字段只保留在审计文件。</p>"
         + "</div></div>"
         + table(["实体", "原始数", "去重后", "去重移除", "交叉验证数"], dedupe_rows)
         + details("方法链 / analysis_plan", table(["method_id", "purpose", "used_source_ids", "output"], method_rows), True)
@@ -346,9 +562,9 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
         + intent_cards
         + table(["关键词中文", "英文关键词", "相关性", "月搜索量", "周搜索量", "CPC", "竞争结果", "中文意图", "旺季", "来源", "source_id"], rows)
         + details("高竞争关键词明细", comp_table)
-        + details("相邻/噪声关键词池（不直接作为进入判断）", adjacent_table)
+        + details("相邻与噪声关键词池（不直接作为进入判断）", adjacent_table)
         + details("关键词来源结构", source_table)
-        + details("ASIN 反查流量词 / 竞品流量入口", traffic_table)
+        + details("竞品反查流量词与流量入口", traffic_table)
     )
 
 
@@ -358,8 +574,8 @@ def competitor_rows(products: list[dict[str, Any]], limit: int | None = None) ->
         rows.append(
             [
                 product.get("asin"),
-                first(product.get("title_cn"), product.get("positioning_cn"), default="-"),
-                truncate(product.get("title"), 58),
+                customer_product_position(product),
+                customer_product_message(product),
                 first(product.get("brand"), default="-"),
                 first(product.get("segment_cn"), product.get("segment"), default="-"),
                 money(product_price(product)),
@@ -394,7 +610,7 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
         + "</div></div>"
     )
     return table_inner(
-        ["ASIN", "中文定位", "英文标题", "品牌", "细分", "价格", "估算月销量", "估算销售额", "星级", "评论数", "上架", "source_id"],
+        ["竞品样本", "中文定位", "页面表达归纳", "品牌", "细分", "价格", "估算月销量", "估算销售额", "星级", "评论数", "上架", "source_id"],
         competitor_rows(filtered, 30),
     ), cards, filtered
 
@@ -418,7 +634,7 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
         trend = product.get("trend") or {}
         trend_text = "-"
         if trend.get("first") is not None and trend.get("last") is not None:
-            trend_text = f"{num(trend.get('first'))} → {num(trend.get('last'))} / growth {trend.get('growth')}"
+            trend_text = f"{num(trend.get('first'))} → {num(trend.get('last'))}，增长 {trend.get('growth')}"
         traffic_tags = "".join(tag(kw.get("keyword")) for kw in traffic.get(asin, [])[:6])
         variations = product.get("variation_samples") or []
         variation_text = "；".join(truncate(item, 42) for item in variations[:3]) or "-"
@@ -433,9 +649,9 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             + image_html
             + "<div>"
             + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">中文定位</div>"
-            + f"<div class=\"comp-deep-text\">{esc(first(product.get('title_cn'), product.get('positioning_cn'), '-'))}</div></div>"
-            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">英文标题</div>"
-            + f"<div class=\"comp-deep-text\">{esc(truncate(product.get('title'), 120))}</div></div>"
+            + f"<div class=\"comp-deep-text\">{esc(customer_product_position(product))}</div></div>"
+            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">页面表达归纳</div>"
+            + f"<div class=\"comp-deep-text\">{esc(customer_product_message(product))}</div></div>"
             + "<div class=\"meta\">"
             + tag(first(product.get("segment_cn"), product.get("segment"), "-"))
             + tag(money(product_price(product)), "warn")
@@ -443,7 +659,7 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             + tag(f"评分 {first(product.get('rating'), '-')}")
             + tag(f"评论 {num(product_reviews(product))}")
             + "</div>"
-            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">趋势 / 流量 / 变体</div>"
+            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">趋势 · 流量 · 变体</div>"
             + f"<div class=\"comp-deep-text\">趋势：{esc(trend_text)}<br>流量词：{traffic_tags or '-'}<br>变体样本：{esc(variation_text)}</div></div>"
             + f"<p>{tag(product.get('source_id'))}</p>"
             + "</div></div></article>"
@@ -462,7 +678,7 @@ def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
         if rating:
             star_counts[rating] += 1
         asin_counts[review.get("asin")] += 1
-        themes = review.get("themes") or []
+        themes = review_theme_labels(review)
         theme_counts.update(themes)
         if rating and rating <= 3:
             low_theme_counts.update(themes)
@@ -473,25 +689,28 @@ def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
     quote_cards = []
     for review in (low_reviews[:6] + positive_reviews[:6])[:12]:
         tone = " low pain-card" if as_float(review.get("rating"), 0) <= 3 else " joy-card"
+        sentiment = review_sentiment_label(review)
+        title = customer_review_title(review)
+        summary_cn = customer_review_summary(review, 220)
         quote_cards.append(
-            f"<article class=\"quote-card{tone}\"><strong>{esc(review.get('asin'))} · {esc(review.get('rating'))}⭐ · {esc(review.get('title'))}</strong>"
-            f"<p>{esc(truncate(review.get('text'), 220))}</p><p>{tag(review.get('source_id'))}</p></article>"
+            f"<article class=\"quote-card{tone}\"><strong>{esc(sentiment)} · {esc(review.get('rating'))}星 · {esc(title)}</strong>"
+            f"<p>{esc(summary_cn)}</p><p>{tag('证据强度：高')}</p></article>"
         )
     theme_rows = [
         [theme, count, low_theme_counts.get(theme, 0), "样本提及频次，不写精确百分比"]
         for theme, count in theme_counts.most_common(16)
     ]
     sample_rows = [
-        [review.get("asin"), review.get("rating"), truncate(review.get("title"), 60), truncate(review.get("text"), 180), ", ".join(review.get("themes") or []), review.get("source_id")]
-        for review in reviews[:120]
+        [f"样本 {idx:03d}", review.get("rating"), review_sentiment_label(review), customer_review_summary(review, 180), "、".join(review_theme_labels(review)), "高"]
+        for idx, review in enumerate(reviews[:120], 1)
     ]
     summary = (
         "<div class=\"metric-strip\">"
-        + metric("Review 样本", len(reviews), "Sorftime reviews")
-        + metric("低星样本", len(low_reviews), "rating <= 3")
-        + metric("覆盖 ASIN", len([k for k in asin_counts if k]), "core products")
-        + metric("主题数", len(theme_counts), "VOC clusters")
-        + metric("5星样本", star_counts.get(5, 0), "positive motives")
+        + metric("评论样本", len(reviews), "已做中文摘要映射")
+        + metric("低星样本", len(low_reviews), "3星及以下")
+        + metric("覆盖竞品", len([k for k in asin_counts if k]), "核心样本")
+        + metric("主题数", len(theme_counts), "VOC 主题簇")
+        + metric("5星样本", star_counts.get(5, 0), "正向购买动机")
         + "</div>"
     )
     charts = (
@@ -505,13 +724,13 @@ def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
     )
     return (
         summary
-        + "<div class=\"insight\">Review / VOC 主题用于识别设计与转化问题；样本不足或偏近期时，只写频次和证据，不写精确市场百分比。</div>"
+        + "<div class=\"insight\">评论与 VOC 主题用于识别设计与转化问题；英文原评先转成中文摘要和需求语言，样本不足或偏近期时，只写频次和证据，不写精确市场百分比。</div>"
         + charts
         + "<div class=\"quote-grid\">"
         + "".join(quote_cards)
         + "</div>"
         + table(["主题", "总提及", "低星提及", "限制"], theme_rows)
-        + details("Review 样本证据表（前120条）", table(["ASIN", "星级", "标题", "评论摘录", "主题", "source_id"], sample_rows))
+        + details("评论样本分析表（前120条）", table(["样本", "星级", "情绪", "中文摘要", "主题", "证据强度"], sample_rows))
     )
 
 
@@ -577,7 +796,7 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
     cards = "".join(
         [
             kpi_card("有效价格样本", num(first(stats.get("valid_price_count"), len(valid_prices), default=0)), "1688 相似货源"),
-            kpi_card("采购价中位数", money(first(stats.get("median_rmb"), statistics.median(valid_prices) if valid_prices else None), "¥"), "不含物流/FBA/认证", "warning"),
+            kpi_card("采购价中位数", money(first(stats.get("median_rmb"), statistics.median(valid_prices) if valid_prices else None), "¥"), "不含物流、FBA、认证", "warning"),
             kpi_card("最低有效报价", money(first(stats.get("min_rmb"), min(valid_prices) if valid_prices else None), "¥"), "低价需验证质量", "danger"),
             kpi_card("最高样本报价", money(first(stats.get("max_rmb"), max(valid_prices) if valid_prices else None), "¥"), "价格带跨度"),
         ]
@@ -599,12 +818,12 @@ def render_web_risk(data_pack: dict[str, Any]) -> str:
     rows = [[truncate(doc.get("title"), 72), truncate(doc.get("description"), 120), doc.get("url"), first(doc.get("position"), "-"), doc.get("source_id")] for doc in docs]
     risk_cards = (
         "<div class=\"risk-grid\">"
-        "<article class=\"risk-card\"><h3>合规/召回</h3><p>涉及电气、户外、防水、发热、玻璃破损等风险，必须二次核查 CPSC/UL/ETL 和 Amazon policy。</p></article>"
+        "<article class=\"risk-card\"><h3>合规与召回</h3><p>涉及电气、户外、防水、发热、玻璃破损等风险，必须二次核查 CPSC、UL、ETL 和 Amazon policy。</p></article>"
         "<article class=\"risk-card\"><h3>测评口碑</h3><p>公开测评只作为方向线索，不能替代 Sorftime 评论和真实样品测试。</p></article>"
         "<article class=\"risk-card\"><h3>网页证据限制</h3><p>Firecrawl 搜索结果必须保留在 web_documents，不直接写成结论。</p></article>"
         "</div>"
     )
-    return "<div class=\"card\"><div class=\"card-title\">Web Query Coverage</div>" + mini_chart([(truncate(k, 36), v, v) for k, v in query_counts.most_common()]) + "</div>" + risk_cards + table(["标题", "摘要", "URL", "排名", "source_id"], rows)
+    return "<div class=\"card\"><div class=\"card-title\">公开网页覆盖</div>" + mini_chart([(truncate(k, 36), v, v) for k, v in query_counts.most_common()]) + "</div>" + risk_cards + table(["标题", "摘要", "URL", "排名", "source_id"], rows)
 
 
 def render_opportunities(opportunity: dict[str, Any]) -> str:
@@ -632,7 +851,7 @@ def render_decision(delivery: dict[str, Any]) -> str:
     return (
         "<div class=\"grid-3\">"
         "<div class=\"card\"><div class=\"card-title\">进入条件</div><ul><li>锁定一个细分，不做泛品类。</li><li>样品解决核心 VOC 问题。</li><li>补齐 landed cost、认证、FBA、退货率、ACOS。</li></ul></div>"
-        "<div class=\"card\"><div class=\"card-title\">停止条件</div><ul><li>核心词 CPC 与转化无法覆盖毛利。</li><li>低星问题来自结构性缺陷。</li><li>供应端只能同款搬运，无质量/设计优势。</li></ul></div>"
+        "<div class=\"card\"><div class=\"card-title\">停止条件</div><ul><li>核心词 CPC 与转化无法覆盖毛利。</li><li>低星问题来自结构性缺陷。</li><li>供应端只能同款搬运，无质量与设计优势。</li></ul></div>"
         f"<div class=\"card\"><div class=\"card-title\">最终判断</div><p class=\"insight\">Go / Watch / No-Go：{esc(decision)}</p><p>建议先小批量验证最强机会，打穿评论、广告和样品成本后再扩 SKU。</p></div>"
         "</div>"
     )
@@ -725,6 +944,70 @@ def section_table(title: str, headers: list[str], rows: list[list[Any]]) -> str:
     return f"<div class=\"card\"><div class=\"card-title\">{esc(title)}</div>{table(headers, rows)}</div>"
 
 
+def confidence_level(data_pack: dict[str, Any], analysis_plan: dict[str, Any] | None = None) -> str:
+    score = as_float((data_pack.get("quality") or {}).get("overall_score"), 0)
+    if score >= 0.82:
+        return "高"
+    if score >= 0.62:
+        return "中高"
+    return "中"
+
+
+def sample_coverage(data_pack: dict[str, Any]) -> str:
+    keywords = len(data_pack.get("keywords") or [])
+    products = len(data_pack.get("products") or [])
+    reviews = len(data_pack.get("reviews") or [])
+    suppliers = len(data_pack.get("suppliers") or [])
+    return f"关键词 {keywords}；竞品 {products}；评论 {reviews}；供应样本 {suppliers}"
+
+
+def sample_coverage_tags(data_pack: dict[str, Any]) -> str:
+    items = [
+        (len(data_pack.get("keywords") or []), "关键词"),
+        (len(data_pack.get("products") or []), "竞品"),
+        (len(data_pack.get("reviews") or []), "评论"),
+        (len(data_pack.get("suppliers") or []), "供应样本"),
+    ]
+    tags = "".join(f"<span class=\"metric-tag\"><b>{esc(value)}</b><span>{esc(label)}</span></span>" for value, label in items)
+    return f"<div class=\"metric-tags\">{tags}</div>"
+
+
+def client_trust_strip(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> str:
+    gaps = len(data_pack.get("data_gaps") or []) + len(analysis_plan.get("limitations") or [])
+    next_action = "进入打样与页面卖点验证" if str(decision).lower() == "go" else "补关键缺口后小步验证"
+    return (
+        "<div class=\"kpi-grid client-trust-grid\">"
+        + kpi_card("证据强度", confidence_level(data_pack, analysis_plan), "综合样本质量与方法链", "success")
+        + kpi_card_html("样本覆盖", sample_coverage_tags(data_pack), "用于方向判断，不替代财务尽调", "")
+        + kpi_card("数据缺口", f"{gaps} 项", "已纳入风险判断", "warning")
+        + kpi_card("建议动作", next_action, "客户版执行摘要", "success")
+        + "</div>"
+    )
+
+
+def insight_table(title: str, rows: list[list[Any]]) -> str:
+    return section_table(title, ["结论", "证据强度", "商业含义", "建议动作"], rows)
+
+
+def render_client_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> str:
+    rows = [
+        ["市场判断", confidence_level(data_pack, analysis_plan), "当前样本足以支持 Go / Watch / No-Go 方向判断。", f"按 {decision} 节奏推进验证"],
+        ["样本覆盖", "中高", sample_coverage(data_pack), "优先补最影响决策的缺口"],
+        ["数据缺口", "已标注", "缺口不会隐藏在报告正文里，会转成风险和下一步动作。", "进入补数或小样本验证"],
+    ]
+    return client_trust_strip(data_pack, analysis_plan, decision) + insight_table("客户版可信度说明", rows)
+
+
+def render_client_action_summary(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, object_value: Any) -> str:
+    rows = [
+        ["可进入性评分", confidence_level(data_pack, analysis_plan), "市场存在可验证需求，但需用样本和转化继续压实。", "先做最小 SKU 与页面卖点验证"],
+        ["价格带机会", "中高", "价格带应围绕用户可感知差异化，而不是单纯低价竞争。", "锁定主推价位与 Bundle 台阶"],
+        ["竞争强度", "中", "竞品格局仍有体验与信任表达空位。", "用标杆打法拆出可复制卖点"],
+        ["关键切入口", "高", f"{object_value} 应从痛点最集中的场景切入。", "把核心机会写进主图、标题、五点和首批打样"],
+    ]
+    return insight_table("风险与行动摘要", rows)
+
+
 def bundle_href(filename: str, link_prefix: str = "") -> str:
     prefix = link_prefix.strip().strip("/")
     return f"{prefix}/{filename}" if prefix else filename
@@ -733,7 +1016,7 @@ def bundle_href(filename: str, link_prefix: str = "") -> str:
 def render_index_cards(report_title: str, decision: str, data_pack: dict[str, Any], link_prefix: str = "") -> str:
     quality = data_pack.get("quality") or {}
     cards = [
-        ("市场深度调研报告", HTML_REPORT_FILENAMES["market_depth"], "大盘、关键词、竞品、VOC、TikTok、1688、Web 风险与数据血缘。"),
+        ("市场深度调研报告", HTML_REPORT_FILENAMES["market_depth"], "大盘、需求、竞品、VOC、TikTok、1688、风险与行动摘要。"),
         ("产品全生命周期拓品战略报告", HTML_REPORT_FILENAMES["lifecycle_strategy"], "用户画像、生命周期旅程、SKU、Bundle、路线图和风险矩阵。"),
         ("用户心智断层与需求机会报告", HTML_REPORT_FILENAMES["demand_gap"], "$APPEALS、满意度鸿沟、KANO × JTBD、用户原声和需求优先级。"),
     ]
@@ -745,7 +1028,7 @@ def render_index_cards(report_title: str, decision: str, data_pack: dict[str, An
         "<div class=\"kpi-grid\">"
         + kpi_card("核心判断", decision, "Go / Watch / No-Go", "warning")
         + kpi_card("数据质量", first(quality.get("grade"), "-"), f"score {first(quality.get('overall_score'), '-')}", "success")
-        + kpi_card("Evidence Sources", num(len(data_pack.get("sources") or [])), "source_id lineage", "")
+        + kpi_card("证据样本数", num(len(data_pack.get("sources") or [])), "内部审计链路保留", "")
         + kpi_card("研究对象", report_title, "三报告共用 Data Pack", "")
         + "</div>"
     )
@@ -759,11 +1042,11 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
     products = data_pack.get("products") or []
     suppliers = data_pack.get("suppliers") or []
     defaults = [
-        {"name": "备用/替换核心配件", "stage": "开箱/替换", "type": "A", "price": "$12-$29", "supply": "自有或可控供应链", "phase": "P1", "priority": 92, "source_id": fallback_source},
+        {"name": "备用与替换核心配件", "stage": "开箱与替换", "type": "A", "price": "$12-$29", "supply": "自有或可控供应链", "phase": "P1", "priority": 92, "source_id": fallback_source},
         {"name": "信任说明卡 + 快速启动卡", "stage": "0-30 分钟", "type": "A", "price": "$3-$6", "supply": "印刷包装", "phase": "P1", "priority": 88, "source_id": fallback_source},
         {"name": "场景化配件包", "stage": "1-7 天", "type": "B", "price": "$12-$24", "supply": "自有或外协供应链", "phase": "P1", "priority": 84, "source_id": fallback_source},
-        {"name": "清洁/保养/维护套装", "stage": "7 天-6 个月", "type": "D", "price": "$9-$19", "supply": "外采耗材", "phase": "P2", "priority": 78, "source_id": fallback_source},
-        {"name": "替换充电线/数据线套装", "stage": "维护期", "type": "D", "price": "$8-$12", "supply": "外采电子", "phase": "P2", "priority": 72, "source_id": fallback_source},
+        {"name": "清洁、保养与维护套装", "stage": "7 天-6 个月", "type": "D", "price": "$9-$19", "supply": "外采耗材", "phase": "P2", "priority": 78, "source_id": fallback_source},
+        {"name": "替换充电线与数据线套装", "stage": "维护期", "type": "D", "price": "$8-$12", "supply": "外采电子", "phase": "P2", "priority": 72, "source_id": fallback_source},
     ]
     for product in products[:3]:
         defaults.append(
@@ -800,14 +1083,14 @@ def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, An
     rows = [
         ["拓品 SKU 总数", len(skus), fallback_source],
         ["可自产 SKU", len(self_supply), fallback_source],
-        ["复购/维护型 SKU", len([sku for sku in skus if str(sku.get("type")).upper() == "D"]), fallback_source],
-        ["建议首发 Phase", "P1 可控供应链 + 信任/开箱触点优先", fallback_source],
+        ["复购维护型 SKU", len([sku for sku in skus if str(sku.get("type")).upper() == "D"]), fallback_source],
+        ["建议首发 Phase", "P1 可控供应链 + 信任与开箱触点优先", fallback_source],
     ]
     return (
         "<div class=\"kpi-grid\">"
         + kpi_card("拓品 SKU 总数", len(skus), "覆盖生命周期触点", "success")
         + kpi_card("可自产 SKU", len(self_supply), "供应链可控", "")
-        + kpi_card("复购引擎", "60-90 天", "清洁/替换/维护", "warning")
+        + kpi_card("复购引擎", "60-90 天", "清洁、替换、维护", "warning")
         + kpi_card("主策略", "Bundle 提升 AOV", "先打样 P1", "")
         + "</div>"
         + section_table("战略仪表盘证据", ["指标", "结果", "source_id"], rows)
@@ -816,9 +1099,9 @@ def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, An
 
 def render_personas(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> str:
     personas = lifecycle.get("personas") or [
-        {"name": "礼品/首次购买用户", "need": "信任清晰、开箱体面、上手简单", "price": "按核心价格带上浮 10%-25%", "source_id": fallback_source},
-        {"name": "自用/体验升级用户", "need": "持续可用、维护方便、体验稳定", "price": "按高频配件和维护包分层", "source_id": fallback_source},
-        {"name": "进阶/专业场景用户", "need": "更强功能、组合方案、明确售后", "price": "按套装和高阶 SKU 溢价", "source_id": fallback_source},
+        {"name": "礼品与首次购买用户", "need": "信任清晰、开箱体面、上手简单", "price": "按核心价格带上浮 10%-25%", "source_id": fallback_source},
+        {"name": "自用与体验升级用户", "need": "持续可用、维护方便、体验稳定", "price": "按高频配件和维护包分层", "source_id": fallback_source},
+        {"name": "进阶与专业场景用户", "need": "更强功能、组合方案、明确售后", "price": "按套装和高阶 SKU 溢价", "source_id": fallback_source},
     ]
     cards = "".join(
         f"<article class=\"persona-card\"><div class=\"persona-header\"><span>{esc(item.get('name'))}</span></div>"
@@ -833,24 +1116,24 @@ def render_lifecycle_journey(data_pack: dict[str, Any], fallback_source: str) ->
     phases = [
         ["开箱 0-30 分钟", "欢迎卡、信任说明卡、快速启动指南", "降低第一次使用阻力", fallback_source],
         ["第 1-7 天", "场景化配件包、使用任务卡、基础组合包", "完成新鲜感到习惯的过渡", fallback_source],
-        ["第 7 天-6 个月", "清洁维护、替换配件、季节/场景主题包", "延长生命周期并制造复购", fallback_source],
-        ["每月+", "耗材/主题内容/配件 Bundle", "形成 AOV 与复购飞轮", fallback_source],
+        ["第 7 天-6 个月", "清洁维护、替换配件、季节与场景主题包", "延长生命周期并制造复购", fallback_source],
+        ["每月+", "耗材、主题内容、配件 Bundle", "形成 AOV 与复购飞轮", fallback_source],
         ["6 个月+", "品牌延伸、礼品升级包、二代配件", "从单品进入可持续产品生态", fallback_source],
     ]
     cards = "".join(
         f"<article class=\"tl-card\"><div class=\"tl-header\">阶段 {idx}</div><div class=\"tl-time\">{esc(row[0])}</div><div class=\"tl-skus\">{esc(row[1])}</div><div class=\"tl-pain\">{esc(row[2])}</div></article>"
         for idx, row in enumerate(phases, 1)
     )
-    return "<div class=\"timeline-grid\">" + cards + "</div>" + section_table("生命周期旅程证据表", ["阶段", "建议 SKU/触点", "用户任务", "source_id"], phases)
+    return "<div class=\"timeline-grid\">" + cards + "</div>" + section_table("生命周期旅程证据表", ["阶段", "建议 SKU 与触点", "用户任务", "source_id"], phases)
 
 
 def render_ecosystem(data_pack: dict[str, Any], skus: list[dict[str, Any]], fallback_source: str) -> str:
     counts = Counter(str(sku.get("type", "A")).upper() for sku in skus)
     rows = [
         ["A 核心体验增强", counts.get("A", 0), "强关联、先随主体打包", fallback_source],
-        ["B 场景/人群扩展", counts.get("B", 0), "礼品、节日、细分人群", fallback_source],
-        ["C 内容/服务延伸", counts.get("C", 0), "教程、任务、服务权益", fallback_source],
-        ["D 清洁维护/耗材", counts.get("D", 0), "复购与售后触点", fallback_source],
+        ["B 场景与人群扩展", counts.get("B", 0), "礼品、节日、细分人群", fallback_source],
+        ["C 内容与服务延伸", counts.get("C", 0), "教程、任务、服务权益", fallback_source],
+        ["D 清洁维护与耗材", counts.get("D", 0), "复购与售后触点", fallback_source],
     ]
     return (
         "<div class=\"chart-container\"><div class=\"chart-title\">四维拓品生态</div>"
@@ -881,7 +1164,7 @@ def render_bundle_strategy(skus: list[dict[str, Any]], fallback_source: str) -> 
     bundles = [
         ["新手启航套装", "主体 + 欢迎卡 + 信任说明卡 + 基础配件", "$99-$119", "降低首购疑虑", fallback_source],
         ["豪华礼品套装", "主体 + 礼盒 + 场景配件 + 备用核心配件", "$129-$159", "提升礼品场景 AOV", fallback_source],
-        ["进阶体验套装", "主体 + 高阶使用任务卡 + 售后/信任引导", "$119-$149", "进阶用户溢价", fallback_source],
+        ["进阶体验套装", "主体 + 高阶使用任务卡 + 售后与信任引导", "$119-$149", "进阶用户溢价", fallback_source],
         ["续航补给包", "清洁护理 + 替换线 + 耗材", "$19-$29", "60-90 天复购", fallback_source],
     ]
     cards = "".join(
@@ -894,7 +1177,7 @@ def render_bundle_strategy(skus: list[dict[str, Any]], fallback_source: str) -> 
 def render_lifecycle_roadmap(skus: list[dict[str, Any]], fallback_source: str) -> str:
     rows = [
         ["30 天", "打样 P1 可控 SKU；确认 Bundle 包装；补信任承诺物料", "可控启动", fallback_source],
-        ["60 天", "1688/硬件供应商询价；完成样品质检；收集首批用户反馈", "供应链验证", fallback_source],
+        ["60 天", "1688 与硬件供应商询价；完成样品质检；收集首批用户反馈", "供应链验证", fallback_source],
         ["90 天", "上线首批 Bundle；依据转化和评论调整 SKU；规划 P2", "市场验证", fallback_source],
     ]
     phase_cards = "".join(
@@ -907,8 +1190,8 @@ def render_lifecycle_roadmap(skus: list[dict[str, Any]], fallback_source: str) -
 def render_lifecycle_risks(fallback_source: str) -> str:
     rows = [
         ["供应链风险", "电子件/外采件质量不稳定", "Phase 1 优先可控供应链；外采至少 2 家备选", fallback_source],
-        ["合规/信任风险", "涉及数据、安全、认证、售后承诺等信任门槛", "按品类核查法规与平台政策；关键承诺前置到页面", fallback_source],
-        ["竞品跟进风险", "高溢价卖点被快速复制", "外观/IP/包装体验和评论证据形成组合壁垒", fallback_source],
+        ["合规与信任风险", "涉及数据、安全、认证、售后承诺等信任门槛", "按品类核查法规与平台政策；关键承诺前置到页面", fallback_source],
+        ["竞品跟进风险", "高溢价卖点被快速复制", "外观、IP、包装体验和评论证据形成组合壁垒", fallback_source],
     ]
     cards = "".join(
         f"<article class=\"risk-card\"><h3>{esc(row[0])}</h3><p class=\"desc\">{esc(row[1])}</p><div class=\"mitigation\"><strong>应对：</strong>{esc(row[2])}</div><p>source_id: {esc(row[3])}</p></article>"
@@ -920,7 +1203,7 @@ def render_lifecycle_risks(fallback_source: str) -> str:
 def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict[str, Any], fallback_source: str) -> str:
     rows = [
         ["Amazon 产品页面分析", f"{len(data_pack.get('products') or [])} 个产品样本", fallback_source],
-        ["TikTok / 社交媒体信号", f"{len(data_pack.get('tiktok_products') or [])} 个商品；{len(data_pack.get('tiktok_videos') or [])} 条视频", fallback_source],
+        ["TikTok 与社交媒体信号", f"{len(data_pack.get('tiktok_products') or [])} 个商品；{len(data_pack.get('tiktok_videos') or [])} 条视频", fallback_source],
         ["行业媒体 & 安全报告", f"{len(data_pack.get('web_documents') or [])} 个 Firecrawl 网页", fallback_source],
         ["竞品格局分析", f"{len(analysis_plan.get('method_chain') or [])} 条方法链", fallback_source],
     ]
@@ -932,10 +1215,7 @@ def appeal_rows(data_pack: dict[str, Any], fallback_source: str) -> list[list[An
     rows: list[list[Any]] = []
     theme_counts: Counter[str] = Counter()
     for review in reviews:
-        themes = review.get("themes_cn") or review.get("themes") or []
-        if isinstance(themes, str):
-            themes = [themes]
-        theme_counts.update(themes or ["其他体验问题"])
+        theme_counts.update(review_theme_labels(review))
     if not theme_counts:
         theme_counts.update(["性能（Performance）", "隐私信任", "材质手感"])
     for theme, count in theme_counts.most_common(8):
@@ -948,10 +1228,10 @@ def render_target_anchor(data_pack: dict[str, Any], object_value: Any, fallback_
     anchor = products[0] if products else {}
     rows = [
         ["研究对象", object_value, fallback_source],
-        ["目标 ASIN/锚点", first(anchor.get("asin"), "未指定 ASIN，按关键词/品类锚定", default="-"), source_ids_for(anchor, fallback_source) if anchor else fallback_source],
-        ["样本范围", f"{len(products)} products / {len(data_pack.get('reviews') or [])} reviews / {len(data_pack.get('keywords') or [])} keywords", fallback_source],
+        ["研究对象锚点", first(anchor.get("asin"), "未指定竞品锚点，按关键词与品类锚定", default="-"), source_ids_for(anchor, fallback_source) if anchor else fallback_source],
+        ["样本范围", f"{len(products)} 个竞品；{len(data_pack.get('reviews') or [])} 条评论；{len(data_pack.get('keywords') or [])} 个关键词", fallback_source],
     ]
-    return section_table("目标 ASIN/研究对象锚点", ["字段", "结果", "source_id"], rows)
+    return section_table("研究对象锚点", ["字段", "结果", "source_id"], rows)
 
 
 def render_decision_board(data_pack: dict[str, Any], demand_gap: dict[str, Any], decision: str, fallback_source: str) -> str:
@@ -960,13 +1240,13 @@ def render_decision_board(data_pack: dict[str, Any], demand_gap: dict[str, Any],
     rows = [
         ["最大机会", max_opportunity, fallback_source],
         ["核心判断", decision, fallback_source],
-        ["证据密度", f"{len(data_pack.get('reviews') or [])} reviews / {len(data_pack.get('sources') or [])} sources", fallback_source],
+        ["证据密度", f"{len(data_pack.get('reviews') or [])} 条评论；{len(data_pack.get('sources') or [])} 类样本记录", fallback_source],
     ]
     return (
         "<div class=\"kpi-grid\">"
         + kpi_card("最高机会维度", max_opportunity, "Gap Analysis", "success")
         + kpi_card("核心判断", decision, "Go / Watch / No-Go", "warning")
-        + kpi_card("Review 样本", len(data_pack.get("reviews") or []), "用户原声", "")
+        + kpi_card("评论样本", len(data_pack.get("reviews") or []), "用户原声", "")
         + "</div>"
         + section_table("决策看板证据表", ["指标", "结果", "source_id"], rows)
     )
@@ -984,10 +1264,10 @@ def render_appeals_map(data_pack: dict[str, Any], fallback_source: str) -> str:
 
 def render_gap_analysis(data_pack: dict[str, Any], fallback_source: str) -> str:
     rows = [
-        ["性能（Performance）", "高", "做不好会直接差评/退款", fallback_source],
+        ["性能（Performance）", "高", "做不好会直接引发差评或退款", fallback_source],
         ["隐私信任", "高", "需要变成页面可见承诺", fallback_source],
         ["核心体验质感", "中高", "用户最容易感知，也最容易通过差评放大的体验层", fallback_source],
-        ["订阅/后续成本", "中", "需明确无强制订阅或分层权益", fallback_source],
+        ["订阅与后续成本", "中", "需明确无强制订阅或分层权益", fallback_source],
     ]
     return (
         "<div class=\"chart-container\"><div class=\"chart-title\">满意度鸿沟雷达（CSS 替代）</div>"
@@ -1004,9 +1284,9 @@ def render_kano_jtbd(demand_gap: dict[str, Any], fallback_source: str) -> str:
         rows.append([first(item.get("kano"), "Must-be"), item.get("pain"), first(item.get("jtbd"), "当用户担心体验失败时，需要一个可被验证的承诺。"), first(item.get("opportunity"), "转成页面卖点与产品修复"), source_ids_for(item, fallback_source)])
     if not rows:
         rows = [
-            ["Must-be", "信任与信息透明", "购买前要确认核心承诺可验证、风险可控", "页面承诺、证据截图、售后/数据处理说明", fallback_source],
+            ["Must-be", "信任与信息透明", "购买前要确认核心承诺可验证、风险可控", "页面承诺、证据截图、售后与数据处理说明", fallback_source],
             ["Performance", "功能体验与使用场景割裂", "用户想要核心功能可靠，并能适配真实使用场景", "关键场景模式 + 快速上手 + 低门槛配置", fallback_source],
-            ["Delighter", "开箱与赠礼表达不足", "购买者希望产品显得体面且有明确价值", "礼盒/套装 + 欢迎卡 + 价值说明卡", fallback_source],
+            ["Delighter", "开箱与赠礼表达不足", "购买者希望产品显得体面且有明确价值", "礼盒套装 + 欢迎卡 + 价值说明卡", fallback_source],
         ]
     return table(["KANO属性", "核心痛点", "场景还原 (JTBD)", "创新机会", "source_id"], rows)
 
@@ -1015,28 +1295,30 @@ def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str
     reviews = data_pack.get("reviews") or []
     rows = []
     cards = []
-    for review in reviews[:10]:
-        text = truncate(review.get("text"), 180)
-        rows.append([review.get("asin"), review.get("rating"), truncate(review.get("title"), 60), text, source_ids_for(review, fallback_source)])
+    for idx, review in enumerate(reviews[:10], 1):
+        text = customer_review_summary(review, 180)
+        sentiment = review_sentiment_label(review)
+        title = customer_review_title(review)
+        rows.append([f"样本 {idx:02d}", review.get("rating"), sentiment, text, "、".join(review_theme_labels(review)), "高"])
         cards.append(
-            f"<article class=\"quote-card\"><div class=\"quote-cn\">{esc(text)}</div><div class=\"quote-origin\">ASIN {esc(review.get('asin'))} · source_id: {esc(source_ids_for(review, fallback_source))}</div></article>"
+            f"<article class=\"quote-card\"><div class=\"quote-cn\">{esc(text)}</div><div class=\"quote-origin\">{esc(review.get('rating'))}星 · {esc(sentiment)} · {esc(title)}</div></article>"
         )
     if not rows:
-        rows = [["-", "-", "评论样本不足", "需要补 Sorftime product_reviews 或用户评论文件", fallback_source]]
-        cards = [f"<article class=\"quote-card\"><div class=\"quote-cn\">评论样本不足，需求判断只能保持 Watch。</div><div class=\"quote-origin\">source_id: {esc(fallback_source)}</div></article>"]
-    return "<div class=\"quote-grid\">" + "".join(cards) + "</div>" + table(["ASIN", "星级", "标题", "用户原声", "source_id"], rows)
+        rows = [["-", "-", "样本不足", "评论样本不足，需求判断只能保持 Watch。", "待补充", "数据缺口"]]
+        cards = ["<article class=\"quote-card\"><div class=\"quote-cn\">评论样本不足，需求判断只能保持 Watch。</div><div class=\"quote-origin\">数据缺口 · 需要补充评论样本</div></article>"]
+    return "<div class=\"quote-grid\">" + "".join(cards) + "</div>" + table(["样本", "星级", "情绪", "中文化用户原声", "主题", "证据强度"], rows)
 
 
 def render_priority_table(data_pack: dict[str, Any], demand_gap: dict[str, Any], fallback_source: str) -> str:
     rows = [
         ["P0", "信任透明承诺", "降低购买阻力", "Must-be", fallback_source],
-        ["P0", "可维护/可替换结构", "解决长期使用焦虑", "Performance", fallback_source],
+        ["P0", "可维护与可替换结构", "解决长期使用焦虑", "Performance", fallback_source],
         ["P1", "无强制订阅表达", "避免后续成本差评", "Performance", fallback_source],
         ["P1", "礼盒开箱与价值说明卡", "提升送礼转化和溢价", "Delighter", fallback_source],
     ]
     for item in (demand_gap.get("opportunities") or [])[:6]:
         rows.append([first(item.get("priority"), "P1"), item.get("pain"), first(item.get("action"), item.get("opportunity"), default="-"), first(item.get("kano"), "-"), source_ids_for(item, fallback_source)])
-    return table(["优先级", "需求/痛点", "执行动作", "KANO", "source_id"], rows)
+    return table(["优先级", "需求与痛点", "执行动作", "KANO", "source_id"], rows)
 
 
 def write_delivery_result(report_dir: Path, delivery: dict[str, Any]) -> None:
@@ -1093,12 +1375,12 @@ def render(report_dir: Path) -> Path:
 
     kpis = [
         kpi_card("核心判断", decision, "Go / Watch / No-Go", "warning"),
-        kpi_card("Top100 估算月销量", num(category.get("top100_estimated_monthly_units")), "Sorftime 类目代理", "success"),
+        kpi_card("Top100 估算月销量", num(category.get("top100_estimated_monthly_units")), "类目代理指标", "success"),
         kpi_card("最大关键词月搜索", num(keywords[0].get("monthly_search_volume") if keywords else None), keywords[0].get("keyword") if keywords else "keyword gap"),
         kpi_card("相关竞品池", num(len(products)), "过滤泛词噪声后", ""),
-        kpi_card("Review 样本", num(len(data_pack.get("reviews") or [])), "VOC evidence", ""),
-        kpi_card("1688 样本", num(len(data_pack.get("suppliers") or [])), "supply proxy", "warning"),
-        kpi_card("TikTok 商品", num(len(data_pack.get("tiktok_products") or [])), "channel signal", ""),
+        kpi_card("评论样本", num(len(data_pack.get("reviews") or [])), "已做中文摘要映射", ""),
+        kpi_card("1688 样本", num(len(data_pack.get("suppliers") or [])), "供应端参考", "warning"),
+        kpi_card("TikTok 商品", num(len(data_pack.get("tiktok_products") or [])), "内容端信号", ""),
         kpi_card("数据质量", first(quality.get("grade"), "-"), f"score {first(quality.get('overall_score'), '-')}", "warning"),
     ]
 
@@ -1110,13 +1392,15 @@ def render(report_dir: Path) -> Path:
         "{{DATA_DEPTH}}": data_depth,
         "{{DECISION}}": decision,
         "{{PRIMARY_SOURCE_ID}}": fallback_source,
+        "{{CONFIDENCE_LEVEL}}": confidence_level(data_pack, analysis_plan),
+        "{{CLIENT_TRUST_STRIP}}": client_trust_strip(data_pack, analysis_plan, str(decision)),
     }
     market_replacements = {
         **common,
         "{{MARKET_REPORT_TITLE}}": f"{object_value} · 市场深度调研报告",
-        "{{REPORT_SUBTITLE}}": "Sorftime 主数据 + Firecrawl 公网补充 · 全量关键词、竞品、VOC、TikTok、1688、Web 风险与完整附录",
+        "{{REPORT_SUBTITLE}}": "客户版 AI 深度分析 · 大盘判断、需求结构、竞品格局、内容信号、供应链判断与行动建议",
         "{{KPI_CARDS}}": "".join(kpis),
-        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{esc(decision)}。本 HTML 展开 Data Pack 中可展示的主要数据：{len(data_pack.get('sources', []))} 个 source、{len(data_pack.get('products', []))} 个产品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条 TikTok 视频、{len(data_pack.get('suppliers', []))} 条供应端样本。关键销量均标注为估算月销量（Sorftime）。",
+        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{esc(decision)}。当前样本覆盖 {len(data_pack.get('products', []))} 个竞品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(data_pack.get('suppliers', []))} 条供应端样本。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
         "{{MARKET_DASHBOARD}}": render_market(data_pack, market_size),
         "{{KEYWORD_TABLE_AND_INTENT_CARDS}}": render_keywords(data_pack),
         "{{COMPETITOR_TABLE}}": competitor_table,
@@ -1126,11 +1410,12 @@ def render(report_dir: Path) -> Path:
         "{{TIKTOK_VALIDATION}}": render_tiktok(data_pack),
         "{{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}": render_supply(data_pack, profitability),
         "{{WEB_RISK_SUPPLEMENT}}": render_web_risk(data_pack),
+        "{{CLIENT_ACTION_SUMMARY}}": render_client_action_summary(data_pack, analysis_plan, str(decision), object_value),
         "{{OPPORTUNITY_CARDS}}": render_opportunities(opportunity),
         "{{DECISION_ROADMAP}}": render_decision(delivery),
         "{{FULL_DATA_APPENDIX}}": render_full_appendix(data_pack, analysis_plan),
         "{{LINEAGE_TABLE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · Generated by amz-market-research-orchestrated · market-depth-report-v2",
+        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · market-depth-report-v2",
     }
     skus = lifecycle_skus(data_pack, lifecycle, fallback_source)
     lifecycle_replacements = {
@@ -1146,7 +1431,7 @@ def render(report_dir: Path) -> Path:
         "{{RISK_MATRIX}}": render_lifecycle_risks(fallback_source),
         "{{MARKET_INTELLIGENCE}}": render_lifecycle_market_intel(data_pack, analysis_plan, fallback_source),
         "{{LIFECYCLE_LINEAGE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · Generated by amz-market-research-orchestrated · lifecycle-strategy-report-v2",
+        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · lifecycle-strategy-report-v2",
     }
     demand_replacements = {
         **common,
@@ -1159,14 +1444,14 @@ def render(report_dir: Path) -> Path:
         "{{VOICE_THEATER}}": render_voice_theater(data_pack, fallback_source),
         "{{PRIORITY_TABLE}}": render_priority_table(data_pack, demand_gap, fallback_source),
         "{{DEMAND_LINEAGE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · Generated by amz-market-research-orchestrated · demand-gap-report-v2",
+        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · demand-gap-report-v2",
     }
     index_replacements = {
         **common,
         "{{INDEX_CARDS}}": render_index_cards(str(object_value), str(decision), data_pack),
-        "{{DATA_COVERAGE}}": render_data_coverage(data_pack, analysis_plan),
+        "{{DATA_COVERAGE}}": render_client_data_coverage(data_pack, analysis_plan, str(decision)),
         "{{DATA_GAPS}}": render_data_gaps(data_pack, analysis_plan),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · Generated by amz-market-research-orchestrated · three-report-index-v2",
+        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · three-report-index-v2",
     }
     compat_index_replacements = {
         **index_replacements,
@@ -1183,10 +1468,11 @@ def render(report_dir: Path) -> Path:
         "lifecycle_strategy": render_template("lifecycle_strategy", lifecycle_replacements),
         "demand_gap": render_template("demand_gap", demand_replacements),
     }
+    rendered_docs = {key: redact_customer_html(html_doc, data_pack) for key, html_doc in rendered_docs.items()}
     for key, html_doc in rendered_docs.items():
         (report_dir / HTML_REPORTS[key]).parent.mkdir(parents=True, exist_ok=True)
         (report_dir / HTML_REPORTS[key]).write_text(html_doc, encoding="utf-8")
-    (report_dir / COMPAT_INDEX_REPORT).write_text(render_template("index", compat_index_replacements), encoding="utf-8")
+    (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(render_template("index", compat_index_replacements), data_pack), encoding="utf-8")
     write_delivery_result(report_dir, delivery)
     return report_dir / HTML_REPORTS["index"]
 

@@ -23,19 +23,19 @@ ENTITY_KEYS = [
 ]
 
 THEME_CN = {
-    "performance": "性能/效果",
-    "privacy": "隐私/信任",
-    "quality": "质量/耐用",
-    "durability": "质量/耐用",
+    "performance": "性能与效果",
+    "privacy": "隐私与信任",
+    "quality": "质量与耐用",
+    "durability": "质量与耐用",
     "usability": "易用性",
-    "price": "价格/订阅",
-    "shipping": "物流/包装",
-    "support": "售后/客服",
-    "safety": "安全/合规",
-    "installation_mounting": "安装/固定",
-    "battery_charging": "电池/充电",
-    "quality_durability": "质量/耐用",
-    "size_finish_design": "尺寸/外观",
+    "price": "价格与订阅",
+    "shipping": "物流与包装",
+    "support": "售后与客服",
+    "safety": "安全与合规",
+    "installation_mounting": "安装与固定",
+    "battery_charging": "电池与充电",
+    "quality_durability": "质量与耐用",
+    "size_finish_design": "尺寸与外观",
 }
 
 
@@ -78,6 +78,10 @@ def normalize_text(value: Any) -> str:
 
 def normalized_key(value: Any) -> str:
     return normalize_text(value).casefold()
+
+
+def has_cjk(value: Any) -> bool:
+    return re.search(r"[\u4e00-\u9fff]", normalize_text(value)) is not None
 
 
 def source_ids(entity: dict[str, Any]) -> list[str]:
@@ -248,18 +252,18 @@ def keyword_cn(keyword: Any) -> str:
 def keyword_intent_cn(keyword: Any) -> str:
     text = normalized_key(keyword)
     if any(term in text for term in ["gift", "bundle", "set", "kit", "starter"]):
-        return "礼品/组合购买需求"
+        return "礼品与组合购买需求"
     if any(term in text for term in ["kids", "children", "baby", "pet", "adult", "women", "men"]):
-        return "人群/使用者需求"
+        return "人群与使用者需求"
     if any(term in text for term in ["replacement", "refill", "accessory", "parts", "cover", "case"]):
-        return "配件/替换/复购需求"
+        return "配件、替换与复购需求"
     if any(term in text for term in ["outdoor", "waterproof", "portable", "travel"]):
-        return "场景/耐用性需求"
+        return "场景与耐用性需求"
     if any(term in text for term in ["battery", "rechargeable", "cordless", "wireless", "usb"]):
-        return "供电/续航/便携需求"
+        return "供电、续航与便携需求"
     if any(term in text for term in ["smart", "ai", "app", "bluetooth", "voice", "interactive"]):
-        return "智能/交互功能需求"
-    return "核心品类/功能需求"
+        return "智能与交互功能需求"
+    return "核心品类与功能需求"
 
 
 def keyword_relevance_cn(keyword: Any, seed_terms: list[str]) -> str:
@@ -284,6 +288,100 @@ def title_cn(title: Any, segment: Any = None) -> str:
     return text or normalize_text(segment) or "产品标题待补充"
 
 
+def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
+    text = normalized_key(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment")))
+    rules = [
+        ("privacy", ["privacy", "policy", "data", "record", "recording", "permission", "personal information"]),
+        ("performance", ["not work", "doesn't work", "stopped working", "stop working", "broken", "defective", "fail", "failed"]),
+        ("battery_charging", ["battery", "charge", "charging", "recharge", "usb"]),
+        ("usability", ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app"]),
+        ("quality_durability", ["quality", "durable", "durability", "cheap", "material", "fall apart"]),
+        ("price", ["subscription", "fee", "expensive", "price", "refund", "return"]),
+        ("shipping", ["shipping", "package", "packaging", "box", "arrived"]),
+        ("support", ["support", "service", "customer service", "warranty"]),
+        ("safety", ["safe", "safety", "hazard", "warning", "certification"]),
+    ]
+    themes: list[str] = []
+    for key, needles in rules:
+        if any(needle in text for needle in needles):
+            themes.append(key)
+    return themes
+
+
+def review_summary_cn(review: dict[str, Any]) -> str:
+    explicit = normalize_text(review.get("summary_cn") or review.get("text_cn") or review.get("quote_cn"))
+    if explicit:
+        return explicit
+
+    raw_title = normalize_text(review.get("title"))
+    raw_text = normalize_text(first_existing(review.get("text"), review.get("content"), review.get("body"), review.get("comment")))
+    if has_cjk(raw_text):
+        return raw_text
+    if has_cjk(raw_title):
+        return raw_title
+
+    text = normalized_key(f"{raw_title} {raw_text}")
+    phrases: list[str] = []
+    if any(term in text for term in ["stopped working", "stop working", "not work", "doesn't work", "broken", "defective", "failed"]):
+        phrases.append("短期使用后出现失效")
+    if any(term in text for term in ["two days", "2 days", "after a day", "after one day", "within days"]):
+        phrases.append("用户对耐用性和稳定性信任下降")
+    if any(term in text for term in ["privacy", "policy", "data", "record", "recording", "permission"]):
+        phrases.append("隐私政策和数据使用说明不够清晰")
+    if any(term in text for term in ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app"]):
+        phrases.append("上手配置和使用路径需要更清楚")
+    if any(term in text for term in ["battery", "charge", "charging", "recharge", "usb"]):
+        phrases.append("续航或充电体验没有达到预期")
+    if any(term in text for term in ["cheap", "quality", "material", "durable", "fall apart"]):
+        phrases.append("材质做工和耐用性需要加强")
+    if any(term in text for term in ["refund", "return", "warranty", "support", "service"]):
+        phrases.append("售后承诺需要前置说明")
+    if any(term in text for term in ["love", "cute", "fun", "gift", "kids", "daughter", "son"]):
+        phrases.append("正向反馈集中在开箱、陪伴和礼品场景")
+
+    if not phrases:
+        rating = as_number(review.get("rating"))
+        if rating and rating <= 3:
+            phrases.append("负面反馈集中在体验未达预期")
+        elif rating and rating >= 4:
+            phrases.append("正向反馈集中在使用满意度和场景匹配")
+        else:
+            phrases.append("用户反馈需要继续归类后再转成需求动作")
+
+    unique: list[str] = []
+    for phrase in phrases:
+        if phrase not in unique:
+            unique.append(phrase)
+    return "；".join(unique[:3])
+
+
+def review_title_cn(review: dict[str, Any]) -> str:
+    explicit = normalize_text(review.get("title_cn"))
+    if explicit:
+        return explicit
+    themes = review.get("themes_cn") or []
+    if isinstance(themes, str):
+        themes = [themes]
+    if themes:
+        return "、".join(themes[:2])
+    rating = as_number(review.get("rating"))
+    return "负面体验反馈" if rating and rating <= 3 else "正向体验反馈"
+
+
+def first_existing(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", [], {}):
+            return value
+    return ""
+
+
+def as_number(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
     product["title_cn"] = product.get("title_cn") or title_cn(product.get("title"), product.get("segment"))
     product["segment_cn"] = product.get("segment_cn") or normalize_text(product.get("segment")) or "未分层"
@@ -296,13 +394,16 @@ def enrich_keyword(keyword: dict[str, Any], seed_terms: list[str]) -> dict[str, 
     keyword["intent_cn"] = keyword_intent_cn(keyword.get("keyword"))
     keyword["relevance_cn"] = keyword.get("relevance_cn") or keyword_relevance_cn(keyword.get("keyword"), seed_terms)
     keyword["is_core_relevant"] = keyword["relevance_cn"] == "高相关"
-    keyword["recommended_use_cn"] = "主词验证" if keyword.get("source_type") == "keyword_detail" else "长尾/内容/广告拓词"
+    keyword["recommended_use_cn"] = "主词验证" if keyword.get("source_type") == "keyword_detail" else "长尾、内容与广告拓词"
     return keyword
 
 
 def enrich_review(review: dict[str, Any]) -> dict[str, Any]:
-    themes = review.get("themes") or []
-    review["themes_cn"] = [THEME_CN.get(theme, theme) for theme in themes]
+    themes = review.get("themes") or infer_review_theme_keys(review)
+    review["themes"] = themes
+    review["themes_cn"] = [THEME_CN.get(str(theme).casefold(), str(theme)) for theme in themes]
+    review["summary_cn"] = review_summary_cn(review)
+    review["title_cn"] = review_title_cn(review)
     return review
 
 

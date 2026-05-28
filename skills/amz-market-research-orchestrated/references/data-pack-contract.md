@@ -120,7 +120,7 @@ The normalizer adds the fields below when possible:
 |---|---|
 | `products` | `source_ids`, `validation`, `title_cn`, `segment_cn`, `positioning_cn` |
 | `keywords` | `source_ids`, `validation`, `keyword_cn`, `intent_cn`, `relevance_cn`, `is_core_relevant`, `recommended_use_cn` |
-| `reviews` | `source_ids`, `validation`, `themes_cn` |
+| `reviews` | `source_ids`, `validation`, `title_cn`, `summary_cn`, `themes_cn` |
 | `tiktok_products`, `tiktok_videos`, `suppliers`, `web_documents` | `source_ids`, `validation` |
 
 Keyword dedupe must not collapse global demand and ASIN traffic into one row:
@@ -129,6 +129,8 @@ Keyword dedupe must not collapse global demand and ASIN traffic into one row:
 - ASIN traffic rows: dedupe by `asin + normalized English keyword`.
 
 HTML should display global demand in the main keyword table, adjacent/noisy terms in a separate table, and ASIN traffic terms in an ASIN traffic foldout.
+
+Client HTML must not display raw English review text or English review titles. Keep original review fields in `data_pack.json` for audit, but render `summary_cn`, `title_cn`, `themes_cn`, sentiment, and suggested actions in customer-facing reports.
 
 ## Quality Object
 
@@ -172,4 +174,4 @@ The validator checks:
 - standalone v2 HTML bundle shape,
 - `delivery_result.json`.
 
-The HTML bundle is validated against `html-report-design-contract.md`: `output/html_reports/report.html` must be the portable `three-report-index-v2` entry page with same-folder child links, `output/report.html` must remain a compatibility entry into `html_reports/`, and the three child reports must include semantic sections, HTML evidence tables, visible source IDs, and their required report modules.
+The HTML bundle is validated against `html-report-design-contract.md`: `output/html_reports/report.html` must be the portable `three-report-index-v2` entry page with same-folder child links, `output/report.html` must remain a compatibility entry into `html_reports/`, and the three child reports must include semantic sections, client-readable insight tables, evidence strength language, and their required report modules. Raw `source_id` values stay in JSON/Markdown audit artifacts, not client HTML.

@@ -58,6 +58,7 @@ def make_renderable_report(root):
             "products": [
                 {
                     "asin": "B0TEST1234",
+                    "product_id": "internal_product_1",
                     "title": "Interactive AI Plush Toy",
                     "price": 89,
                     "rating": 4.5,
@@ -69,7 +70,16 @@ def make_renderable_report(root):
             ],
             "keywords": keywords,
             "categories": [{"node_id": "123", "name": "Plush Toys", "top100_estimated_monthly_units": 10000, "source_id": "src_001", "provider": "sorftime"}],
-            "reviews": [{"asin": "B0TEST1234", "rating": 2, "title": "privacy issue", "text": "privacy concern", "source_id": "src_001", "provider": "sorftime"}],
+            "reviews": [
+                {
+                    "asin": "B0TEST1234",
+                    "rating": 2,
+                    "title": "privacy issue",
+                    "text": "This toy stopped working after two days and the privacy policy is confusing.",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+            ],
             "tiktok_products": [{"product_id": "tk_1", "title": "AI plush", "sold_count": 100, "source_id": "src_001", "provider": "sorftime"}],
             "tiktok_videos": [{"video_id": "v_1", "title": "AI plush demo", "views": 10000, "source_id": "src_001", "provider": "sorftime"}],
             "suppliers": [{"supplier_name": "1688 supplier", "price": 18, "moq": 100, "source_id": "src_001", "provider": "sorftime"}],
@@ -153,7 +163,47 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertNotIn("壁灯", rendered_text)
             self.assertNotIn("灯具", rendered_text)
             self.assertNotIn("毛绒", rendered_text)
+            for leaked in [
+                "source_id",
+                "src_001",
+                "src_002",
+                "B0TEST1234",
+                "Product ID",
+                "product_id",
+                "internal_product_1",
+                "raw_path",
+                "data/raw",
+                "provider",
+                "tool",
+                "Sorftime",
+                "Firecrawl",
+                "sorftime",
+                "firecrawl",
+                "tk_1",
+                "来源",
+            ]:
+                self.assertNotIn(leaked, rendered_text)
+            for client_term in ["证据强度", "样本覆盖", "数据缺口", "建议动作", "置信等级"]:
+                self.assertIn(client_term, rendered_text)
+            self.assertNotIn("1000 关键词 / 1 竞品 / 1 评论 / 1 供应样本", rendered_text)
+            self.assertNotIn("1 个竞品 / 1 条评论 / 1000 个关键词", rendered_text)
+            self.assertNotIn("隐私/信任", rendered_text)
+            self.assertNotIn("性能/效果", rendered_text)
+            self.assertIn('class="metric-tags"', rendered_text)
+            self.assertIn('class="metric-tag"><b>1000</b><span>关键词</span></span>', rendered_text)
+            self.assertIn('class="metric-tag"><b>1</b><span>竞品</span></span>', rendered_text)
+            self.assertNotIn("This toy stopped working after two days", rendered_text)
+            self.assertNotIn("privacy policy is confusing", rendered_text)
+            self.assertNotIn("privacy issue", rendered_text)
+            self.assertNotIn("Interactive AI Plush Toy", rendered_text)
+            self.assertIn("短期使用后出现失效", rendered_text)
+            self.assertIn("隐私政策和数据使用说明不够清晰", rendered_text)
             self.assertNotIn("{{", rendered_text)
+
+            lineage = (report_dir / "data" / "lineage.md").read_text(encoding="utf-8")
+            report_md = (report_dir / "output" / "report.md").read_text(encoding="utf-8")
+            self.assertIn("src_001", lineage)
+            self.assertIn("src_001", report_md)
 
             delivery = json.loads((report_dir / "output" / "delivery_result.json").read_text(encoding="utf-8"))
             self.assertEqual(delivery["html_bundle_dir"], "output/html_reports")

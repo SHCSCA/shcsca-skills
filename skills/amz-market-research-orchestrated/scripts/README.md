@@ -30,7 +30,7 @@ reports/<task_id>/
     delivery_result.json
 ```
 
-The script prints `validate_ok` on success and `validate_failed: ...` on failure. It also rejects HTML reports that are Markdown wrappers instead of the v2 entry page plus three standalone source-linked reports.
+The script prints `validate_ok` on success and `validate_failed: ...` on failure. It also rejects HTML reports that are Markdown wrappers, expose technical audit identifiers, or copy raw English review text into the client-facing pages instead of the v2 entry page plus three client-readable analysis reports.
 
 ## Tests
 
@@ -61,7 +61,7 @@ Cross-validates, dedupes, and enriches `data/data_pack.json`:
 python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir reports/<task_id>
 ```
 
-It adds `normalization`, `source_ids`, `validation`, Chinese keyword/title fields, keyword relevance labels, and writes `data/normalized/cross_validated_data_pack.json`. It also writes `data/normalized/normalization_baseline.json` on the first run so repeated rendering does not reset raw sample counts.
+It adds `normalization`, `source_ids`, `validation`, Chinese keyword/title fields, keyword relevance labels, and Chinese review fields (`title_cn`, `summary_cn`, `themes_cn`), then writes `data/normalized/cross_validated_data_pack.json`. It also writes `data/normalized/normalization_baseline.json` on the first run so repeated rendering does not reset raw sample counts.
 
 ## render_dashboard_html.py
 
@@ -84,3 +84,9 @@ output/html_reports/demand-gap-report.html
 `output/html_reports/` is the portable folder: move or download that folder as a unit and its `report.html` will link to the three child reports with same-folder relative links. `output/report.html` is retained as a compatibility entry that links into `html_reports/`.
 
 The renderer also updates `output/delivery_result.json.html_reports` and `output/delivery_result.json.html_bundle_dir`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
+
+Customer HTML is Chinese-facing by default. Raw English reviews and English review titles remain in `data_pack.json` for audit, while HTML uses Chinese summaries, themes, sentiment labels, and suggested actions.
+
+## prototypes
+
+`../prototypes/client-html-style-preview.html` is a static style preview for the client-facing report language. Treat it as a visual reference for spacing, palette, cards, and customer-readable wording; it is not a generated report artifact and should not be copied as final evidence.
