@@ -95,6 +95,32 @@ def make_valid_report(root):
             },
         },
     )
+    data_pack = json.loads((root / "data" / "data_pack.json").read_text(encoding="utf-8"))
+    data_pack["cleaning_summary"] = data_pack["normalization"]
+    write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
+    child_skills = {
+        "market_depth": "amz-market-depth-report",
+        "lifecycle_strategy": "amz-lifecycle-strategy-report",
+        "demand_gap": "amz-demand-gap-report",
+    }
+    site_assets = {
+        "css": "output/html_reports/assets/report.css",
+        "js": "output/html_reports/assets/report.js",
+        "data": "output/html_reports/assets/report-data.json",
+    }
+    interactive_features = ["table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"]
+    write_json(
+        root / "report_brief.json",
+        {
+            "task_id": "ai_plush_us_20260526",
+            "child_skills": child_skills,
+            "static_site": {"bundle_dir": "output/html_reports", "assets": site_assets, "interactive_features": interactive_features},
+            "data_inputs": {
+                "normalized_data_pack": "data/normalized/normalized_data_pack.json",
+                "analysis_plan": "analysis/analysis_plan.json",
+            },
+        },
+    )
     write_json(
         root / "analysis" / "analysis_plan.json",
         {
@@ -213,6 +239,20 @@ def make_valid_report(root):
                 "demand_gap": "output/html_reports/demand-gap-report.html",
             },
             "html_bundle_dir": "output/html_reports",
+            "child_skills": child_skills,
+            "site_assets": site_assets,
+            "interactive_features": interactive_features,
+            "cleaning_summary": data_pack["normalization"],
+        },
+    )
+    write_text(root / "output" / "html_reports" / "assets" / "report.css", ".site-nav{}.table-tools{}\n")
+    write_text(root / "output" / "html_reports" / "assets" / "report.js", "document.querySelectorAll('table');\n")
+    write_json(
+        root / "output" / "html_reports" / "assets" / "report-data.json",
+        {
+            "child_skills": child_skills,
+            "interactive_features": interactive_features,
+            "cleaning_summary": data_pack["normalization"],
         },
     )
 

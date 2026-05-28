@@ -45,7 +45,10 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | Skill | 类型 | 适用场景 |
 |---|---|---|
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
-| `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研，使用 Sorftime MCP + Firecrawl 生成可审计三报告 |
+| `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研主控，使用 Sorftime MCP + Firecrawl 生成可审计静态站点三报告 |
+| `amz-market-depth-report` | 自建 · 子 Skill | 市场深度调研报告：大盘、需求结构、竞品、VOC、TikTok、1688、风险行动 |
+| `amz-lifecycle-strategy-report` | 自建 · 子 Skill | 产品全生命周期拓品战略报告：SKU、Bundle、路线图、风险矩阵 |
+| `amz-demand-gap-report` | 自建 · 子 Skill | 用户心智断层与需求机会报告：$APPEALS、KANO × JTBD、用户原声、优先级 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
@@ -56,9 +59,18 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 ### `amz-market-research-orchestrated`（可执行 v2）
 
-Amazon / 电商市场调研 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链和交付规范的市场研究报告。
+Amazon / 电商市场调研主控 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链、清洗去重和交互式静态站点交付规范的市场研究报告。
 
-v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的三报告交付包，不是 Markdown 套壳：四个可交付 HTML 统一放在 `output/html_reports/`，其中 `report.html` 为便携入口页，另外三份是市场深度调研、产品全生命周期拓品战略、用户心智断层与需求机会报告；`output/report.html` 只保留为兼容入口。`validate_market_research_deliverables.py` 校验数据血缘、方法链、输出文件、HTML 深度和关键质量规则。
+v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的静态站点包，不是 Markdown 套壳：`output/html_reports/` 内含入口页、三份子报告和共享 `assets/report.css`、`assets/report.js`、`assets/report-data.json`；`output/report.html` 只保留为兼容入口。主控先生成唯一 `data/normalized/normalized_data_pack.json`，完成全局清洗、去重、中文映射和质量评分，再由三个子 Skill 按只读数据口径生成各自报告。`validate_market_research_deliverables.py` 校验数据血缘、方法链、静态站点资产、HTML 深度、交互声明和关键质量规则。
+
+职责拆分：
+
+| Skill | 职责 |
+|---|---|
+| `amz-market-research-orchestrated` | 主控：确认、采集、全局清洗去重、质量评分、调度三子报告、整合交付 |
+| `amz-market-depth-report` | 市场深度：大盘、需求结构、竞品、VOC、标杆打法、TikTok、1688、风险行动 |
+| `amz-lifecycle-strategy-report` | 生命周期：用户画像、SKU、Bundle、30/60/90 路线图、风险矩阵 |
+| `amz-demand-gap-report` | 需求断层：$APPEALS、满意度鸿沟、KANO × JTBD、用户原声和优先级 |
 
 计划覆盖的调研任务：
 
@@ -185,6 +197,9 @@ shcsca-skills/
     │   ├── references/
     │   └── templates/
     ├── amz-market-research-orchestrated/  # 自建 · 可执行 v2 · Amazon 市场研究总控
+    ├── amz-market-depth-report/           # 自建 · 市场深度调研子报告
+    ├── amz-lifecycle-strategy-report/     # 自建 · 生命周期拓品战略子报告
+    ├── amz-demand-gap-report/             # 自建 · 需求断层与机会子报告
     ├── zach-feature-demand-validator/     # 自建 · 功能需求验证
     ├── hv-analysis/                       # khazix · 横纵分析法
     ├── khazix-writer/                     # khazix · 长文写作

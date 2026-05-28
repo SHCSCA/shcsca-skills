@@ -69,7 +69,7 @@ After first assembly, run:
 python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir reports/{task_id}
 ```
 
-The normalizer writes `data/normalized/cross_validated_data_pack.json` and mutates `data/data_pack.json` with deduped, enriched entities.
+The normalizer writes `data/normalized/normalized_data_pack.json` as the master read-only handoff for child report skills, writes `data/normalized/cross_validated_data_pack.json` for backward compatibility, and mutates `data/data_pack.json` with deduped, enriched entities.
 
 For standard and deep research runs, keyword depth is a hard delivery gate:
 
@@ -131,6 +131,18 @@ Keyword dedupe must not collapse global demand and ASIN traffic into one row:
 HTML should display global demand in the main keyword table, adjacent/noisy terms in a separate table, and ASIN traffic terms in an ASIN traffic foldout.
 
 Client HTML must not display raw English review text or English review titles. Keep original review fields in `data_pack.json` for audit, but render `summary_cn`, `title_cn`, `themes_cn`, sentiment, and suggested actions in customer-facing reports.
+
+## Cleaning Boundary
+
+Global cleaning belongs to `amz-market-research-orchestrated`:
+
+- products: ASIN first, then normalized title fingerprint when ASIN is missing,
+- keywords: global market terms and ASIN traffic terms remain separate buckets,
+- reviews: ASIN + date + title + body fingerprint,
+- suppliers: canonical URL, product ID, or title + store,
+- web documents: canonical URL with query strings and fragments removed.
+
+Child report skills may do display-layer grouping, sorting, bucketing, and truncation, but they must not overwrite the global dedupe result or create a competing data pack.
 
 ## Quality Object
 

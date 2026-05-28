@@ -1,20 +1,29 @@
 ---
 name: amz-market-research-orchestrated
-description: "Amazon / 电商市场调研可执行 v2 Skill。用户要求调研市场、品类、赛道、竞品格局、用户需求、产品迭代、新细分机会、TikTok 验证或 1688 供应链成本时使用。以 Sorftime MCP 为主数据源，Firecrawl 为公开网页补充，生成可审计的 Data Pack、Analysis Plan、三份 HTML 和 Markdown 报告。"
+description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要求调研市场、品类、赛道、竞品格局、用户需求、产品迭代、新细分机会、TikTok 验证或 1688 供应链成本时使用。以 Sorftime MCP 为主数据源，Firecrawl 为公开网页补充，生成可审计的 Data Pack、Analysis Plan、交互式静态站点三报告和 Markdown 审计稿。"
 ---
 
 # Amazon 市场调研总控 v2
 
 ## 定位
 
-`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研 Skill。它不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v2 内置最小可执行流程：
+`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研主控 Skill。它不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v2 内置最小可执行流程，并拆分为“主控 + 三个报告子 Skill”：
+
+| Skill | 职责 |
+|---|---|
+| `amz-market-research-orchestrated` | 调研确认、采集调度、全局清洗去重、质量评分、子报告编排和交付整合 |
+| `amz-market-depth-report` | 市场深度调研报告 |
+| `amz-lifecycle-strategy-report` | 产品全生命周期拓品战略报告 |
+| `amz-demand-gap-report` | 用户心智断层与需求机会报告 |
+
+主控流程：
 
 1. 澄清调研目的和数据深度。
 2. 生成 `OrchestrationBrief`。
 3. 用 Sorftime MCP 抓 Amazon / TikTok Shop / 1688 主数据。
 4. 用 Firecrawl 抓公开报告、品牌站、测评、法规和召回信息。
-5. 标准化为 `data_pack.json`，交叉验证、去重、补中文映射，并保留 `source_id`、质量评分和数据缺口。
-6. 生成 `analysis_plan.json`、三份 HTML 报告、Markdown 报告、lineage 和交付结果。
+5. 标准化为 `data_pack.json` 和 `data/normalized/normalized_data_pack.json`，交叉验证、去重、补中文映射，并保留 `source_id`、质量评分和数据缺口。
+6. 将只读 `normalized_data_pack.json`、`analysis_plan.json` 和 `report_brief.json` 交给三个子 Skill 生成三份报告。
 7. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开。
 
 详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)。
@@ -191,7 +200,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 
 归一化脚本必须完成：
 
-- 交叉验证和去重：Amazon 产品按 ASIN，关键词按“全局词 / ASIN 反查词”分桶，Review 按 ASIN+日期+标题+正文指纹，TikTok / Web 按 URL，1688 按商品/URL/标题+店铺。
+- 交叉验证和去重：Amazon 产品按 ASIN 或标题指纹，关键词按“全局词 / ASIN 反查词”分桶，Review 按 ASIN+日期+标题+正文指纹，TikTok 按 product_id / canonical URL，Web 按 canonical URL，1688 按 canonical URL、商品 ID 或标题+店铺。
 - 数据血缘合并：保留 `source_ids`、`validation.evidence_source_count`、`validation.cross_validated`、`validation.conflicts`。
 - 中文映射：关键词新增 `keyword_cn`、`intent_cn`、`relevance_cn`；产品新增 `title_cn`、`segment_cn`、`positioning_cn`；评论新增 `title_cn`、`summary_cn`、`themes_cn`，客户版 HTML 不直接展示英文原评。
 - 噪声分层：核心关键词、相邻泛流量、ASIN 反查流量词必须分开展示，不能把泛词流量当成品类机会。
@@ -202,6 +211,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 
 ```text
 reports/{task_id}/data/normalized/cross_validated_data_pack.json
+reports/{task_id}/data/normalized/normalized_data_pack.json
 ```
 
 ## Step 6: 分析模块
@@ -239,9 +249,11 @@ reports/{task_id}/analysis/
 
 ```text
 reports/{task_id}/
+  report_brief.json
   data/
     raw/
     normalized/
+      normalized_data_pack.json
     data_pack.json
     lineage.md
   analysis/
@@ -260,6 +272,10 @@ reports/{task_id}/
       market-depth-report.html
       lifecycle-strategy-report.html
       demand-gap-report.html
+      assets/
+        report.css
+        report.js
+        report-data.json
     report.md
     delivery_result.json
 ```
@@ -269,6 +285,7 @@ reports/{task_id}/
 - HTML 必须按 [html-report-design-contract.md](references/html-report-design-contract.md) 生成三报告交付包：四个可交付 HTML 必须放在 `output/html_reports/` 同一文件夹内，其中 `report.html` 是便携入口页，三份子报告分别是 `market-depth-report.html`、`lifecycle-strategy-report.html`、`demand-gap-report.html`；`output/report.html` 是兼容入口，链接到 `html_reports/`。
 - HTML 优先使用 `assets/report-index-template.html`、`assets/market-depth-template.html`、`assets/lifecycle-strategy-template.html`、`assets/demand-gap-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
 - HTML 可离线打开，不依赖外部 CDN 才能显示核心内容、布局、表格和关键判断。
+- HTML 静态站点包必须包含 `output/html_reports/assets/report.css`、`report.js`、`report-data.json`，支持表格筛选/排序、顶部导航、移动端目录、折叠证据和轻量图表交互。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
 - HTML 要有客户可读的证据强度、样本覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
 - 聊天里只给摘要和路径，不粘贴完整报告。

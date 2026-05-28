@@ -138,11 +138,16 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 "demand-gap-report.html",
             ]:
                 self.assertTrue((report_dir / "output" / "html_reports" / name).exists(), name)
+            for asset_name in ["report.css", "report.js", "report-data.json"]:
+                self.assertTrue((report_dir / "output" / "html_reports" / "assets" / asset_name).exists(), asset_name)
+            self.assertTrue((report_dir / "report_brief.json").exists(), "report_brief.json")
             self.assertTrue((report_dir / "output" / "report.html").exists(), "compat report.html")
 
             index = (report_dir / "output" / "html_reports" / "report.html").read_text(encoding="utf-8")
             compat_index = (report_dir / "output" / "report.html").read_text(encoding="utf-8")
             self.assertIn('data-report-style="three-report-index-v2"', index)
+            self.assertIn('href="assets/report.css"', index)
+            self.assertIn('src="assets/report.js"', index)
             self.assertIn('href="market-depth-report.html"', index)
             self.assertIn('href="lifecycle-strategy-report.html"', index)
             self.assertIn('href="demand-gap-report.html"', index)
@@ -212,6 +217,33 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(delivery["html_reports"]["market_depth"], "output/html_reports/market-depth-report.html")
             self.assertEqual(delivery["html_reports"]["lifecycle_strategy"], "output/html_reports/lifecycle-strategy-report.html")
             self.assertEqual(delivery["html_reports"]["demand_gap"], "output/html_reports/demand-gap-report.html")
+            self.assertEqual(
+                delivery["child_skills"],
+                {
+                    "market_depth": "amz-market-depth-report",
+                    "lifecycle_strategy": "amz-lifecycle-strategy-report",
+                    "demand_gap": "amz-demand-gap-report",
+                },
+            )
+            self.assertEqual(
+                delivery["site_assets"],
+                {
+                    "css": "output/html_reports/assets/report.css",
+                    "js": "output/html_reports/assets/report.js",
+                    "data": "output/html_reports/assets/report-data.json",
+                },
+            )
+            for feature in ["table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"]:
+                self.assertIn(feature, delivery["interactive_features"])
+            self.assertIn("removed_counts", delivery["cleaning_summary"])
+            site_data = json.loads((report_dir / "output" / "html_reports" / "assets" / "report-data.json").read_text(encoding="utf-8"))
+            self.assertEqual(site_data["report_files"]["market_depth"], "market-depth-report.html")
+            self.assertEqual(site_data["cleaning_summary"]["after_counts"]["keywords"], 1000)
+            self.assertIn("amz-demand-gap-report", site_data["child_skills"].values())
+            report_brief = json.loads((report_dir / "report_brief.json").read_text(encoding="utf-8"))
+            self.assertEqual(report_brief["task_id"], "ai_plush_us_20260526")
+            self.assertEqual(report_brief["child_skills"], delivery["child_skills"])
+            self.assertEqual(report_brief["static_site"]["bundle_dir"], "output/html_reports")
 
             validation = self.run_validator(report_dir)
             self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)
