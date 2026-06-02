@@ -7,7 +7,7 @@ description: "Amazon / 电商市场深度调研子 Skill。由 amz-market-resear
 
 ## 定位
 
-本 Skill 只负责三报告中的“市场深度调研报告”。它不采集数据，不改写主控数据口径，只读取主控生成的 `normalized_data_pack.json`、`analysis_plan.json` 和 `report_brief.json`。
+本 Skill 是 `amz-market-research-orchestrated` 的内部 child module，不作为顶层入口单独触发。它只负责三报告中的“市场深度调研报告”，不采集数据，不改写主控数据口径，只读取主控生成的 `normalized_data_pack.json`、`analysis_plan.json`、`report_brief.json` 和 `market_depth_view.json`。
 
 允许做展示层二次聚合：价格带分桶、竞品分层、VOC 主题排序、TikTok 内容信号摘要、1688 成本带汇总、风险行动表。展示层聚合必须可回到主控数据，不得制造新事实。
 
@@ -17,6 +17,7 @@ description: "Amazon / 电商市场深度调研子 Skill。由 amz-market-resear
 reports/{task_id}/data/normalized/normalized_data_pack.json
 reports/{task_id}/analysis/analysis_plan.json
 reports/{task_id}/report_brief.json
+reports/{task_id}/analysis/market_depth_view.json
 ```
 
 ## 输出
@@ -24,6 +25,12 @@ reports/{task_id}/report_brief.json
 ```text
 reports/{task_id}/analysis/market_depth.json
 reports/{task_id}/output/html_reports/market-depth-report.html
+```
+
+## 内部执行入口
+
+```text
+python skills/amz-market-research-orchestrated/child_skills/market-depth-report/scripts/render_market_depth_report.py --dir reports/{task_id}
 ```
 
 ## 必备板块
@@ -41,6 +48,7 @@ reports/{task_id}/output/html_reports/market-depth-report.html
 ## 质量门禁
 
 - 客户版 HTML 不展示 `source_id`、ASIN、provider、raw path 或英文原始评论。
+- 优先消费 `market_depth_view.json` 的 `kpis`、`charts`、`tables`、`cards`、`evidence_strength`、`sample_coverage`、`limitations`、`client_safe_text`。
 - 表格必须支持静态站点包的筛选、排序和证据抽屉交互。
 - 结论必须先写商业含义，再写建议动作。
 - 输出文件固定为 `market-depth-report.html`。

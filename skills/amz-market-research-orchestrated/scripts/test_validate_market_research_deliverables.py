@@ -21,25 +21,37 @@ def write_text(path, text):
 
 
 def child_html(style, title, sections, extra_terms=""):
+    body_class = {
+        "market-depth-report-v2": "template-market",
+        "lifecycle-strategy-report-v2": "template-lifecycle",
+        "demand-gap-report-v2": "template-demand mode-r3",
+    }[style]
     section_html = "\n".join(
         f'<section id="{slug}"><span class="section-number">{idx:02d}</span><h2>{name}</h2>'
-        f'<div class="chart-container"><div class="mini-chart"></div></div>'
+        f'<div class="chart-container"><div class="mini-chart"><div class="bar-row"><span>样本</span><div class="bar"><span style="--w:50%"></span></div><b>中</b></div></div></div>'
         f'<table class="evidence-table insight-table"><tr><th>结论</th><th>证据强度</th><th>商业含义</th><th>建议动作</th></tr>'
         f'<tr><td>{name}</td><td>高</td><td>样本覆盖足以支撑方向判断</td><td>优先转成页面卖点和打样清单</td></tr></table></section>'
         for idx, (slug, name) in enumerate(sections, 1)
     )
+    interactions = """
+<nav class="site-nav"><button class="site-nav-toggle" type="button">目录</button><a href="report.html">三合一报告</a></nav>
+<div data-tabs><button class="tab-button" type="button" data-tab-target="evidence" aria-selected="true">证据</button><div data-tab-panel="evidence">证据强度：高</div></div>
+<details class="evidence-drawer"><summary>证据抽屉</summary><div class="drawer-body">样本覆盖和数据缺口均已标注。</div></details>
+"""
     return f"""<!doctype html>
 <html lang="zh-CN" data-report-style="{style}">
-<head><meta charset="utf-8"><style>.report-header{{}}.kpi-grid{{}}.section-number{{}}.evidence-table{{}}.insight-table{{}}.chart-container{{}}.mini-chart{{}}.insight-box{{}}.conclusion{{}}.deep-dive-grid{{}}.comp-deep-card{{}}.opportunity-matrix{{}}</style></head>
-<body>
+<head><meta charset="utf-8"><link rel="stylesheet" href="assets/report.css"><style>.report-header{{}}.kpi-grid{{}}.section-number{{}}.evidence-table{{}}.insight-table{{}}.chart-container{{}}.mini-chart{{}}.insight-box{{}}.conclusion{{}}.deep-dive-grid{{}}.comp-deep-card{{}}.opportunity-matrix{{}}</style></head>
+<body class="{body_class}">
 <header class="report-header"><h1>{title}</h1><div class="kpi-grid"><article>Go / Watch / No-Go</article><article>证据强度：高</article><article>样本覆盖：充分</article><article>数据缺口：已标注</article></div></header>
 <main>
 <div class="insight-box">客户版 AI 深度分析报告：先给判断，再给原因，最后给建议动作。</div>
+{interactions}
 {section_html}
 <section><div class="deep-dive-grid"><div class="comp-deep-card">标杆样本 · 溢价逻辑 · 未满足需求</div></div></section>
 <section><div class="insight-box">置信等级：中高；样本覆盖与数据缺口已进入判断。</div><div class="conclusion">结论：优先执行高确定性动作。</div></section>
 {extra_terms}
 </main>
+<script src="assets/report.js" defer></script>
 </body></html>"""
 
 
@@ -99,9 +111,10 @@ def make_valid_report(root):
     data_pack["cleaning_summary"] = data_pack["normalization"]
     write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
     child_skills = {
-        "market_depth": "amz-market-depth-report",
-        "lifecycle_strategy": "amz-lifecycle-strategy-report",
-        "demand_gap": "amz-demand-gap-report",
+        "market_depth": "child_skills/market-depth-report",
+        "lifecycle_strategy": "child_skills/lifecycle-strategy-report",
+        "demand_gap": "child_skills/demand-gap-report",
+        "critic": "child_skills/market-research-critic",
     }
     site_assets = {
         "css": "output/html_reports/assets/report.css",
@@ -143,33 +156,46 @@ def make_valid_report(root):
             "limitations": ["Sorftime estimates are not official Amazon sales."],
         },
     )
+    view_model = {
+        "kpis": [{"label": "核心判断", "value": "Watch"}],
+        "charts": {},
+        "tables": {},
+        "cards": {},
+        "evidence_strength": "中",
+        "sample_coverage": {"products": 1, "keywords": 1000, "reviews": 1},
+        "limitations": ["评论样本需要继续补充"],
+        "client_safe_text": True,
+    }
+    write_json(root / "analysis" / "market_depth_view.json", view_model)
+    write_json(root / "analysis" / "lifecycle_strategy_view.json", view_model)
+    write_json(root / "analysis" / "demand_gap_view.json", view_model)
     write_text(root / "data" / "lineage.md", "# Data Lineage\n\n- src_001: Sorftime product_search\n- src_002: Firecrawl search\n")
     write_text(root / "output" / "report.md", "# Report\n\n估算月销量（Sorftime）来自 src_001。\n\n## Go / Watch / No-Go\nWatch\n")
     write_text(
         root / "output" / "report.html",
         """<!doctype html>
 <html lang="zh-CN" data-report-style="three-report-index-v2">
-<head><meta charset="utf-8"><style>.report-index{}.report-card{}</style></head>
+<head><meta charset="utf-8"><link rel="stylesheet" href="html_reports/assets/report.css"><style>.report-index{}.report-card{}</style></head>
 <body><main class="report-index">
 <h1>三合一市场研究报告</h1>
 <a href="html_reports/market-depth-report.html">市场深度调研报告</a>
 <a href="html_reports/lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
 <a href="html_reports/demand-gap-report.html">用户心智断层与需求机会报告</a>
-<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 建议动作</p>
-</main></body></html>""",
+<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
+</main><script src="html_reports/assets/report.js" defer></script></body></html>""",
     )
     write_text(
         root / "output" / "html_reports" / "report.html",
         """<!doctype html>
 <html lang="zh-CN" data-report-style="three-report-index-v2">
-<head><meta charset="utf-8"><style>.report-index{}.report-card{}</style></head>
+<head><meta charset="utf-8"><link rel="stylesheet" href="assets/report.css"><style>.report-index{}.report-card{}</style></head>
 <body><main class="report-index">
 <h1>三合一市场研究报告</h1>
 <a href="market-depth-report.html">市场深度调研报告</a>
 <a href="lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
 <a href="demand-gap-report.html">用户心智断层与需求机会报告</a>
-<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 建议动作</p>
-</main></body></html>""",
+<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
+</main><script src="assets/report.js" defer></script></body></html>""",
     )
     write_text(
         root / "output" / "html_reports" / "market-depth-report.html",
@@ -230,6 +256,7 @@ def make_valid_report(root):
         root / "output" / "delivery_result.json",
         {
             "status": "complete",
+            "decision": "Watch",
             "formats": ["html", "markdown", "json"],
             "html_reports": {
                 "index": "output/html_reports/report.html",
@@ -243,16 +270,66 @@ def make_valid_report(root):
             "site_assets": site_assets,
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
+            "critic_review": {
+                "path": "analysis/critic_review.json",
+                "refinement_plan": "analysis/refinement_plan.json",
+                "pass": True,
+                "score": 82,
+                "max_refinement_rounds": 2,
+            },
         },
     )
-    write_text(root / "output" / "html_reports" / "assets" / "report.css", ".site-nav{}.table-tools{}\n")
-    write_text(root / "output" / "html_reports" / "assets" / "report.js", "document.querySelectorAll('table');\n")
+    write_text(
+        root / "output" / "html_reports" / "assets" / "report.css",
+        ".site-nav{}.table-tools{}.tab-button{}.evidence-drawer{}.mini-chart{}"
+        ".template-market .report-header{}.template-lifecycle .report-header{}"
+        ".template-demand .report-header{}.template-demand .hero{}"
+        ".persona-grid{}.timeline-grid{}.bundle-grid{}.filter-btn{}.sku-table-wrap{}"
+        ".quote-cn{}.chart-interpretation{}@media(max-width:760px){}\n",
+    )
+    write_text(
+        root / "output" / "html_reports" / "assets" / "report.js",
+        "document.querySelector('.site-nav-toggle');input.type='search';document.querySelectorAll('th');"
+        "document.querySelector('[data-tabs]');document.querySelector('[data-tab-target]');"
+        "document.querySelectorAll('.mini-chart .bar-row');document.querySelector('.filter-bar');"
+        "row.dataset.filter;addEventListener('click',()=>{});\n",
+    )
     write_json(
         root / "output" / "html_reports" / "assets" / "report-data.json",
         {
             "child_skills": child_skills,
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
+        },
+    )
+    write_json(
+        root / "analysis" / "critic_review.json",
+        {
+            "pass": True,
+            "round_id": 0,
+            "score": 82,
+            "grade": "B",
+            "findings": [],
+            "blocking_issues": [],
+            "resolved_findings": [],
+            "remaining_findings": [],
+            "report_issues": {"market_depth": [], "lifecycle_strategy": [], "demand_gap": []},
+            "data_confidence": {"review_depth": "low", "cross_validation": "low", "decision_confidence": "aligned"},
+            "suggestions": [],
+            "refinement_targets": [],
+            "applied_operations": [],
+        },
+    )
+    write_json(
+        root / "analysis" / "refinement_plan.json",
+        {
+            "status": "accepted",
+            "round_id": 0,
+            "max_refinement_rounds": 2,
+            "operations": [],
+            "refinement_targets": [],
+            "applied_operations": [],
+            "constraints": ["Do not recollect data during critic refinement."],
         },
     )
 
@@ -367,6 +444,68 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("raw English review", result.stderr + result.stdout)
+
+    def test_rejects_raw_english_product_title_copied_into_customer_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html = html_path.read_text(encoding="utf-8").replace("</main>", "<p>AI Plush Toy</p></main>")
+            write_text(html_path, html)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("raw English review/client text", result.stderr + result.stdout)
+
+    def test_rejects_duplicate_product_key_after_normalization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            data_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_path.read_text(encoding="utf-8"))
+            data_pack["products"].append(dict(data_pack["products"][0]))
+            data_pack["normalization"]["after_counts"]["products"] = len(data_pack["products"])
+            write_json(data_path, data_pack)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Duplicate products dedupe key", result.stderr + result.stdout)
+
+    def test_rejects_customer_visible_json_leaking_technical_identifiers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            asset_path = report_dir / "output" / "html_reports" / "assets" / "report-data.json"
+            payload = json.loads(asset_path.read_text(encoding="utf-8"))
+            payload["leak"] = "src_评论_under"
+            write_json(asset_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("customer asset leaks technical identifier", result.stderr + result.stdout)
+
+    def test_rejects_low_sample_high_score_strong_go(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            data_pack_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_pack_path.read_text(encoding="utf-8"))
+            data_pack["quality"]["overall_score"] = 0.9
+            data_pack["quality"]["grade"] = "A"
+            data_pack["normalization"]["cross_validated_counts"] = {"keywords": 1000, "products": 0, "reviews": 0}
+            write_json(data_pack_path, data_pack)
+            delivery_path = report_dir / "output" / "delivery_result.json"
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            delivery["decision"] = "Go"
+            write_json(delivery_path, delivery)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("review sample depth", result.stderr + result.stdout)
 
     def test_rejects_keyword_samples_below_1000(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -58,7 +58,7 @@ class NormalizeDataPackTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["source_ids"], ["src_search", "src_detail"])
             self.assertEqual(product["validation"]["evidence_source_count"], 2)
-            self.assertIn("Interactive AI Plush Toy", product["title_cn"])
+            self.assertEqual(product["title_cn"], "竞品样本")
             self.assertNotIn("壁灯", product["title_cn"])
 
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
@@ -218,6 +218,35 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertEqual(normalized["normalization"]["removed_counts"]["web_documents"], 1)
             self.assertEqual(data_pack["web_documents"][0]["canonical_url"], "https://example.com/report")
             self.assertEqual(data_pack["cleaning_summary"], data_pack["normalization"])
+
+    def test_caps_quality_when_review_and_cross_validation_are_thin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [{"source_id": "src_a", "provider": "sorftime", "tool": "product_search", "fetched_at": "now", "confidence": 0.8}],
+                    "products": [{"asin": "B0ABC", "title": "AI Plush Toy", "source_id": "src_a", "provider": "sorftime"}],
+                    "keywords": [{"keyword": f"ai plush toy {idx}", "source_id": "src_a", "provider": "sorftime"} for idx in range(1000)],
+                    "categories": [],
+                    "reviews": [{"asin": "B0ABC", "rating": 5, "text": "Works well", "source_id": "src_a", "provider": "sorftime"}],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.92, "grade": "A"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            self.assertLessEqual(data_pack["quality"]["overall_score"], 0.74)
+            self.assertEqual(data_pack["quality"]["grade"], "low_confidence_watch")
+            self.assertEqual(data_pack["quality"]["original_overall_score"], 0.92)
+            self.assertTrue(any(gap.get("module") == "review_sample_depth" for gap in data_pack["data_gaps"] if isinstance(gap, dict)))
 
 
 if __name__ == "__main__":

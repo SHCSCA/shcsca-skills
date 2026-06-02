@@ -7,14 +7,17 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 
 ## 定位
 
-`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研主控 Skill。它不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v2 内置最小可执行流程，并拆分为“主控 + 三个报告子 Skill”：
+`amz-market-research-orchestrated` 是面向 Amazon / 跨境电商选品和产品策略的深度市场调研主控 Skill。它是唯一外部触发入口，不再依赖未随仓库提供的外部 `data-source-orchestrator`、`market-method-orchestrator`、`research-output-orchestrator`；v2 内置最小可执行流程，并在自身目录内管理三个报告 child module 和一个 critic child module：
 
-| Skill | 职责 |
+| Internal module | 职责 |
 |---|---|
 | `amz-market-research-orchestrated` | 调研确认、采集调度、全局清洗去重、质量评分、子报告编排和交付整合 |
-| `amz-market-depth-report` | 市场深度调研报告 |
-| `amz-lifecycle-strategy-report` | 产品全生命周期拓品战略报告 |
-| `amz-demand-gap-report` | 用户心智断层与需求机会报告 |
+| `child_skills/market-depth-report` | 市场深度调研报告 |
+| `child_skills/lifecycle-strategy-report` | 产品全生命周期拓品战略报告 |
+| `child_skills/demand-gap-report` | 用户心智断层与需求机会报告 |
+| `child_skills/market-research-critic` | 证据强度、结论一致性和客户安全语义评审 |
+
+内部 child modules 不作为顶层 skill 单独触发：它们只由主控读取、调度和验收。
 
 主控流程：
 
@@ -23,8 +26,9 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 3. 用 Sorftime MCP 抓 Amazon / TikTok Shop / 1688 主数据。
 4. 用 Firecrawl 抓公开报告、品牌站、测评、法规和召回信息。
 5. 标准化为 `data_pack.json` 和 `data/normalized/normalized_data_pack.json`，交叉验证、去重、补中文映射，并保留 `source_id`、质量评分和数据缺口。
-6. 将只读 `normalized_data_pack.json`、`analysis_plan.json` 和 `report_brief.json` 交给三个子 Skill 生成三份报告。
-7. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开。
+6. 将只读 `normalized_data_pack.json`、`analysis_plan.json`、`report_brief.json` 和客户安全 `*_view.json` 交给三个内部报告模块生成三份报告。
+7. 调用内部 critic 模块输出 `critic_review.json` 和 `refinement_plan.json`；如不通过，最多做两轮差量修正，不重新采集、不改写事实源。
+8. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开，且客户可见资产不泄露技术字段。
 
 详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)。
 
@@ -286,6 +290,7 @@ reports/{task_id}/
 - HTML 优先使用 `assets/report-index-template.html`、`assets/market-depth-template.html`、`assets/lifecycle-strategy-template.html`、`assets/demand-gap-template.html` 和 `scripts/render_dashboard_html.py`；不得把 Markdown 包进 `<pre>` 或 `.markdown-body`。
 - HTML 可离线打开，不依赖外部 CDN 才能显示核心内容、布局、表格和关键判断。
 - HTML 静态站点包必须包含 `output/html_reports/assets/report.css`、`report.js`、`report-data.json`，支持表格筛选/排序、顶部导航、移动端目录、折叠证据和轻量图表交互。
+- 三份子报告的视觉与交互基准必须吸收用户提供的本地下载模板：`downloadpage/143101` 对应市场深度、`downloadpage/143511` 对应生命周期、`downloadpage/143645` 对应需求断层。只抽取报告页 HTML/CSS/JS 的布局与交互模式到共享 `report.css` / `report.js`；不得搬运 `_next` chunks、iframe case 壳、CDN 依赖或样例硬编码数据。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
 - HTML 要有客户可读的证据强度、样本覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
 - 聊天里只给摘要和路径，不粘贴完整报告。

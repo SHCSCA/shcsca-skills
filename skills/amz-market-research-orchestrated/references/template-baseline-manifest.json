@@ -1,0 +1,92 @@
+{
+  "version": "2026-06-02.template-baseline.v1",
+  "purpose": "Audit manifest for local downloaded HTML templates used as visual and interaction baselines for the three child reports.",
+  "baselines": {
+    "market_depth": {
+      "download_folder": "downloadpage/143101",
+      "report_type": "market-depth-report",
+      "source_file_name": "AI毛绒玩具赛道深度市场调研报告.html",
+      "sha256": "F0E9F357A3906ABB4DE73E1762492C61F9AAB0CF019238608CD71F30ADF8DA3E",
+      "line_count": 1831,
+      "borrowed_css_signals": [
+        "report-header",
+        "header-meta",
+        "container",
+        "section-header",
+        "section-number",
+        "kpi-grid",
+        "kpi-card",
+        "chart-container",
+        "comp-table",
+        "voc-grid",
+        "deep-dive-grid",
+        "comp-deep-card",
+        "opportunity-matrix"
+      ],
+      "borrowed_js_signals": [
+        "chart resize pattern",
+        "bar/radar/bubble visual fallback semantics"
+      ]
+    },
+    "lifecycle_strategy": {
+      "download_folder": "downloadpage/143511",
+      "report_type": "lifecycle-strategy-report",
+      "source_file_name": "AI 毛绒玩具 · 全生命周期拓品战略报告.html",
+      "sha256": "F281A41AFC3715EEEE7ABCCA4227742C214DF4DB4E88BBB5AA687B3BA76397DC",
+      "line_count": 970,
+      "borrowed_css_signals": [
+        "persona-grid",
+        "timeline-grid",
+        "sku-table-wrap",
+        "type-badge",
+        "supply-badge",
+        "priority-bar",
+        "filter-bar",
+        "filter-btn",
+        "bundle-grid",
+        "phase-grid",
+        "risk-grid"
+      ],
+      "borrowed_js_signals": [
+        "declarative table filtering",
+        "sortable SKU table"
+      ]
+    },
+    "demand_gap": {
+      "download_folder": "downloadpage/143645",
+      "report_type": "demand-gap-report",
+      "source_file_name": "R3-需求分析师｜用户心智断层与需求机会报告.html",
+      "sha256": "75DA521423FC6B37A3D3B7101E14F0D2AD910EF34108B8759D5174D3BE17811D",
+      "line_count": 687,
+      "borrowed_css_signals": [
+        "mode-r3",
+        "wrap",
+        "hero",
+        "sec",
+        "kpi-grid",
+        "kpi",
+        "chart",
+        "chart-interpretation",
+        "focus",
+        "warn",
+        "ok",
+        "quote-cn"
+      ],
+      "borrowed_js_signals": [
+        "radar/rose chart semantics",
+        "resize-safe chart fallback"
+      ]
+    }
+  },
+  "excluded_assets": [
+    "_next/static/chunks",
+    "iframe case shells",
+    "cdn.jsdelivr.net echarts runtime",
+    "hard-coded sample SKU_DATA",
+    "raw English review examples"
+  ],
+  "shared_asset_targets": [
+    "output/html_reports/assets/report.css",
+    "output/html_reports/assets/report.js"
+  ]
+}

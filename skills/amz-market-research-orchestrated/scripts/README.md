@@ -42,14 +42,41 @@ The script prints `validate_ok` on success and `validate_failed: ...` on failure
 ## Tests
 
 ```bash
+python skills/amz-market-research-orchestrated/scripts/test_html_components.py
+python skills/amz-market-research-orchestrated/scripts/test_customer_copy.py
+python skills/amz-market-research-orchestrated/scripts/test_customer_safety.py
+python skills/amz-market-research-orchestrated/scripts/test_view_model_builder.py
+python skills/amz-market-research-orchestrated/scripts/test_delivery_writer.py
+python skills/amz-market-research-orchestrated/scripts/test_report_renderers.py
+python skills/amz-market-research-orchestrated/scripts/test_critic_runner.py
+python skills/amz-market-research-orchestrated/scripts/test_site_assets.py
+python skills/amz-market-research-orchestrated/scripts/test_site_interactions.py
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_keywords.py
+python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_reviews.py
 python skills/amz-market-research-orchestrated/scripts/test_normalize_data_pack.py
 python skills/amz-market-research-orchestrated/scripts/test_render_dashboard_html.py
 python skills/amz-market-research-orchestrated/scripts/test_child_skill_split.py
 python skills/amz-market-research-orchestrated/scripts/test_validate_market_research_deliverables.py
 ```
 
-These tests build temporary report directories and verify that Sorftime keyword pagination parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, the three child skills exist, the renderer writes the portable static site bundle plus a compatibility entry, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, and incomplete report sections.
+These tests build temporary report directories and verify that Sorftime keyword/review collection parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, customer copy and customer safety redaction stay intact, critic refinement records failed and passing rounds, the three child skills exist under the orchestrated skill, the renderer writes the portable static site bundle plus a compatibility entry, shared CSS/JS assets are local, `report.js` behaviors execute against a minimal DOM, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, customer HTML leaks, and incomplete report sections.
+
+The shared site assets intentionally borrow the local downloaded report templates as visual baselines: `downloadpage/143101` for market depth, `downloadpage/143511` for lifecycle strategy, and `downloadpage/143645` for demand gap. The generator extracts reusable CSS/JS patterns into local `report.css` and `report.js`; it does not ship `_next` chunks, CDN URLs, iframe shells, or hard-coded sample report data.
+
+## Rendering module boundaries
+
+`render_dashboard_html.py` is the orchestration entrypoint. It loads/normalizes data, runs critic refinement, calls the report document builder, applies final customer HTML redaction, and writes the delivery bundle.
+
+Supporting modules keep the renderer small and auditable:
+
+- `html_components.py`: pure formatting and HTML atoms.
+- `customer_copy.py`: customer-facing Chinese summaries, theme labels, and product positioning copy.
+- `customer_safety.py`: client-safe redaction for HTML and JSON payloads.
+- `view_model_builder.py`: customer-safe view models and `report-data.json` payloads.
+- `report_renderers.py`: pure document assembly for the index, compatibility index, and three child reports.
+- `delivery_writer.py`: `lineage.md`, `report_brief.json`, and `delivery_result.json` writers.
+- `critic_runner.py`: asynchronous-style critic/refinement artifacts and failed-case logging.
+- `site_assets.py`: shared CSS, JS, asset paths, declared interactive features, and template-baseline selectors from the three downloaded HTML report references.
 
 ## collect_sorftime_keywords.py
 

@@ -10,21 +10,21 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from normalize_data_pack import keyword_dedupe_key, product_dedupe_key, review_dedupe_key, supplier_dedupe_key, web_document_dedupe_key
+from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, INTERACTIVE_FEATURES as SITE_INTERACTIVE_FEATURES, SITE_ASSETS
 
-HTML_BUNDLE_DIR = "output/html_reports"
+SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPT_DIR.parent
+TEMPLATE_BASELINE_MANIFEST = SKILL_DIR / "references" / "template-baseline-manifest.json"
+
 BUNDLE_INDEX_REPORT = f"{HTML_BUNDLE_DIR}/report.html"
-COMPAT_INDEX_REPORT = "output/report.html"
-SITE_ASSETS = {
-    "css": f"{HTML_BUNDLE_DIR}/assets/report.css",
-    "js": f"{HTML_BUNDLE_DIR}/assets/report.js",
-    "data": f"{HTML_BUNDLE_DIR}/assets/report-data.json",
-}
 CHILD_SKILLS = {
-    "market_depth": "amz-market-depth-report",
-    "lifecycle_strategy": "amz-lifecycle-strategy-report",
-    "demand_gap": "amz-demand-gap-report",
+    "market_depth": "child_skills/market-depth-report",
+    "lifecycle_strategy": "child_skills/lifecycle-strategy-report",
+    "demand_gap": "child_skills/demand-gap-report",
+    "critic": "child_skills/market-research-critic",
 }
-INTERACTIVE_FEATURES = {"table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"}
+INTERACTIVE_FEATURES = set(SITE_INTERACTIVE_FEATURES)
 
 REQUIRED_FILES = [
     "data/data_pack.json",
@@ -32,6 +32,11 @@ REQUIRED_FILES = [
     "data/lineage.md",
     "report_brief.json",
     "analysis/analysis_plan.json",
+    "analysis/market_depth_view.json",
+    "analysis/lifecycle_strategy_view.json",
+    "analysis/demand_gap_view.json",
+    "analysis/critic_review.json",
+    "analysis/refinement_plan.json",
     COMPAT_INDEX_REPORT,
     BUNDLE_INDEX_REPORT,
     f"{HTML_BUNDLE_DIR}/market-depth-report.html",
@@ -151,7 +156,7 @@ HTML_REQUIRED_CLASSES = [
     "comp-deep-card",
 ]
 
-CUSTOMER_HTML_REQUIRED_TERMS = ["证据强度", "样本覆盖", "数据缺口", "建议动作"]
+CUSTOMER_HTML_REQUIRED_TERMS = ["证据强度", "样本覆盖", "数据缺口", "置信等级", "建议动作"]
 
 CUSTOMER_HTML_BANNED_LITERALS = [
     "source_id",
@@ -161,7 +166,6 @@ CUSTOMER_HTML_BANNED_LITERALS = [
     "product_id",
     "raw_path",
     "provider",
-    "tool",
     "method_id",
     "ASIN",
     "数据血缘",
@@ -169,13 +173,15 @@ CUSTOMER_HTML_BANNED_LITERALS = [
 ]
 
 CUSTOMER_HTML_BANNED_PATTERNS = [
-    re.compile(r"\bsrc[_-][A-Za-z0-9_-]+\b", re.IGNORECASE),
+    re.compile(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
+    re.compile(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
     re.compile(r"\bB0[A-Z0-9]{8}\b"),
     re.compile(r"\bdata/raw/[^\s<>'\"]+", re.IGNORECASE),
     re.compile(r"[A-Za-z]:\\[^\s<>'\"]+"),
 ]
 
 REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
+RAW_CLIENT_TEXT_KEYS = {"title", "name", "description", "summary", "content", "body", "comment"}
 
 
 class ValidationError(Exception):
@@ -192,6 +198,27 @@ def load_json(path: Path) -> Any:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValidationError(message)
+
+
+def validate_unique_entity_keys(data_pack: dict[str, Any]) -> None:
+    checks = [
+        ("products", product_dedupe_key),
+        ("keywords", keyword_dedupe_key),
+        ("reviews", review_dedupe_key),
+        ("suppliers", supplier_dedupe_key),
+        ("web_documents", web_document_dedupe_key),
+    ]
+    for entity_name, key_func in checks:
+        seen: dict[str, int] = {}
+        for idx, entity in enumerate(data_pack.get(entity_name) or []):
+            if not isinstance(entity, dict):
+                continue
+            key = key_func(entity)
+            if not key:
+                continue
+            if key in seen:
+                raise ValidationError(f"Duplicate {entity_name} dedupe key after normalization: {key} at rows {seen[key]} and {idx}")
+            seen[key] = idx
 
 
 def validate_required_files(report_dir: Path) -> None:
@@ -247,6 +274,36 @@ def validate_entity_lineage(data_pack: dict[str, Any], source_ids: set[str]) -> 
     require(normalization.get("deduped") is True, "data_pack.normalization.deduped must be true")
     for key in ["before_counts", "after_counts", "removed_counts", "cross_validated_counts"]:
         require(isinstance(normalization.get(key), dict), f"data_pack.normalization missing {key}")
+    validate_unique_entity_keys(data_pack)
+
+
+def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, Any] | None = None) -> None:
+    delivery = delivery or {}
+    quality = data_pack.get("quality") or {}
+    score = float(quality.get("overall_score") or 0)
+    review_count = len(data_pack.get("reviews") or [])
+    cross_counts = ((data_pack.get("normalization") or {}).get("cross_validated_counts") or {})
+    non_keyword_cross = sum(float(value or 0) for key, value in cross_counts.items() if key != "keywords")
+    decision = str(delivery.get("decision") or "").strip().lower()
+    status = str(delivery.get("status") or "").strip().lower()
+    strong_decision = decision == "go"
+
+    require(
+        not (review_count < 80 and score >= 0.85),
+        "quality score is too high for review sample depth below 80",
+    )
+    require(
+        not (review_count < 80 and strong_decision and score >= 0.75),
+        "strong Go decision requires deeper review evidence or lower confidence",
+    )
+    require(
+        not (non_keyword_cross <= 0 and strong_decision and score >= 0.75),
+        "strong Go decision requires non-keyword cross-validation evidence",
+    )
+    require(
+        not (status == "partial" and strong_decision),
+        "partial delivery status cannot carry an unconditional Go decision",
+    )
 
 
 def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) -> None:
@@ -267,7 +324,7 @@ def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) 
 
 def technical_values_from_data_pack(data_pack: Any) -> set[str]:
     values: set[str] = set()
-    tracked_keys = {"source_id", "source_ids", "provider", "tool", "raw_path", "path", "asin", "product_id", "video_id"}
+    tracked_keys = {"source_id", "source_ids", "provider", "raw_path", "path", "asin", "product_id", "video_id"}
 
     def visit(value: Any, key: str | None = None) -> None:
         if isinstance(value, dict):
@@ -308,6 +365,25 @@ def raw_english_review_values(data_pack: dict[str, Any]) -> set[str]:
     return values
 
 
+def raw_english_client_values(data_pack: dict[str, Any]) -> set[str]:
+    values = set(raw_english_review_values(data_pack))
+    for entity_key in ENTITY_LIST_KEYS:
+        for entity in data_pack.get(entity_key) or []:
+            if not isinstance(entity, dict):
+                continue
+            for key in RAW_CLIENT_TEXT_KEYS:
+                value = entity.get(key)
+                if value in (None, ""):
+                    continue
+                text = re.sub(r"\s+", " ", str(value)).strip()
+                if len(text) < 8 or contains_cjk(text) or text.startswith(("http://", "https://")):
+                    continue
+                words = re.findall(r"[A-Za-z][A-Za-z']+", text)
+                if len(words) >= 3:
+                    values.add(text)
+    return values
+
+
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
         require(literal not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {literal}")
@@ -320,11 +396,96 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
     for value in technical_values_from_data_pack(data_pack):
         require(value not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {value}")
 
-    for value in raw_english_review_values(data_pack):
-        require(value not in html_doc, f"{rel_path} customer HTML leaks raw English review text: {value[:72]}")
+    for value in raw_english_client_values(data_pack):
+        require(value not in html_doc, f"{rel_path} customer HTML leaks raw English review/client text: {value[:72]}")
 
     for term in CUSTOMER_HTML_REQUIRED_TERMS:
         require(term in html_doc, f"{rel_path} customer HTML missing required analysis term: {term}")
+    require(re.search(r"<p>\s*</p>", html_doc, flags=re.I) is None, f"{rel_path} customer HTML contains empty paragraph")
+    require(re.search(r"<strong>\s*</strong>", html_doc, flags=re.I) is None, f"{rel_path} customer HTML contains empty strong tag")
+    require("Score -" not in html_doc, f"{rel_path} customer HTML contains placeholder score")
+    require("趋势：-" not in html_doc, f"{rel_path} customer HTML contains placeholder trend")
+
+
+def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[str, Any]) -> None:
+    for literal in CUSTOMER_HTML_BANNED_LITERALS:
+        require(literal not in text, f"{rel_path} customer asset leaks technical identifier: {literal}")
+    for pattern in CUSTOMER_HTML_BANNED_PATTERNS:
+        match = pattern.search(text)
+        if match is not None:
+            raise ValidationError(f"{rel_path} customer asset leaks technical identifier: {match.group(0)}")
+    for value in technical_values_from_data_pack(data_pack):
+        require(value not in text, f"{rel_path} customer asset leaks technical identifier: {value}")
+    for value in raw_english_client_values(data_pack):
+        require(value not in text, f"{rel_path} customer asset leaks raw English review/client text: {value[:72]}")
+
+
+def validate_customer_visible_assets(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    for rel_path in SITE_ASSETS.values():
+        path = report_dir / rel_path
+        validate_customer_visible_asset(rel_path, path.read_text(encoding="utf-8"), data_pack)
+
+
+def validate_site_asset_contract(report_dir: Path) -> None:
+    manifest = load_json(TEMPLATE_BASELINE_MANIFEST)
+    baselines = manifest.get("baselines") if isinstance(manifest, dict) else None
+    require(isinstance(baselines, dict), "template-baseline-manifest.json missing baselines")
+    for key, folder in {"market_depth": "143101", "lifecycle_strategy": "143511", "demand_gap": "143645"}.items():
+        baseline = baselines.get(key)
+        require(isinstance(baseline, dict), f"template baseline missing {key}")
+        require(folder in str(baseline.get("download_folder")), f"template baseline {key} must cite downloadpage/{folder}")
+        require(re.fullmatch(r"[A-Fa-f0-9]{64}", str(baseline.get("sha256") or "")) is not None, f"template baseline {key} missing sha256")
+        require(int(baseline.get("line_count") or 0) > 100, f"template baseline {key} line_count is too small")
+        require(isinstance(baseline.get("borrowed_css_signals"), list) and baseline["borrowed_css_signals"], f"template baseline {key} missing borrowed_css_signals")
+        require(isinstance(baseline.get("borrowed_js_signals"), list) and baseline["borrowed_js_signals"], f"template baseline {key} missing borrowed_js_signals")
+
+    css_text = (report_dir / SITE_ASSETS["css"]).read_text(encoding="utf-8")
+    js_text = (report_dir / SITE_ASSETS["js"]).read_text(encoding="utf-8")
+    combined = css_text + "\n" + js_text
+    require("http://" not in combined and "https://" not in combined, "site assets must not depend on remote CDN resources")
+    for selector in [
+        ".site-nav",
+        ".table-tools",
+        ".tab-button",
+        ".evidence-drawer",
+        ".mini-chart",
+        ".template-market .report-header",
+        ".template-lifecycle .report-header",
+        ".template-demand .report-header",
+        ".template-demand .hero",
+        ".persona-grid",
+        ".timeline-grid",
+        ".bundle-grid",
+        ".filter-btn",
+        ".sku-table-wrap",
+        ".quote-cn",
+        ".chart-interpretation",
+        "@media(max-width:760px)",
+    ]:
+        require(selector in css_text, f"report.css missing required interactive/layout selector: {selector}")
+    for snippet in [
+        "site-nav-toggle",
+        "input.type='search'",
+        "querySelectorAll('th')",
+        "data-tabs",
+        "data-tab-target",
+        ".mini-chart .bar-row",
+        ".filter-bar",
+        "dataset.filter",
+        "addEventListener('click'",
+    ]:
+        require(snippet in js_text, f"report.js missing required behavior hook: {snippet}")
+
+
+def validate_view_models(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    required_keys = {"kpis", "charts", "tables", "cards", "evidence_strength", "sample_coverage", "limitations", "client_safe_text"}
+    for rel_path in ["analysis/market_depth_view.json", "analysis/lifecycle_strategy_view.json", "analysis/demand_gap_view.json"]:
+        payload = load_json(report_dir / rel_path)
+        require(isinstance(payload, dict), f"{rel_path} must be an object")
+        missing = sorted(required_keys - set(payload.keys()))
+        require(not missing, f"{rel_path} missing required keys: {', '.join(missing)}")
+        require(payload.get("client_safe_text") is True, f"{rel_path} must declare client_safe_text=true")
+        validate_customer_visible_asset(rel_path, json.dumps(payload, ensure_ascii=False), data_pack)
 
 
 def validate_text_artifacts(report_dir: Path, source_ids: set[str], data_pack: dict[str, Any]) -> None:
@@ -349,6 +510,7 @@ def validate_text_artifacts(report_dir: Path, source_ids: set[str], data_pack: d
     validate_index_report(compat_index_html, COMPAT_INDEX_REPORT, COMPAT_INDEX_REQUIRED_LINKS, data_pack)
     for key, html_doc in child_htmls.items():
         validate_child_report(CHILD_REPORTS[key]["path"], html_doc, CHILD_REPORTS[key], data_pack)
+    validate_interactive_dom({BUNDLE_INDEX_REPORT: bundle_index_html, COMPAT_INDEX_REPORT: compat_index_html, **{spec["path"]: child_htmls[key] for key, spec in CHILD_REPORTS.items()}})
 
     missing_lineage = [source_id for source_id in source_ids if source_id not in lineage]
     require(not missing_lineage, f"lineage.md missing source_id entries: {', '.join(missing_lineage)}")
@@ -367,6 +529,8 @@ def validate_html_basics(rel_path: str, html_doc: str) -> None:
         f"{rel_path} contains raw Markdown table syntax",
     )
     require("<style" in html_lower, f"{rel_path} must include self-contained CSS")
+    require("assets/report.css" in html_lower, f"{rel_path} must link shared assets/report.css")
+    require("assets/report.js" in html_lower, f"{rel_path} must load shared assets/report.js")
 
 
 def validate_index_report(report_html: str, rel_path: str, required_links: list[str], data_pack: dict[str, Any], require_same_folder: bool = False) -> None:
@@ -394,6 +558,12 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
         re.search(rf"data-report-style=['\"]{re.escape(spec['style'])}['\"]", report_html) is not None,
         f"{rel_path} missing data-report-style=\"{spec['style']}\"",
     )
+    template_class = {
+        "market-depth-report-v2": "template-market",
+        "lifecycle-strategy-report-v2": "template-lifecycle",
+        "demand-gap-report-v2": "template-demand",
+    }[spec["style"]]
+    require(template_class in report_html, f"{rel_path} missing template class: {template_class}")
     require(report_html.count("<section") >= len(spec["sections"]), f"{rel_path} must use semantic section blocks")
     require(report_html.count("<table") >= 3, f"{rel_path} must render analysis as HTML tables")
     for class_name in HTML_REQUIRED_CLASSES:
@@ -404,6 +574,46 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
 
     for term in spec["terms"]:
         require(term in report_html, f"{rel_path} missing required mapped-data term: {term}")
+
+
+def validate_interactive_dom(html_docs: dict[str, str]) -> None:
+    combined = "\n".join(html_docs.values())
+    require("site-nav" in combined and "site-nav-toggle" in combined, "interactive_features declares mobile_nav but site nav DOM is missing")
+    require("<table" in combined and "evidence-table" in combined, "interactive_features declares table behavior but report tables are missing")
+    require("data-tabs" in combined and "data-tab-target" in combined and "data-tab-panel" in combined, "interactive_features declares tabs but tab DOM is missing")
+    require("evidence-drawer" in combined, "interactive_features declares evidence_drawer but drawer DOM is missing")
+    require("mini-chart" in combined and "bar-row" in combined, "interactive_features declares chart_linking but chart DOM is missing")
+
+
+def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    review = load_json(report_dir / "analysis/critic_review.json")
+    plan = load_json(report_dir / "analysis/refinement_plan.json")
+    require(isinstance(review, dict), "critic_review.json must be an object")
+    for key in ["pass", "score", "grade", "blocking_issues", "report_issues", "data_confidence", "suggestions", "refinement_targets"]:
+        require(key in review, f"critic_review.json missing {key}")
+    require(isinstance(review["pass"], bool), "critic_review.pass must be boolean")
+    require(isinstance(review["score"], (int, float)) and 0 <= review["score"] <= 100, "critic_review.score must be 0-100")
+    require(isinstance(review.get("round_id"), int), "critic_review.round_id must be an integer")
+    require(isinstance(review.get("findings"), list), "critic_review.findings must be a list")
+    require(isinstance(review["blocking_issues"], list), "critic_review.blocking_issues must be a list")
+    require(isinstance(review.get("resolved_findings"), list), "critic_review.resolved_findings must be a list")
+    require(isinstance(review.get("remaining_findings"), list), "critic_review.remaining_findings must be a list")
+    require(isinstance(review["refinement_targets"], list), "critic_review.refinement_targets must be a list")
+    require(review["pass"] is True, "critic_review.pass must be true before final delivery validation")
+    require(isinstance(plan, dict), "refinement_plan.json must be an object")
+    require(plan.get("status") == "accepted", "refinement_plan.json status must be accepted before final delivery validation")
+    require(plan.get("max_refinement_rounds") == 2, "refinement_plan.json must cap max_refinement_rounds at 2")
+    require(isinstance(plan.get("operations") or [], list), "refinement_plan.json operations must be a list")
+    require("data/normalized/normalized_data_pack.json" not in json.dumps(plan.get("refinement_targets") or [], ensure_ascii=False), "refinement targets must not rewrite normalized facts")
+    require("data/normalized/normalized_data_pack.json" not in json.dumps(plan.get("operations") or [], ensure_ascii=False), "refinement operations must not rewrite normalized facts")
+    if plan.get("applied_operations"):
+        history_path = report_dir / "analysis/refinement_history.jsonl"
+        require(history_path.exists(), "applied critic refinements require analysis/refinement_history.jsonl")
+        history_text = history_path.read_text(encoding="utf-8")
+        require('"pass": false' in history_text and '"pass": true' in history_text, "refinement_history.jsonl must record failed and passing critic rounds")
+    if not review["pass"]:
+        failed_cases = report_dir / "training_data/failed_cases.jsonl"
+        require(failed_cases.exists(), "failed critic review must append training_data/failed_cases.jsonl")
 
 
 def validate_delivery(report_dir: Path) -> None:
@@ -417,8 +627,13 @@ def validate_delivery(report_dir: Path) -> None:
     require(delivery.get("html_bundle_dir") == HTML_BUNDLE_DIR, f"delivery_result.json html_bundle_dir must be {HTML_BUNDLE_DIR}")
     for key, spec in CHILD_REPORTS.items():
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
-    require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare the three report skills")
+    require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare internal report modules and critic")
     require(delivery.get("site_assets") == SITE_ASSETS, "delivery_result.json site_assets must declare static site assets")
+    critic = delivery.get("critic_review")
+    require(isinstance(critic, dict), "delivery_result.json missing critic_review summary")
+    require(critic.get("path") == "analysis/critic_review.json", "delivery_result.json critic_review.path mismatch")
+    require(critic.get("refinement_plan") == "analysis/refinement_plan.json", "delivery_result.json critic_review.refinement_plan mismatch")
+    require(critic.get("max_refinement_rounds") == 2, "delivery_result.json critic max_refinement_rounds must be 2")
     features = set(delivery.get("interactive_features") or [])
     require(INTERACTIVE_FEATURES.issubset(features), "delivery_result.json missing required interactive_features")
     cleaning = delivery.get("cleaning_summary")
@@ -440,13 +655,19 @@ def validate(report_dir: Path) -> None:
     validate_required_files(report_dir)
     data_pack = load_json(report_dir / "data/data_pack.json")
     analysis_plan = load_json(report_dir / "analysis/analysis_plan.json")
+    delivery = load_json(report_dir / "output/delivery_result.json")
     require(isinstance(data_pack, dict), "data_pack.json must be an object")
     require(isinstance(analysis_plan, dict), "analysis_plan.json must be an object")
 
     source_ids = validate_sources(data_pack)
     validate_entity_lineage(data_pack, source_ids)
+    validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)
     validate_text_artifacts(report_dir, source_ids, data_pack)
+    validate_site_asset_contract(report_dir)
+    validate_customer_visible_assets(report_dir, data_pack)
+    validate_view_models(report_dir, data_pack)
+    validate_critic_outputs(report_dir, data_pack)
     validate_delivery(report_dir)
 
 

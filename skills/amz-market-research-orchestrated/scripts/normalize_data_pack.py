@@ -345,21 +345,32 @@ def keyword_relevance_cn(keyword: Any, seed_terms: list[str]) -> str:
 
 def title_cn(title: Any, segment: Any = None) -> str:
     text = normalize_text(title)
-    return text or normalize_text(segment) or "产品标题待补充"
+    if has_cjk(text):
+        return text
+    segment_text = normalize_text(segment)
+    if has_cjk(segment_text):
+        return f"{segment_text}样本"
+    return "竞品样本"
 
 
 def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
-    text = normalized_key(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment")))
+    raw_text = " ".join(
+        str(review.get(key) or "")
+        for key in ("title", "title_cn", "summary_cn", "text", "content", "body", "comment", "quote_cn")
+    )
+    text = normalized_key(raw_text)
     rules = [
         ("privacy", ["privacy", "policy", "data", "record", "recording", "permission", "personal information"]),
-        ("performance", ["not work", "doesn't work", "stopped working", "stop working", "broken", "defective", "fail", "failed"]),
-        ("battery_charging", ["battery", "charge", "charging", "recharge", "usb"]),
-        ("usability", ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app"]),
-        ("quality_durability", ["quality", "durable", "durability", "cheap", "material", "fall apart"]),
+        ("performance", ["not work", "doesn't work", "stopped working", "stop working", "broken", "defective", "fail", "failed", "不亮", "亮度", "不够亮", "失效", "不工作", "故障", "闪烁", "照射"]),
+        ("battery_charging", ["battery", "charge", "charging", "recharge", "usb", "电池", "续航", "充电", "掉电", "不耐用", "容量"]),
+        ("usability", ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app", "遥控", "触控", "配对", "串扰", "操作", "开关"]),
+        ("quality_durability", ["quality", "durable", "durability", "cheap", "material", "fall apart", "做工", "破损", "缺件", "材质", "粗糙", "断裂", "进水"]),
         ("price", ["subscription", "fee", "expensive", "price", "refund", "return"]),
         ("shipping", ["shipping", "package", "packaging", "box", "arrived"]),
         ("support", ["support", "service", "customer service", "warranty"]),
-        ("safety", ["safe", "safety", "hazard", "warning", "certification"]),
+        ("safety", ["safe", "safety", "hazard", "warning", "certification", "安全", "过热", "烧焦", "起火", "短路", "温升"]),
+        ("installation_mounting", ["install", "mount", "adhesive", "magnet", "screw", "安装", "打孔", "胶贴", "磁吸", "孔位", "固定", "支架"]),
+        ("size_finish_design", ["size", "finish", "design", "color", "glass", "shade", "尺寸", "外观", "玻璃", "灯罩", "色差", "造型"]),
     ]
     themes: list[str] = []
     for key, needles in rules:
@@ -443,8 +454,9 @@ def as_number(value: Any) -> float:
 
 
 def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
-    product["title_cn"] = product.get("title_cn") or title_cn(product.get("title"), product.get("segment"))
+    product["title_cn"] = product.get("title_cn") or title_cn(product.get("title"), first_existing(product.get("segment_cn"), product.get("segment")))
     product["segment_cn"] = product.get("segment_cn") or normalize_text(product.get("segment")) or "未分层"
+    product["segment"] = product.get("segment") or product["segment_cn"]
     product["positioning_cn"] = product.get("positioning_cn") or product["title_cn"]
     return product
 
@@ -459,12 +471,60 @@ def enrich_keyword(keyword: dict[str, Any], seed_terms: list[str]) -> dict[str, 
 
 
 def enrich_review(review: dict[str, Any]) -> dict[str, Any]:
-    themes = review.get("themes") or infer_review_theme_keys(review)
+    explicit_themes = review.get("themes") or []
+    explicit_themes_cn = review.get("themes_cn") or []
+    if isinstance(explicit_themes, str):
+        explicit_themes = [explicit_themes]
+    if isinstance(explicit_themes_cn, str):
+        explicit_themes_cn = [explicit_themes_cn]
+    themes = list(explicit_themes) if explicit_themes else list(explicit_themes_cn)
+    if not themes:
+        themes = infer_review_theme_keys(review)
     review["themes"] = themes
     review["themes_cn"] = [THEME_CN.get(str(theme).casefold(), str(theme)) for theme in themes]
     review["summary_cn"] = review_summary_cn(review)
     review["title_cn"] = review_title_cn(review)
     return review
+
+
+def upsert_gap(data_pack: dict[str, Any], module: str, reason: str, impact: str, next_step: str) -> None:
+    gaps = data_pack.setdefault("data_gaps", [])
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            continue
+        if gap.get("module") == module and gap.get("reason") == reason:
+            gap.update({"impact": impact, "next_step": next_step})
+            return
+    gaps.append({"module": module, "reason": reason, "impact": impact, "next_step": next_step})
+
+
+def apply_quality_caps(data_pack: dict[str, Any], after_counts: dict[str, int], cross_validated: dict[str, int]) -> None:
+    quality = data_pack.setdefault("quality", {})
+    raw_score = quality.get("overall_score")
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        score = 0.68
+    caps: list[dict[str, Any]] = []
+    if after_counts.get("reviews", 0) < 80:
+        caps.append({"module": "review_sample_depth", "max_score": 0.74})
+    non_keyword_cross = sum(value for key, value in cross_validated.items() if key != "keywords")
+    if non_keyword_cross <= 0:
+        caps.append({"module": "cross_validation_depth", "max_score": 0.74})
+    if data_pack.get("data_gaps") and score > 0.84:
+        caps.append({"module": "data_gap_visibility", "max_score": 0.84})
+    if caps:
+        capped = min([score, *[float(item["max_score"]) for item in caps]])
+        quality["overall_score"] = round(capped, 2)
+        if capped < score:
+            quality["original_overall_score"] = score
+            quality["score_adjustments"] = caps
+        if capped < 0.75:
+            quality["grade"] = "low_confidence_watch"
+        elif capped < 0.85:
+            quality["grade"] = quality.get("grade") or "medium_confidence"
+    else:
+        quality["overall_score"] = round(score, 2)
 
 
 def normalize(report_dir: Path) -> dict[str, Any]:
@@ -515,6 +575,23 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "English keyword/title fields copied into audit-friendly display fields; relevance is inferred from research_object/seed keyword overlap",
         ],
     }
+    if after_counts.get("keywords", 0) < 1000:
+        upsert_gap(
+            data_pack,
+            "keyword_sample_depth",
+            f"标准/深度版关键词样本不足 1000，当前 {after_counts.get('keywords', 0)}。",
+            "需求结构、关键词机会和内容选题只能做方向判断，不能做完整优先级排序。",
+            "继续分页采集 category_keywords 与 keyword_extends，直到归一化后关键词样本 >=1000。",
+        )
+    if after_counts.get("reviews", 0) < 80:
+        upsert_gap(
+            data_pack,
+            "review_sample_depth",
+            f"评论样本不足建议门槛 80，当前 {after_counts.get('reviews', 0)}。",
+            "VOC、APPEALS、KANO/JTBD 和用户原声只能作为初步线索，不能写成精确市场占比。",
+            "对核心 ASIN 补采 Positive/Neutral/Negative 评论，优先达到 80 条，深度版建议 200 条以上。",
+        )
+    apply_quality_caps(data_pack, after_counts, cross_validated)
     data_pack["cleaning_summary"] = data_pack["normalization"]
 
     write_json(data_path, data_pack)

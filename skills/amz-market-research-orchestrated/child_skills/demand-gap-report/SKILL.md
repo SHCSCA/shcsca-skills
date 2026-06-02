@@ -7,7 +7,7 @@ description: "Amazon / 电商用户心智断层与需求机会子 Skill。由 am
 
 ## 定位
 
-本 Skill 只负责三报告中的“用户心智断层与需求机会报告”。它不采集数据，不改写主控数据口径，只读取主控生成的 `normalized_data_pack.json`、`analysis_plan.json` 和 `report_brief.json`。
+本 Skill 是 `amz-market-research-orchestrated` 的内部 child module，不作为顶层入口单独触发。它只负责三报告中的“用户心智断层与需求机会报告”，不采集数据，不改写主控数据口径，只读取主控生成的 `normalized_data_pack.json`、`analysis_plan.json`、`report_brief.json` 和 `demand_gap_view.json`。
 
 允许做展示层二次聚合：`$APPEALS` 痛点图、满意度鸿沟、KANO × JTBD、用户原声分组、需求优先级。展示层聚合必须可回到主控数据，不得制造新事实。
 
@@ -17,6 +17,7 @@ description: "Amazon / 电商用户心智断层与需求机会子 Skill。由 am
 reports/{task_id}/data/normalized/normalized_data_pack.json
 reports/{task_id}/analysis/analysis_plan.json
 reports/{task_id}/report_brief.json
+reports/{task_id}/analysis/demand_gap_view.json
 ```
 
 ## 输出
@@ -24,6 +25,12 @@ reports/{task_id}/report_brief.json
 ```text
 reports/{task_id}/analysis/demand_gap.json
 reports/{task_id}/output/html_reports/demand-gap-report.html
+```
+
+## 内部执行入口
+
+```text
+python skills/amz-market-research-orchestrated/child_skills/demand-gap-report/scripts/render_demand_gap_report.py --dir reports/{task_id}
 ```
 
 ## 必备板块
@@ -39,6 +46,7 @@ reports/{task_id}/output/html_reports/demand-gap-report.html
 ## 质量门禁
 
 - 用户原声只展示中文摘要、情绪、主题和动作含义；英文原评只留在审计文件。
+- 优先消费 `demand_gap_view.json` 的 `kpis`、`charts`、`tables`、`cards`、`evidence_strength`、`sample_coverage`、`limitations`、`client_safe_text`。
 - 子报告只读 `normalized_data_pack.json`，不得自行覆盖全局去重结果。
 - 表格必须支持静态站点包的筛选、排序和证据抽屉交互。
 - 输出文件固定为 `demand-gap-report.html`。

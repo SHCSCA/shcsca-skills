@@ -15,6 +15,16 @@ output/html_reports/assets/report-data.json
 
 Do not copy the provided sample reports verbatim. Reuse their structure pattern: dark report header, KPI dashboard, numbered modules, dense cards, insight tables, matrices, roadmap, risk section, and executive summary cards. HTML is the client-facing analysis layer; source audit details stay in JSON/Markdown artifacts.
 
+Template baselines for this design system:
+
+| Report | Local template baseline |
+|---|---|
+| Market depth | `downloadpage/143101` report HTML |
+| Lifecycle strategy | `downloadpage/143511` report HTML |
+| Demand gap | `downloadpage/143645` report HTML, using the active `mode-r3` look |
+
+Use the `reports/*/*.html` files in those folders as the source of visual and interaction patterns. Do not import `_next/static/chunks`, iframe case shells, Next runtime scripts, external CDN URLs, or hard-coded sample data. Shared CSS and JS must be folded into `output/html_reports/assets/report.css` and `output/html_reports/assets/report.js`.
+
 ## Hard Requirements
 
 The four files inside `output/html_reports/` must:
@@ -28,6 +38,7 @@ The four files inside `output/html_reports/` must:
 - Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, `product_id`, or ASIN values.
 - Use client-readable credibility language: `证据强度`, `样本覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
 - Support static-site interactions without CDN: top navigation, mobile directory, table search, table sorting, collapsible evidence drawers, and lightweight chart hover/link states.
+- Support template-derived report interactions without CDN: lifecycle-style `.filter-bar` / `.filter-btn[data-filter]` controls, sortable/searchable SKU and evidence tables, tabs, and chart fallback hover states.
 - Use Chinese-facing content by default. English review text, English review titles, raw scraped comments, and raw field values must be mapped into Chinese summaries, themes, sentiment labels, business meaning, and suggested actions before appearing in client HTML.
 
 Required `data-report-style` markers:
@@ -39,6 +50,14 @@ Required `data-report-style` markers:
 | `output/html_reports/market-depth-report.html` | `market-depth-report-v2` |
 | `output/html_reports/lifecycle-strategy-report.html` | `lifecycle-strategy-report-v2` |
 | `output/html_reports/demand-gap-report.html` | `demand-gap-report-v2` |
+
+Required body template classes:
+
+| File | Body class |
+|---|---|
+| `market-depth-report.html` | `template-market` |
+| `lifecycle-strategy-report.html` | `template-lifecycle` |
+| `demand-gap-report.html` | `template-demand mode-r3` |
 
 ## Entry Page
 
@@ -101,9 +120,9 @@ Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点
 ## Visual System
 
 - Market and lifecycle reports use the restrained executive palette: deep navy header, warm off-white background, white cards, thin borders, muted blue accent, sage/rose/warm accents for opportunity and risk.
-- Demand-gap report may keep a darker analytical style, but tables and text must remain legible and printable.
+- Demand-gap report uses the `143645` active `mode-r3` analytical style: strong navy hero, high-contrast evidence cards, clear gap/risk emphasis, and readable tables.
 - No decorative CDN charts are required. Use CSS mini bars, tables, and cards as offline-first chart fallbacks.
-- Required reusable hooks in child reports: `report-header`, `kpi-grid`, `section-number`, `evidence-table`, `insight-table`, `mini-chart`, `chart-container`, `insight-box`, `conclusion`, `deep-dive-grid`, `comp-deep-card`.
+- Required reusable hooks in child reports: `report-header`, `kpi-grid`, `section-number`, `evidence-table`, `insight-table`, `mini-chart`, `chart-container`, `insight-box`, `conclusion`, `deep-dive-grid`, `comp-deep-card`, `persona-grid`, `timeline-grid`, `bundle-grid`, `sku-table-wrap`, `filter-btn`, `quote-cn`, and `chart-interpretation`.
 
 ## Content Depth Rules
 

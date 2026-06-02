@@ -85,7 +85,7 @@ def make_renderable_report(root):
             "suppliers": [{"supplier_name": "1688 supplier", "price": 18, "moq": 100, "source_id": "src_001", "provider": "sorftime"}],
             "web_documents": [{"url": "https://example.com/report", "title": "AI toy safety", "source_id": "src_002", "provider": "firecrawl"}],
             "data_gaps": ["No internal landed cost sheet."],
-            "quality": {"overall_score": 0.82, "grade": "decision_grade"},
+            "quality": {"overall_score": 0.7, "grade": "B"},
         },
     )
     write_json(
@@ -142,6 +142,26 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 self.assertTrue((report_dir / "output" / "html_reports" / "assets" / asset_name).exists(), asset_name)
             self.assertTrue((report_dir / "report_brief.json").exists(), "report_brief.json")
             self.assertTrue((report_dir / "output" / "report.html").exists(), "compat report.html")
+            for view_name in [
+                "market_depth_view.json",
+                "lifecycle_strategy_view.json",
+                "demand_gap_view.json",
+            ]:
+                view_path = report_dir / "analysis" / view_name
+                self.assertTrue(view_path.exists(), view_name)
+                view = json.loads(view_path.read_text(encoding="utf-8"))
+                for key in [
+                    "kpis",
+                    "charts",
+                    "tables",
+                    "cards",
+                    "evidence_strength",
+                    "sample_coverage",
+                    "limitations",
+                    "client_safe_text",
+                ]:
+                    self.assertIn(key, view, f"{view_name}:{key}")
+                self.assertTrue(view["client_safe_text"], view_name)
 
             index = (report_dir / "output" / "html_reports" / "report.html").read_text(encoding="utf-8")
             compat_index = (report_dir / "output" / "report.html").read_text(encoding="utf-8")
@@ -156,6 +176,25 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn('href="html_reports/market-depth-report.html"', compat_index)
             self.assertIn('href="html_reports/lifecycle-strategy-report.html"', compat_index)
             self.assertIn('href="html_reports/demand-gap-report.html"', compat_index)
+            for leaked in [
+                "source_id",
+                "src_001",
+                "src_002",
+                "B0TEST1234",
+                "Product ID",
+                "product_id",
+                "raw_path",
+                "data/raw",
+                "provider",
+                "tool",
+                "Sorftime",
+                "Firecrawl",
+                "sorftime",
+                "firecrawl",
+                "tk_1",
+                "来源",
+            ]:
+                self.assertNotIn(leaked, compat_index)
             rendered_text = "\n".join(
                 (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
                 for name in [
@@ -165,6 +204,14 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                     "demand-gap-report.html",
                 ]
             )
+            self.assertIn('body class="template-market"', rendered_text)
+            self.assertIn('body class="template-lifecycle"', rendered_text)
+            self.assertIn('body class="template-demand mode-r3"', rendered_text)
+            for name in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                child_html = (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
+                self.assertIn("site-nav", child_html)
+                self.assertIn('href="assets/report.css"', child_html)
+                self.assertIn('src="assets/report.js"', child_html)
             self.assertNotIn("壁灯", rendered_text)
             self.assertNotIn("灯具", rendered_text)
             self.assertNotIn("毛绒", rendered_text)
@@ -220,11 +267,15 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(
                 delivery["child_skills"],
                 {
-                    "market_depth": "amz-market-depth-report",
-                    "lifecycle_strategy": "amz-lifecycle-strategy-report",
-                    "demand_gap": "amz-demand-gap-report",
+                    "market_depth": "child_skills/market-depth-report",
+                    "lifecycle_strategy": "child_skills/lifecycle-strategy-report",
+                    "demand_gap": "child_skills/demand-gap-report",
+                    "critic": "child_skills/market-research-critic",
                 },
             )
+            self.assertEqual(delivery["critic_review"]["path"], "analysis/critic_review.json")
+            self.assertEqual(delivery["critic_review"]["refinement_plan"], "analysis/refinement_plan.json")
+            self.assertEqual(delivery["critic_review"]["max_refinement_rounds"], 2)
             self.assertEqual(
                 delivery["site_assets"],
                 {
@@ -239,12 +290,35 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             site_data = json.loads((report_dir / "output" / "html_reports" / "assets" / "report-data.json").read_text(encoding="utf-8"))
             self.assertEqual(site_data["report_files"]["market_depth"], "market-depth-report.html")
             self.assertEqual(site_data["cleaning_summary"]["after_counts"]["keywords"], 1000)
-            self.assertIn("amz-demand-gap-report", site_data["child_skills"].values())
+            self.assertIn("child_skills/demand-gap-report", site_data["child_skills"].values())
+            self.assertIn("child_skills/market-research-critic", site_data["child_skills"].values())
             report_brief = json.loads((report_dir / "report_brief.json").read_text(encoding="utf-8"))
             self.assertEqual(report_brief["task_id"], "ai_plush_us_20260526")
             self.assertEqual(report_brief["child_skills"], delivery["child_skills"])
             self.assertEqual(report_brief["static_site"]["bundle_dir"], "output/html_reports")
+            self.assertTrue((report_dir / "analysis" / "critic_review.json").exists())
+            self.assertTrue((report_dir / "analysis" / "refinement_plan.json").exists())
 
+            validation = self.run_validator(report_dir)
+            self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)
+
+    def test_renderer_downgrades_partial_go_to_watch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+            delivery_path = report_dir / "output" / "delivery_result.json"
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            delivery["status"] = "partial"
+            delivery["decision"] = "Go"
+            write_json(delivery_path, delivery)
+
+            result = self.run_renderer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            self.assertEqual(delivery["decision"], "Watch")
+            self.assertEqual(delivery["decision_adjustment"]["from"], "Go")
+            self.assertIn("partial_delivery", delivery["decision_adjustment"]["reasons"])
             validation = self.run_validator(report_dir)
             self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)
 

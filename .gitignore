@@ -8,4 +8,5 @@ __pycache__/
 !skills/**/templates/*.xlsx
 skills/**/templates/~$*.xlsx
 output/
+reports/
 skills/**/reports/

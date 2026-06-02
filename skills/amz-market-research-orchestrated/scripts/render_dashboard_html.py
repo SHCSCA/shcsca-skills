@@ -4,497 +4,88 @@
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import re
 import statistics
 from collections import Counter, defaultdict
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from normalize_data_pack import THEME_CN, ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
+import critic_runner
+from customer_copy import (
+    customer_product_message,
+    customer_product_position,
+    customer_review_summary,
+    customer_review_title,
+    review_sentiment_label,
+    review_theme_labels,
+)
+from delivery_writer import write_delivery_result, write_lineage_markdown, write_report_brief
+from customer_safety import customer_safe_asset_text, redact_customer_html
+from html_components import (
+    as_float,
+    clean,
+    details,
+    esc,
+    first,
+    kpi_card,
+    kpi_card_html,
+    metric,
+    mini_chart,
+    money,
+    num,
+    pct,
+    price_band,
+    product_price,
+    product_revenue,
+    product_reviews,
+    product_sales,
+    relevant_products,
+    table,
+    table_inner,
+    tag,
+    truncate,
+)
+from normalize_data_pack import ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
+from report_renderers import build_report_documents
+from site_assets import (
+    HTML_BUNDLE_DIR,
+    COMPAT_INDEX_REPORT,
+    HTML_REPORT_FILENAMES,
+    HTML_REPORTS,
+    attach_site_chrome,
+    write_basic_site_assets,
+)
+from view_model_builder import build_site_data, write_report_views
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
-TEMPLATE_PATHS = {
-    "index": SKILL_DIR / "assets" / "report-index-template.html",
+CHILD_SKILLS_DIR = SKILL_DIR / "child_skills"
+LEGACY_TEMPLATE_PATHS = {
     "market_depth": SKILL_DIR / "assets" / "market-depth-template.html",
     "lifecycle_strategy": SKILL_DIR / "assets" / "lifecycle-strategy-template.html",
     "demand_gap": SKILL_DIR / "assets" / "demand-gap-template.html",
 }
+TEMPLATE_PATHS = {
+    "index": SKILL_DIR / "assets" / "report-index-template.html",
+    "market_depth": CHILD_SKILLS_DIR / "market-depth-report" / "templates" / "market-depth-report.html",
+    "lifecycle_strategy": CHILD_SKILLS_DIR / "lifecycle-strategy-report" / "templates" / "lifecycle-strategy-report.html",
+    "demand_gap": CHILD_SKILLS_DIR / "demand-gap-report" / "templates" / "demand-gap-report.html",
+}
 
-HTML_BUNDLE_DIR = "output/html_reports"
-COMPAT_INDEX_REPORT = "output/report.html"
-ASSET_DIR = f"{HTML_BUNDLE_DIR}/assets"
-HTML_REPORT_FILENAMES = {
-    "index": "report.html",
-    "market_depth": "market-depth-report.html",
-    "lifecycle_strategy": "lifecycle-strategy-report.html",
-    "demand_gap": "demand-gap-report.html",
-}
-HTML_REPORTS = {key: f"{HTML_BUNDLE_DIR}/{filename}" for key, filename in HTML_REPORT_FILENAMES.items()}
-SITE_ASSETS = {
-    "css": f"{ASSET_DIR}/report.css",
-    "js": f"{ASSET_DIR}/report.js",
-    "data": f"{ASSET_DIR}/report-data.json",
-}
 CHILD_SKILLS = {
-    "market_depth": "amz-market-depth-report",
-    "lifecycle_strategy": "amz-lifecycle-strategy-report",
-    "demand_gap": "amz-demand-gap-report",
+    "market_depth": "child_skills/market-depth-report",
+    "lifecycle_strategy": "child_skills/lifecycle-strategy-report",
+    "demand_gap": "child_skills/demand-gap-report",
+    "critic": "child_skills/market-research-critic",
 }
-INTERACTIVE_FEATURES = [
-    "table_filter",
-    "table_sort",
-    "tabs",
-    "evidence_drawer",
-    "chart_linking",
-    "mobile_nav",
-]
-
-REPORT_CSS = """
-:root{--site-bg:#f6f7f9;--site-ink:#172033;--site-muted:#667085;--site-line:#d7dde7;--site-accent:#2f6f8f;--site-accent-2:#b7791f;--site-danger:#b42318;--site-ok:#2f7d55}
-.site-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 22px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--site-line);backdrop-filter:blur(10px)}
-.site-nav a{color:var(--site-ink);text-decoration:none;font-size:13px;font-weight:800}.site-nav-links{display:flex;gap:8px;flex-wrap:wrap}.site-nav-links a{padding:7px 10px;border:1px solid transparent}.site-nav-links a:hover,.site-nav-links a:focus{border-color:var(--site-line);background:#f0f4f8}.site-nav-toggle{display:none}
-.table-tools{display:flex;justify-content:flex-end;margin:8px 0}.table-tools input{width:min(320px,100%);border:1px solid var(--site-line);padding:9px 11px;font:13px/1.4 inherit;background:#fff;color:var(--site-ink)}
-th[data-sortable]{cursor:pointer;user-select:none}th[data-sortable]::after{content:" ↕";color:rgba(255,255,255,.65);font-size:11px}.is-filtered-out{display:none!important}
-.chart-container,.mini-chart,.evidence-table,.insight-table,.kpi-grid,.deep-dive-grid,.comp-deep-card,.opportunity-matrix{scroll-margin-top:76px}
-.bar-row{transition:background .18s ease}.bar-row:hover{background:rgba(47,111,143,.08)}.bar-row.is-linked{outline:2px solid rgba(47,111,143,.22)}
-.tab-list{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}.tab-button{border:1px solid var(--site-line);background:#fff;color:var(--site-ink);padding:8px 12px;font-weight:800;cursor:pointer}.tab-button[aria-selected=true]{background:var(--site-ink);color:#fff}
-.evidence-drawer{border:1px solid var(--site-line);background:#fff;margin:14px 0}.evidence-drawer summary{cursor:pointer;padding:12px 14px;font-weight:900;color:var(--site-ink)}.evidence-drawer .drawer-body{padding:0 14px 14px;color:var(--site-muted)}
-@media(max-width:760px){.site-nav{align-items:flex-start}.site-nav-toggle{display:block;border:1px solid var(--site-line);background:#fff;padding:7px 10px;font-weight:800}.site-nav-links{display:none;width:100%;padding-top:8px}.site-nav.is-open{flex-wrap:wrap}.site-nav.is-open .site-nav-links{display:flex;flex-direction:column}.table-tools{justify-content:stretch}.site-nav a{font-size:12px}}
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
-""".strip()
-
-REPORT_JS = """
-(function(){
-  const nav=document.querySelector('.site-nav');
-  const toggle=document.querySelector('.site-nav-toggle');
-  if(toggle&&nav){toggle.addEventListener('click',()=>nav.classList.toggle('is-open'));}
-  document.querySelectorAll('table').forEach((table,idx)=>{
-    if(table.dataset.enhanced)return;
-    table.dataset.enhanced='true';
-    const wrap=document.createElement('div');
-    wrap.className='table-tools';
-    const input=document.createElement('input');
-    input.type='search';
-    input.placeholder='筛选当前表格';
-    input.setAttribute('aria-label','筛选当前表格');
-    wrap.appendChild(input);
-    table.parentNode.insertBefore(wrap,table);
-    input.addEventListener('input',()=>{
-      const q=input.value.trim().toLowerCase();
-      table.querySelectorAll('tbody tr').forEach(row=>{
-        row.classList.toggle('is-filtered-out',q&&!row.textContent.toLowerCase().includes(q));
-      });
-    });
-    table.querySelectorAll('th').forEach((th,col)=>{
-      th.dataset.sortable='true';
-      th.addEventListener('click',()=>{
-        const tbody=table.tBodies[0];
-        if(!tbody)return;
-        const dir=th.dataset.sortDir==='asc'?'desc':'asc';
-        th.dataset.sortDir=dir;
-        [...tbody.rows].sort((a,b)=>{
-          const av=a.cells[col]?.textContent.trim()||'';
-          const bv=b.cells[col]?.textContent.trim()||'';
-          const an=parseFloat(av.replace(/[^0-9.-]/g,''));
-          const bn=parseFloat(bv.replace(/[^0-9.-]/g,''));
-          const cmp=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:av.localeCompare(bv,'zh-CN');
-          return dir==='asc'?cmp:-cmp;
-        }).forEach(row=>tbody.appendChild(row));
-      });
-    });
-  });
-  document.querySelectorAll('[data-tabs]').forEach(group=>{
-    const buttons=[...group.querySelectorAll('[data-tab-target]')];
-    buttons.forEach(button=>button.addEventListener('click',()=>{
-      buttons.forEach(btn=>btn.setAttribute('aria-selected',String(btn===button)));
-      group.querySelectorAll('[data-tab-panel]').forEach(panel=>{
-        panel.hidden=panel.dataset.tabPanel!==button.dataset.tabTarget;
-      });
-    }));
-  });
-  document.querySelectorAll('.mini-chart .bar-row').forEach(row=>{
-    row.addEventListener('mouseenter',()=>row.classList.add('is-linked'));
-    row.addEventListener('mouseleave',()=>row.classList.remove('is-linked'));
-  });
-})();
-""".strip()
 
 
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def clean(value: Any) -> str:
-    text = "" if value is None else str(value)
-    replacements = {
-        "\r\n": " ",
-        "\n": " ",
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    return " ".join(text.split())
-
-
-def esc(value: Any) -> str:
-    return html.escape(clean(value), quote=True)
-
-
-def num(value: Any) -> str:
-    if value in (None, ""):
-        return "-"
-    try:
-        return f"{float(value):,.0f}"
-    except (TypeError, ValueError):
-        return esc(value)
-
-
-def money(value: Any, currency: str = "$") -> str:
-    if value in (None, ""):
-        return "-"
-    try:
-        return f"{currency}{float(value):,.2f}"
-    except (TypeError, ValueError):
-        return esc(value)
-
-
-def pct(value: Any) -> str:
-    if value in (None, ""):
-        return "-"
-    try:
-        return f"{float(value):.1f}%"
-    except (TypeError, ValueError):
-        return esc(value)
-
-
-def as_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value in (None, ""):
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def first(*values: Any, default: Any = "-") -> Any:
-    for value in values:
-        if value not in (None, "", [], {}):
-            return value
-    return default
-
-
-def truncate(value: Any, limit: int = 100) -> str:
-    text = clean(value)
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
-def has_cjk(value: Any) -> bool:
-    return re.search(r"[\u4e00-\u9fff]", clean(value)) is not None
-
-
-def review_theme_labels(review: dict[str, Any]) -> list[str]:
-    themes = review.get("themes_cn") or review.get("themes") or []
-    if isinstance(themes, str):
-        themes = [themes]
-    labels = []
-    for theme in themes:
-        text = str(theme)
-        labels.append(THEME_CN.get(text.casefold(), text).replace("/", "与"))
-    return labels or ["其他体验问题"]
-
-
-def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
-    for key in ("summary_cn", "text_cn", "quote_cn", "review_cn"):
-        value = clean(review.get(key))
-        if value:
-            return truncate(value, limit)
-
-    raw = clean(first(review.get("text"), review.get("content"), review.get("body"), review.get("comment"), default=""))
-    if has_cjk(raw):
-        return truncate(raw, limit)
-
-    text = clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
-    phrases: list[str] = []
-    if any(term in text for term in ["stopped working", "stop working", "not work", "doesn't work", "broken", "defective", "failed"]):
-        phrases.append("短期使用后出现失效")
-    if any(term in text for term in ["two days", "2 days", "after a day", "after one day", "within days"]):
-        phrases.append("用户对耐用性和稳定性信任下降")
-    if any(term in text for term in ["privacy", "policy", "data", "record", "recording", "permission"]):
-        phrases.append("隐私政策和数据使用说明不够清晰")
-    if any(term in text for term in ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app"]):
-        phrases.append("上手配置和使用路径需要更清楚")
-    if any(term in text for term in ["battery", "charge", "charging", "recharge", "usb"]):
-        phrases.append("续航或充电体验没有达到预期")
-    if any(term in text for term in ["cheap", "quality", "material", "durable", "fall apart"]):
-        phrases.append("材质做工和耐用性需要加强")
-    if any(term in text for term in ["refund", "return", "warranty", "support", "service"]):
-        phrases.append("售后承诺需要前置说明")
-
-    if not phrases:
-        rating = as_float(review.get("rating"), 0)
-        phrases.append("负面反馈集中在体验未达预期" if rating and rating <= 3 else "用户反馈需要继续归类后再转成需求动作")
-    unique = []
-    for phrase in phrases:
-        if phrase not in unique:
-            unique.append(phrase)
-    return "；".join(unique[:3])
-
-
-def customer_review_title(review: dict[str, Any]) -> str:
-    title_cn = clean(review.get("title_cn"))
-    if title_cn:
-        return truncate(title_cn, 60)
-    return "、".join(review_theme_labels(review)[:2])
-
-
-def review_sentiment_label(review: dict[str, Any]) -> str:
-    rating = as_float(review.get("rating"), 0)
-    if rating and rating <= 3:
-        return "负面触发"
-    if rating and rating >= 4:
-        return "正向动机"
-    return "待判定"
-
-
-def customer_product_position(product: dict[str, Any]) -> str:
-    for key in ("positioning_cn", "title_cn"):
-        value = clean(product.get(key))
-        if value and has_cjk(value):
-            return truncate(value, 90)
-    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品样本")
-    price = money(product_price(product))
-    rating = first(product.get("rating"), default="-")
-    reviews = num(product_reviews(product))
-    return f"{segment} · {price} 价格带 · 评分 {rating} · 评论 {reviews}，用于判断竞品定位和页面表达"
-
-
-def customer_product_message(product: dict[str, Any]) -> str:
-    position = customer_product_position(product)
-    sales = num(product_sales(product))
-    return f"{position}；估算月销量 {sales}，重点观察其价格锚点、评价门槛和差异化承诺。"
-
-
-def table(headers: list[str], rows: list[list[Any]], class_name: str = "evidence-table") -> str:
-    head = "".join(f"<th>{esc(header)}</th>" for header in headers)
-    body = "\n".join(
-        "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>" for row in rows
-    )
-    return f"<table class=\"{class_name}\"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-
-
-TECHNICAL_DISPLAY_KEYS = {"source_id", "source_ids", "provider", "tool", "raw_path", "path", "asin", "product_id", "video_id"}
-REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
-
-CUSTOMER_LABEL_REPLACEMENTS = [
-    ("used_source_ids", "证据强度"),
-    ("source_ids", "证据强度"),
-    ("source_id", "证据强度"),
-    ("Product ID", "产品角色"),
-    ("product_id", "产品角色"),
-    ("raw_path", "内部审计记录"),
-    ("provider", "证据覆盖"),
-    ("tool", "分析方法"),
-    ("method_id", "分析方法"),
-    ("ASIN", "竞品样本"),
-    ("asin", "竞品样本"),
-    ("Sorftime", "市场样本"),
-    ("Firecrawl", "公开网页补充"),
-    ("sorftime", "市场样本"),
-    ("firecrawl", "公开网页补充"),
-    ("Data Pack", "分析底稿"),
-    ("data/raw", "内部审计记录"),
-    ("数据血缘", "证据说明"),
-    ("来源", "证据覆盖"),
-    ("Provider Coverage", "证据覆盖"),
-    ("lineage", "审计链路"),
-    ("英文标题", "页面表达归纳"),
-    ("Review", "评论"),
-    ("reviews", "评论"),
-    ("products", "竞品"),
-    ("sources", "样本记录"),
-]
-
-
-def collect_technical_values(value: Any, key: str | None = None) -> set[str]:
-    values: set[str] = set()
-    if isinstance(value, dict):
-        for child_key, child_value in value.items():
-            values.update(collect_technical_values(child_value, str(child_key)))
-    elif isinstance(value, list):
-        for item in value:
-            values.update(collect_technical_values(item, key))
-    elif key in TECHNICAL_DISPLAY_KEYS and value not in (None, ""):
-        text = str(value).strip()
-        if len(text) >= 3:
-            values.add(text)
-    return values
-
-
-def raw_english_review_values(data_pack: dict[str, Any]) -> set[str]:
-    values: set[str] = set()
-    for review in data_pack.get("reviews") or []:
-        if not isinstance(review, dict):
-            continue
-        for key in REVIEW_TEXT_KEYS:
-            text = clean(review.get(key))
-            if len(text) < 8 or has_cjk(text):
-                continue
-            words = re.findall(r"[A-Za-z][A-Za-z']+", text)
-            if len(words) >= 2:
-                values.add(text)
-    return values
-
-
-def review_redaction_needles(text: str) -> set[str]:
-    needles = {text, esc(text)}
-    for limit in (60, 70, 72, 80, 90, 100, 120, 180, 220):
-        if len(text) > limit:
-            shortened = truncate(text, limit)
-            needles.add(shortened)
-            needles.add(esc(shortened))
-    return {needle for needle in needles if len(needle) >= 8}
-
-
-def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
-    for old, new in CUSTOMER_LABEL_REPLACEMENTS:
-        html_doc = html_doc.replace(old, new)
-
-    replacement_by_key = {
-        "source_id": "高",
-        "source_ids": "高",
-        "provider": "样本覆盖",
-        "tool": "分析方法",
-        "raw_path": "内部审计记录",
-        "path": "内部审计记录",
-        "asin": "竞品样本",
-        "product_id": "内容商品样本",
-        "video_id": "内容样本",
-    }
-
-    def replace_value(value: Any, key: str | None = None) -> None:
-        nonlocal html_doc
-        if isinstance(value, dict):
-            for child_key, child_value in value.items():
-                replace_value(child_value, str(child_key))
-        elif isinstance(value, list):
-            for item in value:
-                replace_value(item, key)
-        elif key in TECHNICAL_DISPLAY_KEYS and value not in (None, ""):
-            text = str(value).strip()
-            if len(text) < 3:
-                return
-            replacement = replacement_by_key.get(key or "", "样本证据")
-            for needle in {text, esc(text)}:
-                html_doc = html_doc.replace(needle, replacement)
-
-    replace_value(data_pack)
-    for review_text in raw_english_review_values(data_pack):
-        for needle in review_redaction_needles(review_text):
-            html_doc = html_doc.replace(needle, "中文化评论摘要")
-    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品样本", html_doc)
-    html_doc = re.sub(r"\bsrc[_-][A-Za-z0-9_-]+\b", "高", html_doc, flags=re.IGNORECASE)
-    html_doc = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", html_doc, flags=re.IGNORECASE)
-    html_doc = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", html_doc)
-    html_doc = html_doc.replace("证据强度: 高", "证据强度：高")
-    html_doc = html_doc.replace("证据强度： 高", "证据强度：高")
-    return html_doc
-
-
-def table_inner(headers: list[str], rows: list[list[Any]]) -> str:
-    rendered = table(headers, rows)
-    return rendered.removeprefix("<table class=\"evidence-table\">").removesuffix("</table>")
-
-
-def kpi_card(label: str, value: Any, sub: Any = "", tone: str = "") -> str:
-    tone_class = f" {tone}" if tone else ""
-    return (
-        f"<article class=\"kpi-card{tone_class}\">"
-        f"<div class=\"kpi-label\">{esc(label)}</div>"
-        f"<div class=\"kpi-value\">{esc(value)}</div>"
-        f"<div class=\"kpi-sub\">{esc(sub)}</div>"
-        "</article>"
-    )
-
-
-def kpi_card_html(label: str, value_html: str, sub: Any = "", tone: str = "") -> str:
-    tone_class = f" {tone}" if tone else ""
-    return (
-        f"<article class=\"kpi-card{tone_class}\">"
-        f"<div class=\"kpi-label\">{esc(label)}</div>"
-        f"<div class=\"kpi-value has-tags\">{value_html}</div>"
-        f"<div class=\"kpi-sub\">{esc(sub)}</div>"
-        "</article>"
-    )
-
-
-def metric(label: str, value: Any, sub: Any = "") -> str:
-    return f"<div class=\"metric\"><b>{esc(value)}</b><span>{esc(label)} · {esc(sub)}</span></div>"
-
-
-def tag(value: Any, tone: str = "") -> str:
-    tone_class = f" {tone}" if tone else ""
-    return f"<span class=\"tag{tone_class}\">{esc(value)}</span>"
-
-
-def mini_chart(items: list[tuple[Any, float, Any]], tone: str = "") -> str:
-    if not items:
-        return "<div class=\"mini-chart\"><div class=\"bar-row\"><span>无数据</span><div class=\"bar\"><span style=\"--w:0%\"></span></div><b>-</b></div></div>"
-    max_value = max(abs(value) for _, value, _ in items) or 1
-    rows = []
-    for label, value, display in items:
-        width = max(3, min(100, abs(value) / max_value * 100))
-        rows.append(
-            f"<div class=\"bar-row\"><span>{esc(label)}</span>"
-            f"<div class=\"bar {tone}\"><span style=\"--w:{width:.1f}%\"></span></div>"
-            f"<b>{esc(display)}</b></div>"
-        )
-    return "<div class=\"mini-chart\">" + "".join(rows) + "</div>"
-
-
-def details(title: str, body: str, open_attr: bool = False) -> str:
-    opened = " open" if open_attr else ""
-    return f"<details{opened}><summary>{esc(title)}</summary><div class=\"details-body\">{body}</div></details>"
-
-
-def product_sales(product: dict[str, Any]) -> Any:
-    return first(product.get("estimated_monthly_sales"), product.get("monthly_sales"), product.get("sales"), product.get("月销量"), default=None)
-
-
-def product_revenue(product: dict[str, Any]) -> Any:
-    return first(product.get("estimated_monthly_revenue"), product.get("monthly_revenue"), product.get("月销额"), default=None)
-
-
-def product_price(product: dict[str, Any]) -> Any:
-    return first(product.get("price"), product.get("价格"), default=None)
-
-
-def product_reviews(product: dict[str, Any]) -> Any:
-    return first(product.get("review_count"), product.get("reviews"), product.get("评论数"), default=None)
-
-
-def relevant_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return products
-
-
-def price_band(price: Any) -> str:
-    value = as_float(price, -1)
-    if value < 0:
-        return "unknown"
-    if value < 20:
-        return "<$20"
-    if value < 30:
-        return "$20-$29"
-    if value < 45:
-        return "$30-$44"
-    if value < 60:
-        return "$45-$59"
-    return "$60+"
 
 
 def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> str:
@@ -559,10 +150,18 @@ def render_market(data_pack: dict[str, Any], market_size: dict[str, Any]) -> str
     price_band_sales: defaultdict[str, float] = defaultdict(float)
     origin_counts = Counter()
     for product in products:
-        segment_sales[first(product.get("segment"), "unknown")] += as_float(product_sales(product), 0)
+        segment_sales[first(product.get("segment_cn"), product.get("segment"), default="unknown")] += as_float(product_sales(product), 0)
         price_band_sales[price_band(product_price(product))] += as_float(product_sales(product), 0)
-        if product.get("seller_origin"):
-            origin_counts[product.get("seller_origin")] += 1
+        seller_origin = first(
+            product.get("seller_origin"),
+            product.get("seller_country"),
+            product.get("seller_source"),
+            product.get("seller_location"),
+            product.get("merchant_country"),
+            default="",
+        )
+        if seller_origin:
+            origin_counts[seller_origin] += 1
     cards = [
         kpi_card("Top100 估算月销量", num(first(category.get("top100_estimated_monthly_units"), market_size.get("top100_estimated_monthly_units"), default=None)), "Sorftime 类目代理指标", "success"),
         kpi_card("Top100 估算销售额", money(first(category.get("top100_estimated_monthly_revenue"), market_size.get("top100_estimated_monthly_revenue"), default=None)), "用于判断大盘体量", "warning"),
@@ -574,8 +173,8 @@ def render_market(data_pack: dict[str, Any], market_size: dict[str, Any]) -> str
         ["Top3 产品占比", pct(first(category.get("top3_product_sales_share"), market_size.get("top3_product_sales_share_pct"), default=None)), source_id],
         ["Top3 品牌占比", pct(first(category.get("top3_brand_sales_share"), market_size.get("top3_brand_sales_share_pct"), default=None)), source_id],
         ["Amazon 自营占比", pct(first(category.get("amazon_owned_sales_share"), market_size.get("amazon_owned_sales_share_pct"), default=None)), source_id],
-        ["低评论产品销量占比", pct(category.get("low_reviews_sales_share")), source_id],
-        ["高评论产品销量占比", pct(category.get("high_reviews_sales_share")), source_id],
+        ["低评论产品销量占比", pct(first(category.get("low_reviews_sales_share"), category.get("low_review_sales_share"), default=None)), source_id],
+        ["高评论产品销量占比", pct(first(category.get("high_reviews_sales_share"), category.get("high_review_sales_share"), default=None)), source_id],
     ]
     return (
         "<div class=\"kpi-grid\">" + "".join(cards) + "</div>"
@@ -686,7 +285,7 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
         reverse=True,
     )
     filtered = relevant_products(products)
-    segment_counts = Counter(first(product.get("segment"), "unknown") for product in filtered)
+    segment_counts = Counter(first(product.get("segment_cn"), product.get("segment"), default="unknown") for product in filtered)
     price_counts = Counter(price_band(product_price(product)) for product in filtered)
     cards = (
         "<div class=\"grid-3\">"
@@ -721,12 +320,12 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
     for product in products[:12]:
         asin = product.get("asin")
         trend = product.get("trend") or {}
-        trend_text = "-"
+        trend_text = "待验证"
         if trend.get("first") is not None and trend.get("last") is not None:
             trend_text = f"{num(trend.get('first'))} → {num(trend.get('last'))}，增长 {trend.get('growth')}"
         traffic_tags = "".join(tag(kw.get("keyword")) for kw in traffic.get(asin, [])[:6])
         variations = product.get("variation_samples") or []
-        variation_text = "；".join(truncate(item, 42) for item in variations[:3]) or "-"
+        variation_text = "；".join(truncate(item, 42) for item in variations[:3]) or "待补样本"
         image = product.get("image_url") or ""
         image_html = f"<img src=\"{esc(image)}\" alt=\"{esc(asin)}\">" if image else "<div></div>"
         cards.append(
@@ -749,7 +348,7 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             + tag(f"评论 {num(product_reviews(product))}")
             + "</div>"
             + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">趋势 · 流量 · 变体</div>"
-            + f"<div class=\"comp-deep-text\">趋势：{esc(trend_text)}<br>流量词：{traffic_tags or '-'}<br>变体样本：{esc(variation_text)}</div></div>"
+            + f"<div class=\"comp-deep-text\">趋势：{esc(trend_text)}<br>流量词：{traffic_tags or '待补样本'}<br>变体样本：{esc(variation_text)}</div></div>"
             + f"<p>{tag(product.get('source_id'))}</p>"
             + "</div></div></article>"
         )
@@ -839,17 +438,25 @@ def tiktok_relevance(product: dict[str, Any], seed_terms: list[str]) -> str:
     return "待判断"
 
 
+def customer_safe_signal_title(item: dict[str, Any], fallback: str) -> str:
+    for key in ("title_cn", "name_cn", "summary_cn"):
+        value = clean(item.get(key))
+        if value and re.search(r"[\u4e00-\u9fff]", value):
+            return truncate(value, 70)
+    return fallback
+
+
 def render_tiktok(data_pack: dict[str, Any]) -> str:
     products = data_pack.get("tiktok_products") or []
     videos = sorted(data_pack.get("tiktok_videos") or [], key=lambda video: as_float(video.get("views"), 0), reverse=True)
     seed_terms = infer_seed_terms(data_pack)
     relevance_counts = Counter(tiktok_relevance(product, seed_terms) for product in products)
     product_rows = [
-        [product.get("product_id"), truncate(product.get("title"), 70), tiktok_relevance(product, seed_terms), first(product.get("brand"), "-"), money(product.get("price")), num(product.get("estimated_monthly_sales")), num(product.get("review_count")), product.get("source_id")]
+        [product.get("product_id"), customer_safe_signal_title(product, "内容商品样本"), tiktok_relevance(product, seed_terms), first(product.get("brand"), "-"), money(product.get("price")), num(product.get("estimated_monthly_sales")), num(product.get("review_count")), product.get("source_id")]
         for product in products
     ]
     video_rows = [
-        [video.get("product_id"), truncate(video.get("title"), 70), num(video.get("views")), num(video.get("likes")), truncate(video.get("author"), 32), truncate(video.get("tags"), 80), video.get("source_id")]
+        [video.get("product_id"), customer_safe_signal_title(video, "内容视频样本"), num(video.get("views")), num(video.get("likes")), truncate(video.get("author"), 32), "内容标签已归纳", video.get("source_id")]
         for video in videos[:40]
     ]
     return (
@@ -863,7 +470,11 @@ def render_tiktok(data_pack: dict[str, Any]) -> str:
 
 def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> str:
     suppliers = sorted(data_pack.get("suppliers") or [], key=lambda supplier: as_float(supplier.get("sales_30d"), 0), reverse=True)
-    valid_prices = [as_float(supplier.get("price_rmb"), -1) for supplier in suppliers if as_float(supplier.get("price_rmb"), -1) > 0]
+
+    def supplier_price(supplier: dict[str, Any]) -> Any:
+        return first(supplier.get("price_rmb"), supplier.get("factory_price_rmb"), supplier.get("price"), default=None)
+
+    valid_prices = [as_float(supplier_price(supplier), -1) for supplier in suppliers if as_float(supplier_price(supplier), -1) > 0]
     stats = profitability.get("supply_stats") or {}
     origin_counts = Counter(supplier.get("shipping_origin") for supplier in suppliers if supplier.get("shipping_origin"))
     price_counts = Counter()
@@ -879,7 +490,15 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
         else:
             price_counts["¥200+"] += 1
     rows = [
-        [truncate(supplier.get("title"), 72), money(supplier.get("price_rmb"), "¥"), num(supplier.get("sales_30d")), first(supplier.get("repurchase_rate"), "-"), first(supplier.get("store_name"), "-"), first(supplier.get("shipping_origin"), "-"), supplier.get("source_id")]
+        [
+            truncate(first(supplier.get("title_cn"), supplier.get("title"), supplier.get("name"), supplier.get("supplier_name"), default="-"), 72),
+            money(supplier_price(supplier), "¥"),
+            num(supplier.get("sales_30d")),
+            first(supplier.get("repurchase_rate"), pct(supplier.get("repurchase_rate_pct")), default="-"),
+            first(supplier.get("store_name"), "-"),
+            first(supplier.get("shipping_origin"), "-"),
+            supplier.get("source_id"),
+        ]
         for supplier in suppliers[:40]
     ]
     cards = "".join(
@@ -904,7 +523,7 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
 def render_web_risk(data_pack: dict[str, Any]) -> str:
     docs = data_pack.get("web_documents") or []
     query_counts = Counter(doc.get("query") for doc in docs)
-    rows = [[truncate(doc.get("title"), 72), truncate(doc.get("description"), 120), doc.get("url"), first(doc.get("position"), "-"), doc.get("source_id")] for doc in docs]
+    rows = [[customer_safe_signal_title(doc, "公开网页样本"), "网页摘要已归纳到风险和机会判断", "网页链接保留在审计稿", first(doc.get("position"), "-"), doc.get("source_id")] for doc in docs]
     risk_cards = (
         "<div class=\"risk-grid\">"
         "<article class=\"risk-card\"><h3>合规与召回</h3><p>涉及电气、户外、防水、发热、玻璃破损等风险，必须二次核查 CPSC、UL、ETL 和 Amazon policy。</p></article>"
@@ -918,19 +537,26 @@ def render_web_risk(data_pack: dict[str, Any]) -> str:
 def render_opportunities(opportunity: dict[str, Any]) -> str:
     opportunities = opportunity.get("opportunities") or []
     if not opportunities:
-        opportunities = [{"name": "细分机会待验证", "decision": "Watch", "score": "-", "entry_shape": "需要继续收敛证据。", "risks": ["证据不足"]}]
+        opportunities = [{"name": "细分机会待验证", "decision": "Watch", "score": "待评分", "entry_shape": "需要继续收敛证据。", "risks": ["证据不足"]}]
     cards = []
     for item in opportunities[:10]:
         decision = str(item.get("decision") or "Watch")
         tone = "nogo" if "No" in decision or "不" in decision else "watch" if "Watch" in decision else ""
         risks = item.get("risks") or []
         evidence = item.get("evidence") or []
+        entry_shape = first(
+            item.get("entry_shape"),
+            item.get("recommendation"),
+            "以小批量样品、页面卖点和广告转化验证为先，达标后再扩 SKU。",
+        )
+        evidence_text = "；".join(str(v) for v in evidence[:4]) or "由关键词需求、竞品销量、VOC 主题和供应端样本共同支撑，需结合打样继续验证。"
+        risk_text = "；".join(str(v) for v in risks[:5]) or "主要风险在真实转化、退货率、认证成本和供应端一致性。"
         cards.append(
             f"<article class=\"opportunity-card {tone}\"><h3>{esc(item.get('name'))}</h3>"
-            f"<p>{tag(decision)} {tag('Score ' + str(item.get('score', '-')), 'warn')}</p>"
-            f"<p><strong>建议形态：</strong>{esc(item.get('entry_shape') or item.get('recommendation') or '')}</p>"
-            f"<p><strong>证据：</strong>{esc('；'.join(str(v) for v in evidence[:4]))}</p>"
-            f"<p><strong>风险：</strong>{esc('；'.join(str(v) for v in risks[:5]))}</p></article>"
+            f"<p>{tag(decision)} {tag('Score ' + str(first(item.get('score'), '待评分')), 'warn')}</p>"
+            f"<p><strong>建议形态：</strong>{esc(entry_shape)}</p>"
+            f"<p><strong>证据：</strong>{esc(evidence_text)}</p>"
+            f"<p><strong>风险：</strong>{esc(risk_text)}</p></article>"
         )
     return "".join(cards)
 
@@ -967,11 +593,11 @@ def render_full_appendix(data_pack: dict[str, Any], analysis_plan: dict[str, Any
     web_docs = data_pack.get("web_documents") or []
     product_table = table(["ASIN", "中文定位", "英文标题", "品牌", "细分", "价格", "估算月销量", "估算销售额", "星级", "评论数", "上架", "source_id"], competitor_rows(products, None), "evidence-table appendix-table")
     keyword_table = table(["关键词中文", "英文关键词", "相关性", "月搜索量", "周搜索量", "CPC", "竞争数", "中文意图", "来源", "source_id"], [[kw.get("keyword_cn"), kw.get("keyword"), kw.get("relevance_cn"), num(kw.get("monthly_search_volume")), num(kw.get("weekly_search_volume")), kw.get("recommended_cpc") or "-", num(kw.get("competitor_count")), kw.get("intent_cn"), kw.get("source_type"), kw.get("source_id")] for kw in keywords], "evidence-table appendix-table")
-    review_table = table(["ASIN", "星级", "日期", "标题", "评论摘录", "主题", "source_id"], [[r.get("asin"), r.get("rating"), r.get("review_date"), truncate(r.get("title"), 70), truncate(r.get("text"), 220), ", ".join(r.get("themes") or []), r.get("source_id")] for r in reviews], "evidence-table appendix-table")
-    tk_product_table = table(["Product ID", "标题", "品牌", "价格", "估算月销量", "source_id"], [[p.get("product_id"), truncate(p.get("title"), 90), p.get("brand"), money(p.get("price")), num(p.get("estimated_monthly_sales")), p.get("source_id")] for p in tiktok_products], "evidence-table appendix-table")
-    tk_video_table = table(["Product ID", "标题", "播放", "点赞", "达人", "URL", "source_id"], [[v.get("product_id"), truncate(v.get("title"), 80), num(v.get("views")), num(v.get("likes")), truncate(v.get("author"), 40), v.get("url"), v.get("source_id")] for v in tiktok_videos], "evidence-table appendix-table")
-    supplier_table = table(["标题", "价格", "30日销量", "店铺", "发货地", "URL", "source_id"], [[truncate(s.get("title"), 90), money(s.get("price_rmb"), "¥"), num(s.get("sales_30d")), s.get("store_name"), s.get("shipping_origin"), s.get("url"), s.get("source_id")] for s in suppliers], "evidence-table appendix-table")
-    web_table = table(["标题", "摘要", "URL", "query", "source_id"], [[truncate(w.get("title"), 80), truncate(w.get("description"), 130), w.get("url"), truncate(w.get("query"), 60), w.get("source_id")] for w in web_docs], "evidence-table appendix-table")
+    review_table = table(["ASIN", "星级", "日期", "标题", "评论摘录", "主题", "source_id"], [[r.get("asin"), r.get("rating"), r.get("review_date"), r.get("title_cn"), r.get("summary_cn"), ", ".join(r.get("themes_cn") or []), r.get("source_id")] for r in reviews], "evidence-table appendix-table")
+    tk_product_table = table(["Product ID", "标题", "品牌", "价格", "估算月销量", "source_id"], [[p.get("product_id"), customer_safe_signal_title(p, "内容商品样本"), p.get("brand"), money(p.get("price")), num(p.get("estimated_monthly_sales")), p.get("source_id")] for p in tiktok_products], "evidence-table appendix-table")
+    tk_video_table = table(["Product ID", "标题", "播放", "点赞", "达人", "URL", "source_id"], [[v.get("product_id"), customer_safe_signal_title(v, "内容视频样本"), num(v.get("views")), num(v.get("likes")), truncate(v.get("author"), 40), "内容链接保留在审计稿", v.get("source_id")] for v in tiktok_videos], "evidence-table appendix-table")
+    supplier_table = table(["标题", "价格", "30日销量", "店铺", "发货地", "URL", "source_id"], [[customer_safe_signal_title(s, "供应商样本"), money(s.get("price_rmb"), "¥"), num(s.get("sales_30d")), "供应端店铺样本", s.get("shipping_origin"), "供应链接保留在审计稿", s.get("source_id")] for s in suppliers], "evidence-table appendix-table")
+    web_table = table(["标题", "摘要", "URL", "query", "source_id"], [[customer_safe_signal_title(w, "公开网页样本"), "网页摘要已归纳到风险和机会判断", "网页链接保留在审计稿", "检索词保留在审计稿", w.get("source_id")] for w in web_docs], "evidence-table appendix-table")
     method_table = table(["method_id", "purpose/output", "used_source_ids"], [[m.get("method_id"), truncate(m.get("purpose") or m.get("output"), 120), ", ".join(str(v) for v in (m.get("used_source_ids") or []))] for m in analysis_plan.get("method_chain", [])], "evidence-table appendix-table")
     return (
         details(f"完整产品池 products（{len(products)}）", product_table)
@@ -994,17 +620,6 @@ def render_lineage(data_pack: dict[str, Any]) -> str:
     return rendered.removeprefix("<table class=\"evidence-table appendix-table\">").removesuffix("</table>")
 
 
-def write_lineage_markdown(data_pack: dict[str, Any], path: Path) -> None:
-    lines = ["# Data Lineage", ""]
-    for source in data_pack.get("sources", []):
-        label = truncate(first(source.get("label"), source.get("query"), source.get("args"), default="-"), 140)
-        limitation = truncate(source.get("limitation") or source.get("raw_path") or "", 180)
-        lines.append(
-            f"- {source.get('source_id')}: {source.get('provider')} / {source.get('tool')} / {label} / confidence={source.get('confidence')} / {limitation}"
-        )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def render_template(template_key: str, replacements: dict[str, Any]) -> str:
     template = TEMPLATE_PATHS[template_key].read_text(encoding="utf-8")
     html_doc = template
@@ -1013,85 +628,24 @@ def render_template(template_key: str, replacements: dict[str, Any]) -> str:
     return html_doc
 
 
-def attach_site_chrome(html_doc: str, asset_prefix: str = "") -> str:
-    css_href = f"{asset_prefix}assets/report.css"
-    js_src = f"{asset_prefix}assets/report.js"
-    nav = (
-        "<nav class=\"site-nav\" aria-label=\"报告导航\">"
-        "<button class=\"site-nav-toggle\" type=\"button\">目录</button>"
-        "<a class=\"site-nav-brand\" href=\"" + asset_prefix + "report.html\">三合一报告</a>"
-        "<div class=\"site-nav-links\">"
-        "<a href=\"" + asset_prefix + "market-depth-report.html\">市场深度</a>"
-        "<a href=\"" + asset_prefix + "lifecycle-strategy-report.html\">生命周期拓品</a>"
-        "<a href=\"" + asset_prefix + "demand-gap-report.html\">需求断层</a>"
-        "</div></nav>"
-    )
-    if "assets/report.css" not in html_doc:
-        html_doc = html_doc.replace("</head>", f"<link rel=\"stylesheet\" href=\"{css_href}\">\n</head>")
-    if "site-nav" not in html_doc:
-        html_doc = html_doc.replace("<body>", "<body>\n" + nav, 1)
-    if "assets/report.js" not in html_doc:
-        html_doc = html_doc.replace("</body>", f"<script src=\"{js_src}\" defer></script>\n</body>")
+def render_legacy_child_template(template_key: str, replacements: dict[str, Any]) -> str:
+    template = LEGACY_TEMPLATE_PATHS[template_key].read_text(encoding="utf-8")
+    html_doc = template
+    for token, value in replacements.items():
+        html_doc = html_doc.replace(token, str(value))
     return html_doc
 
 
-def site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> dict[str, Any]:
-    normalization = data_pack.get("normalization") or data_pack.get("cleaning_summary") or {}
-    return {
-        "report_files": {key: filename for key, filename in HTML_REPORT_FILENAMES.items()},
-        "child_skills": CHILD_SKILLS,
-        "interactive_features": INTERACTIVE_FEATURES,
-        "decision": decision,
-        "quality": data_pack.get("quality") or {},
-        "cleaning_summary": {
-            "deduped": normalization.get("deduped"),
-            "before_counts": normalization.get("before_counts") or {},
-            "after_counts": normalization.get("after_counts") or {},
-            "removed_counts": normalization.get("removed_counts") or {},
-            "cross_validated_counts": normalization.get("cross_validated_counts") or {},
-        },
-        "coverage": {
-            "products": len(data_pack.get("products") or []),
-            "keywords": len(data_pack.get("keywords") or []),
-            "reviews": len(data_pack.get("reviews") or []),
-            "tiktok_products": len(data_pack.get("tiktok_products") or []),
-            "suppliers": len(data_pack.get("suppliers") or []),
-            "web_documents": len(data_pack.get("web_documents") or []),
-            "method_chain": len(analysis_plan.get("method_chain") or []),
-        },
-        "data_gaps": [clean(gap.get("gap") if isinstance(gap, dict) else gap) for gap in (data_pack.get("data_gaps") or [])],
-    }
+def child_body_fragment(html_doc: str) -> str:
+    styles = "\n".join(re.findall(r"<style\b[^>]*>.*?</style>", html_doc, flags=re.S | re.I))
+    scripts = "\n".join(re.findall(r"<script\b[^>]*>.*?</script>", html_doc, flags=re.S | re.I))
+    match = re.search(r"<body\b[^>]*>(.*)</body>", html_doc, flags=re.S | re.I)
+    body = match.group(1) if match else html_doc
+    return "\n".join(part for part in [styles, body, scripts] if part)
 
 
 def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> None:
-    asset_dir = report_dir / ASSET_DIR
-    asset_dir.mkdir(parents=True, exist_ok=True)
-    (asset_dir / "report.css").write_text(REPORT_CSS + "\n", encoding="utf-8")
-    (asset_dir / "report.js").write_text(REPORT_JS + "\n", encoding="utf-8")
-    (asset_dir / "report-data.json").write_text(
-        json.dumps(site_data(data_pack, analysis_plan, decision), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> None:
-    brief = data_pack.get("brief") or {}
-    report_brief = {
-        "task_id": data_pack.get("task_id") or analysis_plan.get("task_id"),
-        "research_object": brief.get("research_object") or data_pack.get("research_object") or {},
-        "decision": decision,
-        "child_skills": CHILD_SKILLS,
-        "static_site": {
-            "bundle_dir": HTML_BUNDLE_DIR,
-            "assets": SITE_ASSETS,
-            "interactive_features": INTERACTIVE_FEATURES,
-        },
-        "data_inputs": {
-            "normalized_data_pack": "data/normalized/normalized_data_pack.json",
-            "analysis_plan": "analysis/analysis_plan.json",
-        },
-    }
-    (report_dir / "report_brief.json").write_text(json.dumps(report_brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_basic_site_assets(report_dir, build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS))
 
 
 def primary_source_id(data_pack: dict[str, Any]) -> str:
@@ -1145,6 +699,16 @@ def sample_coverage_tags(data_pack: dict[str, Any]) -> str:
 def client_trust_strip(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> str:
     gaps = len(data_pack.get("data_gaps") or []) + len(analysis_plan.get("limitations") or [])
     next_action = "进入打样与页面卖点验证" if str(decision).lower() == "go" else "补关键缺口后小步验证"
+    tabs = (
+        "<div class=\"trust-tabs\" data-tabs>"
+        "<div class=\"tab-list\" role=\"tablist\">"
+        "<button class=\"tab-button\" type=\"button\" data-tab-target=\"evidence\" aria-selected=\"true\">证据</button>"
+        "<button class=\"tab-button\" type=\"button\" data-tab-target=\"gaps\" aria-selected=\"false\">缺口</button>"
+        "</div>"
+        "<div data-tab-panel=\"evidence\">当前结论以归一化样本、交叉验证和方法链为准。</div>"
+        "<div data-tab-panel=\"gaps\" hidden>缺失指标会进入数据缺口和下一步验证，不包装成已证实结论。</div>"
+        "</div>"
+    )
     return (
         "<div class=\"kpi-grid client-trust-grid\">"
         + kpi_card("证据强度", confidence_level(data_pack, analysis_plan), "综合样本质量与方法链", "success")
@@ -1152,6 +716,7 @@ def client_trust_strip(data_pack: dict[str, Any], analysis_plan: dict[str, Any],
         + kpi_card("数据缺口", f"{gaps} 项", "已纳入风险判断", "warning")
         + kpi_card("建议动作", next_action, "客户版执行摘要", "success")
         + "</div>"
+        + tabs
     )
 
 
@@ -1208,7 +773,15 @@ def render_index_cards(report_title: str, decision: str, data_pack: dict[str, An
 def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> list[dict[str, Any]]:
     explicit = lifecycle.get("skus")
     if isinstance(explicit, list) and explicit:
-        return [item for item in explicit if isinstance(item, dict)]
+        safe_items: list[dict[str, Any]] = []
+        for idx, item in enumerate(explicit, 1):
+            if not isinstance(item, dict):
+                continue
+            safe = dict(item)
+            name = clean(first(safe.get("name"), safe.get("title"), default=""))
+            safe["name"] = name if re.search(r"[\u4e00-\u9fff]", name) else f"拓品方案 {idx}"
+            safe_items.append(safe)
+        return safe_items
     products = data_pack.get("products") or []
     suppliers = data_pack.get("suppliers") or []
     defaults = [
@@ -1221,7 +794,7 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
     for product in products[:3]:
         defaults.append(
             {
-                "name": f"{first(product.get('title_cn'), product.get('title'), default='竞品功能')} 对标配件",
+                "name": f"{customer_safe_signal_title(product, '竞品功能')} 对标配件",
                 "stage": "竞品补位",
                 "type": "C",
                 "price": money(max(9, as_float(product_price(product), 19) * 0.18)),
@@ -1234,7 +807,7 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
     for supplier in suppliers[:3]:
         defaults.append(
             {
-                "name": first(supplier.get("title"), supplier.get("supplier_name"), default="1688 相似供应端机会"),
+                "name": "1688 相似供应端机会",
                 "stage": "供应链验证",
                 "type": "D",
                 "price": money(first(supplier.get("price"), supplier.get("price_rmb"), default=12), "¥"),
@@ -1275,10 +848,10 @@ def render_personas(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallba
     ]
     cards = "".join(
         f"<article class=\"persona-card\"><div class=\"persona-header\"><span>{esc(item.get('name'))}</span></div>"
-        f"<div class=\"persona-body\"><p>{esc(item.get('need'))}</p><strong>{esc(item.get('price'))}</strong><p>source_id: {esc(source_ids_for(item, fallback_source))}</p></div></article>"
+        f"<div class=\"persona-body\"><p>{esc(first(item.get('need'), '用户需求仍需补充样本验证'))}</p><strong>{esc(first(item.get('price'), '价格接受带待验证'))}</strong><p>source_id: {esc(source_ids_for(item, fallback_source))}</p></div></article>"
         for item in personas[:6]
     )
-    rows = [[item.get("name"), item.get("need"), item.get("price"), source_ids_for(item, fallback_source)] for item in personas[:12]]
+    rows = [[item.get("name"), first(item.get("need"), "用户需求仍需补充样本验证"), first(item.get("price"), "价格接受带待验证"), source_ids_for(item, fallback_source)] for item in personas[:12]]
     return "<div class=\"persona-grid\">" + cards + "</div>" + section_table("用户画像证据表", ["画像", "核心需求", "价格接受带", "source_id"], rows)
 
 
@@ -1491,23 +1064,56 @@ def render_priority_table(data_pack: dict[str, Any], demand_gap: dict[str, Any],
     return table(["优先级", "需求与痛点", "执行动作", "KANO", "source_id"], rows)
 
 
-def write_delivery_result(report_dir: Path, delivery: dict[str, Any]) -> None:
-    output_path = report_dir / "output" / "delivery_result.json"
-    delivery = dict(delivery)
-    delivery.setdefault("status", "complete")
-    formats = list(delivery.get("formats") or [])
-    if "html" not in formats:
-        formats.append("html")
-    delivery["formats"] = formats
-    html_reports = dict(HTML_REPORTS)
-    html_reports["compat_index"] = COMPAT_INDEX_REPORT
-    delivery["html_reports"] = html_reports
-    delivery["html_bundle_dir"] = HTML_BUNDLE_DIR
-    delivery["child_skills"] = CHILD_SKILLS
-    delivery["site_assets"] = SITE_ASSETS
-    delivery["interactive_features"] = INTERACTIVE_FEATURES
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(delivery, ensure_ascii=False, indent=2), encoding="utf-8")
+def renderer_callbacks() -> dict[str, Any]:
+    return {
+        "as_float": as_float,
+        "attach_site_chrome": attach_site_chrome,
+        "child_body_fragment": child_body_fragment,
+        "client_trust_strip": client_trust_strip,
+        "confidence_level": confidence_level,
+        "esc": esc,
+        "first": first,
+        "kpi_card": kpi_card,
+        "lifecycle_skus": lifecycle_skus,
+        "num": num,
+        "primary_source_id": primary_source_id,
+        "product_sales": product_sales,
+        "relevant_products": relevant_products,
+        "render_appeals_map": render_appeals_map,
+        "render_bundle_strategy": render_bundle_strategy,
+        "render_client_action_summary": render_client_action_summary,
+        "render_client_data_coverage": render_client_data_coverage,
+        "render_competitors": render_competitors,
+        "render_data_gaps": render_data_gaps,
+        "render_decision": render_decision,
+        "render_decision_board": render_decision_board,
+        "render_ecosystem": render_ecosystem,
+        "render_full_appendix": render_full_appendix,
+        "render_gap_analysis": render_gap_analysis,
+        "render_index_cards": render_index_cards,
+        "render_kano_jtbd": render_kano_jtbd,
+        "render_keywords": render_keywords,
+        "render_legacy_child_template": render_legacy_child_template,
+        "render_lifecycle_journey": render_lifecycle_journey,
+        "render_lifecycle_market_intel": render_lifecycle_market_intel,
+        "render_lifecycle_risks": render_lifecycle_risks,
+        "render_lifecycle_roadmap": render_lifecycle_roadmap,
+        "render_lineage": render_lineage,
+        "render_market": render_market,
+        "render_opportunities": render_opportunities,
+        "render_personas": render_personas,
+        "render_priority_table": render_priority_table,
+        "render_product_deep_dives": render_product_deep_dives,
+        "render_sku_execution_table": render_sku_execution_table,
+        "render_strategy_dashboard": render_strategy_dashboard,
+        "render_supply": render_supply,
+        "render_target_anchor": render_target_anchor,
+        "render_template": render_template,
+        "render_tiktok": render_tiktok,
+        "render_voc": render_voc,
+        "render_voice_theater": render_voice_theater,
+        "render_web_risk": render_web_risk,
+    }
 
 
 def render(report_dir: Path) -> Path:
@@ -1523,133 +1129,80 @@ def render(report_dir: Path) -> Path:
     demand_gap = load_json(report_dir / "analysis" / "demand_gap.json", {})
     delivery = load_json(report_dir / "output" / "delivery_result.json", {})
 
-    brief = data_pack.get("brief") or {}
-    research_object = brief.get("research_object") or data_pack.get("research_object") or {}
-    object_value = first(research_object.get("value") if isinstance(research_object, dict) else research_object, data_pack.get("task_id"), default="Amazon Market")
-    quality = data_pack.get("quality") or {}
-    decision = first(delivery.get("decision"), "Watch", default="Watch")
-    categories = data_pack.get("categories") or []
-    category = categories[0] if categories else {}
-    keyword_pool = [kw for kw in data_pack.get("keywords", []) if kw.get("monthly_search_volume")]
-    core_keyword_pool = [
-        kw
-        for kw in keyword_pool
-        if kw.get("source_type") != "product_traffic_terms"
-        and (kw.get("is_core_relevant") or kw.get("relevance_cn") == "高相关")
-    ]
-    keywords = sorted(core_keyword_pool or keyword_pool, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
-    products = relevant_products(sorted(data_pack.get("products") or [], key=lambda product: as_float(product_sales(product), 0), reverse=True))
-    competitor_table, competitor_cards, competitor_products = render_competitors(data_pack)
-    fallback_source = primary_source_id(data_pack)
-    report_date = datetime.now().strftime("%Y-%m-%d")
-    target_market = first((brief.get("market_scope") or {}).get("amazon") if isinstance(brief.get("market_scope"), dict) else None, "Amazon US")
-    data_depth = first(brief.get("data_depth"), (brief.get("data_scope") or {}).get("depth") if isinstance(brief.get("data_scope"), dict) else None, "标准版")
-    report_title = f"{object_value} · 三合一市场研究报告"
-
-    kpis = [
-        kpi_card("核心判断", decision, "Go / Watch / No-Go", "warning"),
-        kpi_card("Top100 估算月销量", num(category.get("top100_estimated_monthly_units")), "类目代理指标", "success"),
-        kpi_card("最大关键词月搜索", num(keywords[0].get("monthly_search_volume") if keywords else None), keywords[0].get("keyword") if keywords else "keyword gap"),
-        kpi_card("相关竞品池", num(len(products)), "过滤泛词噪声后", ""),
-        kpi_card("评论样本", num(len(data_pack.get("reviews") or [])), "已做中文摘要映射", ""),
-        kpi_card("1688 样本", num(len(data_pack.get("suppliers") or [])), "供应端参考", "warning"),
-        kpi_card("TikTok 商品", num(len(data_pack.get("tiktok_products") or [])), "内容端信号", ""),
-        kpi_card("数据质量", first(quality.get("grade"), "-"), f"score {first(quality.get('overall_score'), '-')}", "warning"),
-    ]
-
-    common = {
-        "{{REPORT_TITLE}}": report_title,
-        "{{REPORT_OBJECT}}": esc(object_value),
-        "{{REPORT_DATE}}": report_date,
-        "{{TARGET_MARKET}}": target_market,
-        "{{DATA_DEPTH}}": data_depth,
-        "{{DECISION}}": decision,
-        "{{PRIMARY_SOURCE_ID}}": fallback_source,
-        "{{CONFIDENCE_LEVEL}}": confidence_level(data_pack, analysis_plan),
-        "{{CLIENT_TRUST_STRIP}}": client_trust_strip(data_pack, analysis_plan, str(decision)),
-    }
-    market_replacements = {
-        **common,
-        "{{MARKET_REPORT_TITLE}}": f"{object_value} · 市场深度调研报告",
-        "{{REPORT_SUBTITLE}}": "客户版 AI 深度分析 · 大盘判断、需求结构、竞品格局、内容信号、供应链判断与行动建议",
-        "{{KPI_CARDS}}": "".join(kpis),
-        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{esc(decision)}。当前样本覆盖 {len(data_pack.get('products', []))} 个竞品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(data_pack.get('suppliers', []))} 条供应端样本。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
-        "{{MARKET_DASHBOARD}}": render_market(data_pack, market_size),
-        "{{KEYWORD_TABLE_AND_INTENT_CARDS}}": render_keywords(data_pack),
-        "{{COMPETITOR_TABLE}}": competitor_table,
-        "{{COMPETITOR_SEGMENT_CARDS}}": competitor_cards,
-        "{{COMPETITOR_DEEP_DIVES}}": render_product_deep_dives(competitor_products, data_pack.get("keywords") or []),
-        "{{VOC_CARDS_AND_TABLE}}": render_voc(data_pack, voc),
-        "{{TIKTOK_VALIDATION}}": render_tiktok(data_pack),
-        "{{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}": render_supply(data_pack, profitability),
-        "{{WEB_RISK_SUPPLEMENT}}": render_web_risk(data_pack),
-        "{{CLIENT_ACTION_SUMMARY}}": render_client_action_summary(data_pack, analysis_plan, str(decision), object_value),
-        "{{OPPORTUNITY_CARDS}}": render_opportunities(opportunity),
-        "{{DECISION_ROADMAP}}": render_decision(delivery),
-        "{{FULL_DATA_APPENDIX}}": render_full_appendix(data_pack, analysis_plan),
-        "{{LINEAGE_TABLE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · market-depth-report-v2",
-    }
-    skus = lifecycle_skus(data_pack, lifecycle, fallback_source)
-    lifecycle_replacements = {
-        **common,
-        "{{LIFECYCLE_REPORT_TITLE}}": f"{object_value} · 产品全生命周期拓品战略报告",
-        "{{STRATEGY_DASHBOARD}}": render_strategy_dashboard(data_pack, lifecycle, fallback_source),
-        "{{USER_PERSONAS}}": render_personas(data_pack, lifecycle, fallback_source),
-        "{{LIFECYCLE_JOURNEY}}": render_lifecycle_journey(data_pack, fallback_source),
-        "{{FOUR_DIMENSION_ECOSYSTEM}}": render_ecosystem(data_pack, skus, fallback_source),
-        "{{SKU_EXECUTION_TABLE}}": render_sku_execution_table(skus, fallback_source),
-        "{{BUNDLE_STRATEGY}}": render_bundle_strategy(skus, fallback_source),
-        "{{IMPLEMENTATION_ROADMAP}}": render_lifecycle_roadmap(skus, fallback_source),
-        "{{RISK_MATRIX}}": render_lifecycle_risks(fallback_source),
-        "{{MARKET_INTELLIGENCE}}": render_lifecycle_market_intel(data_pack, analysis_plan, fallback_source),
-        "{{LIFECYCLE_LINEAGE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · lifecycle-strategy-report-v2",
-    }
-    demand_replacements = {
-        **common,
-        "{{DEMAND_REPORT_TITLE}}": f"{object_value} · 用户心智断层与需求机会报告",
-        "{{TARGET_ANCHOR}}": render_target_anchor(data_pack, object_value, fallback_source),
-        "{{DECISION_BOARD}}": render_decision_board(data_pack, demand_gap, decision, fallback_source),
-        "{{APPEALS_MAP}}": render_appeals_map(data_pack, fallback_source),
-        "{{GAP_ANALYSIS}}": render_gap_analysis(data_pack, fallback_source),
-        "{{KANO_JTBD_MATRIX}}": render_kano_jtbd(demand_gap, fallback_source),
-        "{{VOICE_THEATER}}": render_voice_theater(data_pack, fallback_source),
-        "{{PRIORITY_TABLE}}": render_priority_table(data_pack, demand_gap, fallback_source),
-        "{{DEMAND_LINEAGE}}": render_lineage(data_pack),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · demand-gap-report-v2",
-    }
-    index_replacements = {
-        **common,
-        "{{INDEX_CARDS}}": render_index_cards(str(object_value), str(decision), data_pack),
-        "{{DATA_COVERAGE}}": render_client_data_coverage(data_pack, analysis_plan, str(decision)),
-        "{{DATA_GAPS}}": render_data_gaps(data_pack, analysis_plan),
-        "{{REPORT_FOOTER}}": f"{esc(object_value)} · amz-market-research-orchestrated 生成 · three-report-index-v2",
-    }
-    compat_index_replacements = {
-        **index_replacements,
-        "{{INDEX_CARDS}}": render_index_cards(str(object_value), str(decision), data_pack, link_prefix="html_reports"),
-    }
-
     output_dir = report_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
     bundle_dir = report_dir / HTML_BUNDLE_DIR
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    rendered_docs = {
-        "index": attach_site_chrome(render_template("index", index_replacements)),
-        "market_depth": attach_site_chrome(render_template("market_depth", market_replacements)),
-        "lifecycle_strategy": attach_site_chrome(render_template("lifecycle_strategy", lifecycle_replacements)),
-        "demand_gap": attach_site_chrome(render_template("demand_gap", demand_replacements)),
-    }
-    rendered_docs = {key: redact_customer_html(html_doc, data_pack) for key, html_doc in rendered_docs.items()}
+
+    def build_safe_documents(decision_value: str) -> tuple[dict[str, str], str]:
+        docs, compat_html = build_report_documents(
+            data_pack,
+            analysis_plan,
+            market_size,
+            voc,
+            opportunity,
+            profitability,
+            lifecycle,
+            demand_gap,
+            delivery,
+            decision_value,
+            renderer_callbacks(),
+        )
+        return {key: redact_customer_html(html_doc, data_pack) for key, html_doc in docs.items()}, redact_customer_html(compat_html, data_pack)
+
+    def load_view_models() -> dict[str, dict[str, Any]]:
+        return {
+            "market_depth_view.json": load_json(report_dir / "analysis" / "market_depth_view.json", {}),
+            "lifecycle_strategy_view.json": load_json(report_dir / "analysis" / "lifecycle_strategy_view.json", {}),
+            "demand_gap_view.json": load_json(report_dir / "analysis" / "demand_gap_view.json", {}),
+        }
+
+    original_decision = str(first(delivery.get("decision"), "Watch", default="Watch"))
+    rendered_docs, compat_index_html = build_safe_documents(original_decision)
+    write_report_views(report_dir, data_pack, analysis_plan, original_decision)
+    draft_view_models = load_view_models()
+    draft_critic_review = critic_runner.build_critic_review(
+        data_pack,
+        analysis_plan,
+        delivery,
+        original_decision,
+        round_id=0,
+        rendered_docs={**rendered_docs, "compat_index": compat_index_html},
+        view_models=draft_view_models,
+    )
+    refinement_plan = critic_runner.build_refinement_plan(draft_critic_review, original_decision)
+    decision = critic_runner.apply_refinement_plan(delivery, refinement_plan, original_decision)
+    if str(decision) != original_decision:
+        rendered_docs, compat_index_html = build_safe_documents(str(decision))
+        write_report_views(report_dir, data_pack, analysis_plan, str(decision))
+    view_models = load_view_models()
+
     for key, html_doc in rendered_docs.items():
         (report_dir / HTML_REPORTS[key]).parent.mkdir(parents=True, exist_ok=True)
         (report_dir / HTML_REPORTS[key]).write_text(html_doc, encoding="utf-8")
-    (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(attach_site_chrome(render_template("index", compat_index_replacements), "html_reports/"), data_pack), encoding="utf-8")
+    (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(compat_index_html, data_pack), encoding="utf-8")
     write_site_assets(report_dir, data_pack, analysis_plan, str(decision))
-    write_report_brief(report_dir, data_pack, analysis_plan, str(decision))
-    delivery["cleaning_summary"] = site_data(data_pack, analysis_plan, str(decision))["cleaning_summary"]
-    write_delivery_result(report_dir, delivery)
+    write_report_brief(report_dir, data_pack, analysis_plan, str(decision), CHILD_SKILLS)
+    delivery["cleaning_summary"] = build_site_data(data_pack, analysis_plan, str(decision), CHILD_SKILLS)["cleaning_summary"]
+    critic_review = critic_runner.write_critic_outputs(
+        report_dir,
+        data_pack,
+        analysis_plan,
+        delivery,
+        str(decision),
+        draft_review=draft_critic_review,
+        refinement_plan=refinement_plan,
+        rendered_docs={**rendered_docs, "compat_index": compat_index_html},
+        view_models=view_models,
+    )
+    delivery["critic_review"] = {
+        "path": "analysis/critic_review.json",
+        "refinement_plan": "analysis/refinement_plan.json",
+        "pass": critic_review["pass"],
+        "score": critic_review["score"],
+        "max_refinement_rounds": critic_review["max_refinement_rounds"],
+    }
+    write_delivery_result(report_dir, delivery, CHILD_SKILLS)
     return report_dir / HTML_REPORTS["index"]
 
 
