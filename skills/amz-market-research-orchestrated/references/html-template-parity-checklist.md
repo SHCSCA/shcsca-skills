@@ -24,6 +24,15 @@ Baseline folder: `143101`.
 
 Required section density:
 
+- 大盘结论
+- 需求结构
+- 竞品格局
+- VOC 洞察
+- 标杆打法
+- 机会定义
+- TikTok 内容信号
+- 1688 供应链判断
+- 风险与行动摘要
 - Executive market verdict and Go / Watch / No-Go summary.
 - TAM/SAM/SOM or market sizing equivalent when evidence exists; otherwise explicit data gap.
 - Demand trend and keyword structure.
@@ -54,6 +63,15 @@ Baseline folder: `143511`.
 
 Required section density:
 
+- 战略仪表盘
+- 用户画像
+- 生命周期旅程
+- 四维拓品生态
+- 拓品方案池
+- Bundle 策略
+- 30/60/90 天路线图
+- 风险矩阵
+- 市场验证摘要
 - Strategic dashboard.
 - Persona / segment grid.
 - Lifecycle journey or timeline.
@@ -84,6 +102,13 @@ Baseline folder: `143645`.
 
 Required section density:
 
+- 研究对象概述
+- 决策看板
+- $APPEALS 痛点图
+- 满意度鸿沟
+- KANO x JTBD
+- 用户原声
+- 需求优先级
 - Research object overview.
 - Decision board.
 - `$APPEALS` pain map.

@@ -103,6 +103,6 @@ python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py -
 
 Passing the proof command does not prove the business conclusion is correct; it proves readiness, render, critic delivery state, customer safety, and final validation are structurally auditable.
 
-For HTML, passing the validator also proves the bundle is not a raw Markdown shell, contains the required three-report modules, passes data readiness, and meets the 1000-keyword minimum for standard/deep reports.
+For HTML, passing the proof also proves the template parity contract is intact, the bundle is not a raw Markdown shell, contains the required three-report modules, passes data readiness, and meets the 1000-keyword minimum for standard/deep reports.
 
 Historical directories that fail readiness may remain in the repository or local reports folder only as `non_acceptance_sample` evidence. They must not be used to claim delivery completion, even if older `delivery_result.json` or `critic_review.json` files contain `complete` or `pass=true`.

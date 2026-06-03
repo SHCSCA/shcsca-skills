@@ -16,6 +16,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 READINESS = SCRIPT_DIR / "check_data_readiness.py"
 RENDERER = SCRIPT_DIR / "render_dashboard_html.py"
 VALIDATOR = SCRIPT_DIR / "validate_market_research_deliverables.py"
+TEMPLATE_PARITY = SCRIPT_DIR / "validate_template_parity_contract.py"
 
 
 def utc_now() -> str:
@@ -82,6 +83,25 @@ def run_proof(report_dir: Path, depth: str, skip_render: bool = False) -> dict[s
     repo_root = Path.cwd()
     steps: list[dict[str, Any]] = []
 
+    steps.append(run_step("template_parity", [sys.executable, str(TEMPLATE_PARITY)], repo_root))
+    if not steps[-1]["pass"]:
+        proof = {
+            "report_dir": str(report_dir),
+            "checked_at": utc_now(),
+            "overall_pass": False,
+            "sample_class": None,
+            "decision": None,
+            "readiness": {},
+            "delivery_status": None,
+            "critic_pass": None,
+            "critic_score": None,
+            "critic_summary": None,
+            "steps": steps,
+        }
+        write_json(report_dir / "output" / "acceptance_proof.json", proof)
+        (report_dir / "output" / "acceptance_proof.md").write_text(proof_markdown(proof), encoding="utf-8")
+        return proof
+
     steps.append(run_step("readiness", [sys.executable, str(READINESS), "--dir", str(report_dir), "--depth", depth, "--write"], repo_root))
     readiness = load_json(report_dir / "data" / "normalized" / "data_readiness_report.json", {})
 
@@ -91,8 +111,11 @@ def run_proof(report_dir: Path, depth: str, skip_render: bool = False) -> dict[s
     if all(step["pass"] for step in steps):
         steps.append(run_step("validate", [sys.executable, str(VALIDATOR), "--dir", str(report_dir)], repo_root))
 
-    delivery = load_json(report_dir / "output" / "delivery_result.json", {})
-    critic = load_json(report_dir / "analysis" / "critic_review.json", {})
+    render_passed = any(step["name"] == "render" and step["pass"] for step in steps)
+    validate_passed = any(step["name"] == "validate" and step["pass"] for step in steps)
+    can_trust_delivery = render_passed or validate_passed
+    delivery = load_json(report_dir / "output" / "delivery_result.json", {}) if can_trust_delivery else {}
+    critic = load_json(report_dir / "analysis" / "critic_review.json", {}) if can_trust_delivery else {}
     proof = {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
@@ -103,7 +126,8 @@ def run_proof(report_dir: Path, depth: str, skip_render: bool = False) -> dict[s
         "delivery_status": delivery.get("status"),
         "critic_pass": critic.get("pass"),
         "critic_score": critic.get("score"),
-        "critic_summary": "analysis/critic_summary.md" if (report_dir / "analysis" / "critic_summary.md").exists() else None,
+        "critic_summary": "analysis/critic_summary.md" if can_trust_delivery and (report_dir / "analysis" / "critic_summary.md").exists() else None,
+        "stale_delivery_ignored": not can_trust_delivery and (report_dir / "output" / "delivery_result.json").exists(),
         "steps": steps,
     }
     write_json(report_dir / "output" / "acceptance_proof.json", proof)

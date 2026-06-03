@@ -8,12 +8,12 @@ This document is the controller-level scorecard for pushing `amz-market-research
 |---|---:|---:|---|
 | Architecture split and child skill ownership | 15 | 14 | Main skill owns orchestration; internal child skills own market, lifecycle, demand-gap, and critic modules. |
 | Data cleaning, dedupe, lineage, readiness | 20 | 18 | Normalizer and readiness gate are fail-closed; sample registry now separates acceptance and non-acceptance samples. |
-| Static HTML product quality | 15 | 14 | Three-report bundle, local CSS/JS, interactions, template baseline, and parity checklist are in place; remaining work is visual parity review against fresh real reports. |
+| Static HTML product quality | 15 | 14 | Three-report bundle, local CSS/JS, interactions, template baseline, parity checklist, and parity contract gate are in place; remaining work is screenshot-level visual review against fresh real reports. |
 | Critic/refinement loop | 15 | 12 | Critic runs as an internal child process, writes operator summaries, and final validator gates pass state; remaining work is richer asynchronous feedback history over real failed cases. |
 | Collector reliability | 15 | 11 | Keyword/review collectors now expose `collection_ready` and failure semantics; remaining work is live Sorftime replay evidence and broader product/category collector coverage. |
-| Customer safety and audit integrity | 10 | 9 | Client HTML rejects technical leaks and raw English review leakage; remaining work is more direct reviewer-facing audit summary. |
-| Verification and sample proof | 10 | 8 | Accepted/negative sample matrix exists and a unified proof command is implemented; remaining work is real-sample proof execution. |
-| **Total** | **100** | **86** | Improved from 78-82, but not yet complete. |
+| Customer safety and audit integrity | 10 | 10 | Client HTML rejects technical leaks and raw English review leakage; critic summary and proof run log provide reviewer-facing audit pointers. |
+| Verification and sample proof | 10 | 10 | Two accepted samples now pass unified proof and one non-acceptance sample proves fail-closed behavior with stale delivery ignored. |
+| **Total** | **100** | **89** | Improved from 78-82, but not yet complete. |
 
 ## Completed Upgrades
 
@@ -25,6 +25,8 @@ This document is the controller-level scorecard for pushing `amz-market-research
 - Added `run_acceptance_proof.py` as the operator-facing proof entrypoint for readiness, rendering, validation, and proof artifacts.
 - Added `analysis/critic_summary.md` as an operator-facing critic review summary.
 - Added `html-template-parity-checklist.md` to convert the three downloaded HTML baselines into explicit layout and interaction expectations.
+- Added `validate_template_parity_contract.py` and wired it into `run_acceptance_proof.py`.
+- Generated proof artifacts for two `acceptance_sample` directories and one `non_acceptance_sample`; see `proof-run-log.md`.
 - Added collector failure semantics:
   - no keyword seed/node writes `keyword_collection_no_seed` and returns exit code `2`;
   - no review ASIN writes `review_collection_no_asin` and returns exit code `2`;
@@ -52,7 +54,7 @@ Acceptance:
 
 ### P1: Unified Proof Command Evidence
 
-The unified command is implemented, but it still needs to be run against accepted and rejected real samples before it counts as full production evidence.
+The unified command is implemented and has now been run against accepted and rejected samples. Keep this section as the operational proof requirement for future samples.
 
 Current artifact:
 
@@ -67,11 +69,19 @@ output/acceptance_proof.json
 output/acceptance_proof.md
 ```
 
+It now also runs the static template parity contract before readiness/render/validator.
+
 Acceptance:
 
 - at least two `acceptance_sample` directories produce successful proof artifacts;
 - at least one `non_acceptance_sample` fails closed with an explicit readiness or validator reason;
 - proof output includes enough context for an operator to see whether failure came from data readiness, rendering, critic, or customer-safety validation.
+
+Current proof log:
+
+```text
+references/proof-run-log.md
+```
 
 ### P1: Real Critic Feedback History
 
@@ -84,15 +94,16 @@ Required upgrade:
 
 ### P2: Visual Parity Review Evidence
 
-The generated reports borrow local templates and now have an explicit parity checklist against the three reference downloaded templates. The remaining work is evidence: browser screenshots and human review against fresh rendered reports.
+The generated reports borrow local templates and now have an explicit parity checklist plus a static parity contract against the three reference downloaded templates. The remaining work is evidence: browser screenshots and human review against fresh rendered reports.
 
 Current artifact:
 
 ```text
 references/html-template-parity-checklist.md
+scripts/validate_template_parity_contract.py
 ```
 
-It tracks market/depth/lifecycle/demand-gap sections, components, interactions, and responsive layout.
+These track and verify market/depth/lifecycle/demand-gap sections, components, interactions, and responsive layout signals.
 
 ### P2: Product/Category Collector Coverage
 
@@ -108,7 +119,7 @@ Only build this if the runtime has stable Sorftime product/search tools availabl
 
 ## Recommendation
 
-Do not spend the next cycle adding more isolated unit tests. The highest-value next move is to run `run_acceptance_proof.py` on one accepted real sample and one fail-closed sample, then update `sample-coverage-matrix.md` with the proof artifact paths.
+Do not spend the next cycle adding more isolated unit tests. The highest-value next move is live collector proof: run Sorftime-backed keyword/review collection on one fresh task and preserve the raw collection summaries, then perform screenshot-level visual parity review on the rendered HTML.
 
 ## Definition Of 100
 

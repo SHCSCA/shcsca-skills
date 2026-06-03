@@ -69,6 +69,22 @@ These tests build temporary report directories and verify that Sorftime keyword/
 
 The shared site assets intentionally borrow the local downloaded report templates as visual baselines: `downloadpage/143101` for market depth, `downloadpage/143511` for lifecycle strategy, and `downloadpage/143645` for demand gap. The generator extracts reusable CSS/JS patterns into local `report.css` and `report.js`; it does not ship `_next` chunks, CDN URLs, iframe shells, or hard-coded sample report data.
 
+## validate_template_parity_contract.py
+
+Checks that the three downloaded HTML baselines, `template-baseline-manifest.json`, `html-template-parity-checklist.md`, shared CSS/JS, and report templates agree on required layout and interaction signals:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/validate_template_parity_contract.py
+```
+
+Use `--require-downloads` on the user's machine when auditing against the actual downloaded folders:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/validate_template_parity_contract.py --require-downloads
+```
+
+`run_acceptance_proof.py` runs this contract first. If template parity fails, the proof stops before readiness/render/validator.
+
 ## check_data_readiness.py
 
 Checks whether a Data Pack is ready to enter standard/deep report generation:

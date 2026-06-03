@@ -14,9 +14,9 @@ Use this registry to classify local report directories. A report directory is a 
 
 | Path | Class | Current proof target | Notes |
 |---|---|---|---|
-| `reports/lighting_us_20260528` | `acceptance_sample` | readiness pass, render pass, final validator pass, browser smoke source for generated fixture parity. | Review depth is thin and should remain a warning, not a structural blocker. |
-| `skills/amz-market-research-orchestrated/reports/wall_sconce_us_20260526` | `acceptance_sample` | readiness pass, render pass, final validator pass. | Large evidence pack used for validator performance and customer-safety regression. |
-| `skills/amz-market-research-orchestrated/reports/neck_massager_us_20260525` | `non_acceptance_sample` | readiness fail; renderer must stop before client HTML delivery. | Products and keywords are empty; do not use to claim delivery completion. |
+| `reports/lighting_us_20260528` | `acceptance_sample` | `output/acceptance_proof.json`, checked `2026-06-03T06:35:28Z`, `overall_pass=true`. | Review depth is thin and remains a warning, not a structural blocker. |
+| `skills/amz-market-research-orchestrated/reports/wall_sconce_us_20260526` | `acceptance_sample` | `output/acceptance_proof.json`, checked `2026-06-03T06:35:46Z`, `overall_pass=true`. | Large evidence pack used for validator performance and customer-safety regression. |
+| `skills/amz-market-research-orchestrated/reports/neck_massager_us_20260525` | `non_acceptance_sample` | `output/acceptance_proof.json`, checked `2026-06-03T06:37:39Z`, `overall_pass=false`, `stale_delivery_ignored=true`. | Products and keywords are empty; old delivery artifacts are ignored and must not be used to claim completion. |
 
 ## Required Verification Commands
 

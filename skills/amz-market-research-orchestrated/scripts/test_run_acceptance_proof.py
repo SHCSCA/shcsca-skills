@@ -38,11 +38,41 @@ class RunAcceptanceProofTest(unittest.TestCase):
 
             self.assertTrue(proof["overall_pass"])
             self.assertEqual(proof["sample_class"], "acceptance_sample")
-            self.assertEqual([step["name"] for step in proof["steps"]], ["readiness", "render", "validate"])
+            self.assertEqual([step["name"] for step in proof["steps"]], ["template_parity", "readiness", "render", "validate"])
             self.assertTrue((report_dir / "output" / "acceptance_proof.json").exists())
             markdown = (report_dir / "output" / "acceptance_proof.md").read_text(encoding="utf-8")
             self.assertIn("# Acceptance Proof", markdown)
             self.assertIn("acceptance_ready", markdown)
+
+    def test_failed_readiness_ignores_stale_delivery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "output" / "delivery_result.json", {"status": "complete", "decision": "Go"})
+            write_json(report_dir / "analysis" / "critic_review.json", {"pass": True, "score": 92})
+
+            def fake_step(name, _command, _cwd):
+                if name == "readiness":
+                    write_json(
+                        report_dir / "data" / "normalized" / "data_readiness_report.json",
+                        {
+                            "acceptance_ready": False,
+                            "sample_class": "non_acceptance_sample",
+                            "blocking_gaps": [{"module": "keyword_sample_depth"}],
+                            "warnings": [],
+                        },
+                    )
+                    return {"name": name, "command": [], "returncode": 2, "stdout": "", "stderr": "", "pass": False}
+                return {"name": name, "command": [], "returncode": 0, "stdout": "", "stderr": "", "pass": True}
+
+            with patch.object(proof_runner, "run_step", side_effect=fake_step):
+                proof = proof_runner.run_proof(report_dir, "standard")
+
+            self.assertFalse(proof["overall_pass"])
+            self.assertEqual(proof["sample_class"], "non_acceptance_sample")
+            self.assertIsNone(proof["delivery_status"])
+            self.assertIsNone(proof["critic_pass"])
+            self.assertTrue(proof["stale_delivery_ignored"])
+            self.assertEqual([step["name"] for step in proof["steps"]], ["template_parity", "readiness"])
 
 
 if __name__ == "__main__":

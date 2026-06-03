@@ -88,8 +88,16 @@ def run(report_dir: Path, decision: str, previous_review_path: Path | None = Non
         )
         refinement_plan = critic_runner.build_refinement_plan(critic_review, decision)
         next_decision = critic_runner.apply_refinement_plan(delivery, refinement_plan, decision)
-        write_json(report_dir / "analysis/critic_review.json", critic_review)
-        write_json(report_dir / "analysis/refinement_plan.json", refinement_plan)
+        critic_review = critic_runner.write_critic_outputs(
+            report_dir,
+            data_pack,
+            analysis_plan,
+            delivery,
+            decision,
+            refinement_plan=refinement_plan,
+            rendered_docs=rendered_docs,
+            view_models=view_models,
+        )
         if next_decision != decision:
             write_json(delivery_path, delivery)
 
@@ -99,6 +107,7 @@ def run(report_dir: Path, decision: str, previous_review_path: Path | None = Non
         "score": critic_review.get("score"),
         "critic_review": "analysis/critic_review.json",
         "refinement_plan": "analysis/refinement_plan.json",
+        "critic_summary": "analysis/critic_summary.md",
     }
     write_json(report_dir / "analysis/critic_decision.json", result)
     return result
