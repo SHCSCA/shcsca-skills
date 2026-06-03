@@ -127,6 +127,47 @@ class CollectSorftimeReviewsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn('"collection_ready": false', result.stdout)
 
+    def test_collect_reaches_review_target_and_writes_raw_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "research_object": {"seed_asins": ["B0OK000001", "B0OK000002"]},
+                    "sources": [],
+                    "products": [],
+                    "reviews": [],
+                    "data_gaps": [],
+                },
+            )
+
+            def fake_call_tool(_url, _name, args):
+                rows = [
+                    {"评论": f"Works well for {args['asin']} #{idx}", "评星": "5", "标题": "Useful"}
+                    for idx in range(3)
+                ]
+                return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
+
+            with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
+                summary = collector.collect(report_dir, [], "Both", "US", 0, min_reviews=6)
+
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            written_summary = json.loads((report_dir / "data" / "normalized" / "review_collection_summary.json").read_text(encoding="utf-8"))
+            raw_files = list((report_dir / "data" / "raw").glob("sorftime_product_reviews_*.json"))
+
+            self.assertTrue(summary["collection_ready"])
+            self.assertEqual(summary["calls"], 2)
+            self.assertEqual(summary["review_type"], "Both")
+            self.assertEqual(summary["asin_count"], 2)
+            self.assertEqual(summary["min_reviews"], 6)
+            self.assertEqual(summary["failures"], [])
+            self.assertEqual(summary["reviews_added"], 6)
+            self.assertEqual(summary["reviews_total"], 6)
+            self.assertEqual(summary, written_summary)
+            self.assertEqual(len(raw_files), 2)
+            self.assertEqual(len(data_pack["sources"]), 2)
+            self.assertEqual({review["asin"] for review in data_pack["reviews"]}, {"B0OK000001", "B0OK000002"})
+
 
 if __name__ == "__main__":
     unittest.main()

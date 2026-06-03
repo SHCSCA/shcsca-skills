@@ -161,6 +161,40 @@ def make_valid_report(root):
     data_pack["cleaning_summary"] = data_pack["normalization"]
     write_json(root / "data" / "data_pack.json", data_pack)
     write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
+    readiness_counts = {
+        "sources": 2,
+        "products": 1,
+        "keywords": 1000,
+        "categories": 1,
+        "reviews": 1,
+        "tiktok_products": 1,
+        "tiktok_videos": 1,
+        "suppliers": 1,
+        "web_documents": 1,
+        "data_gaps": 1,
+    }
+    readiness = {
+        "report_dir": str(root),
+        "checked_at": "2026-05-26T10:00:00Z",
+        "depth": "standard",
+        "data_pack": "data/normalized/normalized_data_pack.json",
+        "sample_class": "acceptance_sample",
+        "acceptance_ready": True,
+        "blocking_gaps": [],
+        "warnings": [{"module": "review_sample_depth", "current": 1, "recommended": 80}],
+        "counts": readiness_counts,
+        "collector_commands": [],
+    }
+    readiness_summary = {
+        "acceptance_ready": True,
+        "sample_class": "acceptance_sample",
+        "depth": "standard",
+        "blocking_gap_count": 0,
+        "warning_count": 1,
+        "counts": readiness_counts,
+    }
+    delivery_readiness = {"path": "data/normalized/data_readiness_report.json", **readiness_summary}
+    write_json(root / "data" / "normalized" / "data_readiness_report.json", readiness)
     child_skills = {
         "market_depth": "child_skills/market-depth-report",
         "lifecycle_strategy": "child_skills/lifecycle-strategy-report",
@@ -324,6 +358,7 @@ def make_valid_report(root):
             "site_assets": site_assets,
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
+            "data_readiness": delivery_readiness,
             "critic_review": {
                 "path": "analysis/critic_review.json",
                 "refinement_plan": "analysis/refinement_plan.json",
@@ -353,6 +388,7 @@ def make_valid_report(root):
         {
             "child_skills": child_skills,
             "interactive_features": interactive_features,
+            "readiness": readiness_summary,
             "cleaning_summary": data_pack["normalization"],
         },
     )
@@ -748,6 +784,34 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("data readiness must pass", result.stderr + result.stdout)
+
+    def test_rejects_forged_delivery_readiness_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            delivery_path = report_dir / "output" / "delivery_result.json"
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            delivery["data_readiness"]["counts"]["keywords"] = 42
+            write_json(delivery_path, delivery)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("delivery_result.json data_readiness.counts mismatch", result.stderr + result.stdout)
+
+    def test_rejects_forged_report_data_readiness_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            asset_path = report_dir / "output" / "html_reports" / "assets" / "report-data.json"
+            payload = json.loads(asset_path.read_text(encoding="utf-8"))
+            payload["readiness"]["sample_class"] = "non_acceptance_sample"
+            write_json(asset_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("report-data.json readiness.sample_class mismatch", result.stderr + result.stdout)
 
     def test_entity_without_source_id_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

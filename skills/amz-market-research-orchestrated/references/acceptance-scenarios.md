@@ -2,6 +2,8 @@
 
 Use these scenarios when checking whether `amz-market-research-orchestrated` v2 was followed correctly on a real research run.
 
+For local sample classification, use [sample-coverage-matrix.md](sample-coverage-matrix.md). Only `acceptance_sample` directories may be used as delivery proof.
+
 ## Scenario 1: New Market Entry
 
 Input:
@@ -95,11 +97,10 @@ Required evidence:
 Every real run must pass:
 
 ```bash
-python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
-python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/{task_id}
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/{task_id} --depth standard
 ```
 
-Passing the validator does not prove the business conclusion is correct; it proves the report is structurally auditable.
+Passing the proof command does not prove the business conclusion is correct; it proves readiness, render, critic delivery state, customer safety, and final validation are structurally auditable.
 
 For HTML, passing the validator also proves the bundle is not a raw Markdown shell, contains the required three-report modules, passes data readiness, and meets the 1000-keyword minimum for standard/deep reports.
 

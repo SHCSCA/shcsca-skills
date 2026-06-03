@@ -79,6 +79,38 @@ class CollectSorftimeKeywordsTest(unittest.TestCase):
             self.assertFalse(summary["collection_ready"])
             self.assertIn("Theoretical row capacity is below min_keywords", summary["warnings"][0])
 
+    def test_collect_pages_until_keyword_target_and_writes_raw_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "data" / "data_pack.json", {"sources": [], "keywords": [], "categories": [], "data_gaps": []})
+
+            def fake_call_tool(_url, _name, args):
+                page = int(args["page"])
+                rows = [{"关键词": f"neck massager keyword {page}-{idx}", "月搜索量": str(1000 + idx)} for idx in range(20)]
+                return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
+
+            with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
+                summary = collector.collect(report_dir, 45, None, ["neck massager"], 75, 0)
+
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            written_summary = json.loads((report_dir / "data" / "normalized" / "keyword_collection_summary.json").read_text(encoding="utf-8"))
+            raw_files = list((report_dir / "data" / "raw").glob("sorftime_keyword_extends_*.json"))
+
+            self.assertTrue(summary["collection_ready"])
+            self.assertEqual(summary["calls"], 3)
+            self.assertEqual(summary["planned_calls"], 75)
+            self.assertEqual(summary["theoretical_row_capacity"], 1500)
+            self.assertEqual(summary["min_keywords"], 45)
+            self.assertEqual(summary["seed_count"], 1)
+            self.assertEqual(summary["warnings"], [])
+            self.assertEqual(summary["keywords_added"], 60)
+            self.assertEqual(summary["keywords_total"], 60)
+            self.assertEqual(summary, written_summary)
+            self.assertEqual(len(raw_files), 3)
+            self.assertEqual(len(data_pack["sources"]), 3)
+            self.assertEqual(data_pack["keywords"][0]["source_type"], "keyword_extends")
+            self.assertFalse((report_dir / "data" / "normalized" / "normalized_data_pack.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

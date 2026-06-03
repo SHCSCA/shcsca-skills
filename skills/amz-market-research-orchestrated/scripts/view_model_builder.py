@@ -197,13 +197,26 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
     return defaults
 
 
-def build_site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, child_skills: dict[str, str]) -> dict[str, Any]:
+def readiness_summary(readiness: dict[str, Any] | None) -> dict[str, Any]:
+    readiness = readiness or {}
+    return {
+        "acceptance_ready": readiness.get("acceptance_ready"),
+        "sample_class": readiness.get("sample_class"),
+        "depth": readiness.get("depth"),
+        "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
+        "warning_count": len(readiness.get("warnings") or []),
+        "counts": readiness.get("counts") or {},
+    }
+
+
+def build_site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, child_skills: dict[str, str], readiness: dict[str, Any] | None = None) -> dict[str, Any]:
     normalization = data_pack.get("normalization") or data_pack.get("cleaning_summary") or {}
     return {
         "report_files": {key: filename for key, filename in HTML_REPORT_FILENAMES.items()},
         "child_skills": child_skills,
         "interactive_features": INTERACTIVE_FEATURES,
         "decision": decision,
+        "readiness": readiness_summary(readiness),
         "quality": data_pack.get("quality") or {},
         "cleaning_summary": {
             "deduped": normalization.get("deduped"),

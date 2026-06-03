@@ -41,6 +41,7 @@ INTERACTIVE_FEATURES = set(SITE_INTERACTIVE_FEATURES)
 REQUIRED_FILES = [
     "data/data_pack.json",
     "data/normalized/normalized_data_pack.json",
+    "data/normalized/data_readiness_report.json",
     "data/lineage.md",
     "report_brief.json",
     "analysis/analysis_plan.json",
@@ -373,6 +374,17 @@ def validate_data_readiness(report_dir: Path) -> None:
         require(isinstance(recorded, dict), "data_readiness_report.json must be an object")
         require(recorded.get("acceptance_ready") is True, "data_readiness_report.json cannot be false for final delivery validation")
         require(recorded.get("sample_class") == "acceptance_sample", "data_readiness_report.json sample_class must be acceptance_sample")
+
+
+def readiness_summary_for_contract(readiness: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "acceptance_ready": readiness.get("acceptance_ready"),
+        "sample_class": readiness.get("sample_class"),
+        "depth": readiness.get("depth"),
+        "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
+        "warning_count": len(readiness.get("warnings") or []),
+        "counts": readiness.get("counts") or {},
+    }
 
 
 def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) -> None:
@@ -863,8 +875,15 @@ def validate_child_skill_invocation_log(report_dir: Path) -> None:
 
 def validate_delivery(report_dir: Path) -> None:
     delivery = load_json(report_dir / "output/delivery_result.json")
+    readiness = assess_data_readiness(report_dir, "auto")
+    expected_readiness = readiness_summary_for_contract(readiness)
     require(isinstance(delivery, dict), "delivery_result.json must be an object")
     require(delivery.get("status") in {"complete", "partial"}, "delivery_result.json status must be complete or partial")
+    delivery_readiness = delivery.get("data_readiness")
+    require(isinstance(delivery_readiness, dict), "delivery_result.json missing data_readiness summary")
+    require(delivery_readiness.get("path") == "data/normalized/data_readiness_report.json", "delivery_result.json data_readiness.path mismatch")
+    for key, expected in expected_readiness.items():
+        require(delivery_readiness.get(key) == expected, f"delivery_result.json data_readiness.{key} mismatch")
     html_reports = delivery.get("html_reports")
     require(isinstance(html_reports, dict), "delivery_result.json missing html_reports mapping")
     require(html_reports.get("index") == BUNDLE_INDEX_REPORT, f"delivery_result.json html_reports.index must be {BUNDLE_INDEX_REPORT}")
@@ -881,6 +900,7 @@ def validate_delivery(report_dir: Path) -> None:
     require(critic.get("path") == "analysis/critic_review.json", "delivery_result.json critic_review.path mismatch")
     require(critic.get("refinement_plan") == "analysis/refinement_plan.json", "delivery_result.json critic_review.refinement_plan mismatch")
     require(critic.get("max_refinement_rounds") == 2, "delivery_result.json critic max_refinement_rounds must be 2")
+    require(not (critic.get("pass") is True and not delivery_readiness.get("acceptance_ready")), "critic pass cannot override failed data readiness")
     features = set(delivery.get("interactive_features") or [])
     require(INTERACTIVE_FEATURES.issubset(features), "delivery_result.json missing required interactive_features")
     cleaning = delivery.get("cleaning_summary")
@@ -889,6 +909,10 @@ def validate_delivery(report_dir: Path) -> None:
 
     site_data = load_json(report_dir / SITE_ASSETS["data"])
     require(site_data.get("child_skills") == CHILD_SKILLS, "report-data.json child_skills mismatch")
+    site_readiness = site_data.get("readiness")
+    require(isinstance(site_readiness, dict), "report-data.json missing readiness summary")
+    for key, expected in expected_readiness.items():
+        require(site_readiness.get(key) == expected, f"report-data.json readiness.{key} mismatch")
     require(INTERACTIVE_FEATURES.issubset(set(site_data.get("interactive_features") or [])), "report-data.json missing interactive features")
     for key in ["before_counts", "after_counts", "removed_counts"]:
         require(isinstance((site_data.get("cleaning_summary") or {}).get(key), dict), f"report-data.json cleaning_summary missing {key}")

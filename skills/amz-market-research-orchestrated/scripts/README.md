@@ -58,6 +58,7 @@ python skills/amz-market-research-orchestrated/scripts/test_normalize_data_pack.
 python skills/amz-market-research-orchestrated/scripts/test_render_dashboard_html.py
 python skills/amz-market-research-orchestrated/scripts/test_child_skill_split.py
 python skills/amz-market-research-orchestrated/scripts/test_validate_market_research_deliverables.py
+python skills/amz-market-research-orchestrated/scripts/test_run_acceptance_proof.py
 ```
 
 These tests build temporary report directories and verify that Sorftime keyword/review collection parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, customer copy and customer safety redaction stay intact, critic refinement records failed and passing rounds, the three child skills exist under the orchestrated skill, the renderer writes the portable static site bundle plus a compatibility entry, shared CSS/JS assets are local, `report.js` behaviors execute against a minimal DOM, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, customer HTML leaks, and incomplete report sections.
@@ -75,6 +76,8 @@ python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py -
 The script reads `data/normalized/normalized_data_pack.json` when present, otherwise `data/data_pack.json`, and writes `data/normalized/data_readiness_report.json` with `acceptance_ready`, `sample_class`, `blocking_gaps`, `warnings`, entity counts, and collector commands. Standard/deep runs are blocked when source lineage is empty, product samples are empty, or keyword samples are below 1000. Review, Web, TikTok, and supplier gaps are warnings so the report can degrade honestly when the final validator still accepts the structure and the limitations are visible. Review recommendations are 80 samples for standard reports and 200 samples for deep reports.
 
 When `sample_class=non_acceptance_sample`, keep the directory only as historical/demo evidence. Do not render or claim a completed client deliverable from it, even if older delivery or critic files contain `status=complete` or `pass=true`.
+
+Final bundles must carry the same readiness state in three places: `data/normalized/data_readiness_report.json`, `output/delivery_result.json.data_readiness`, and `output/html_reports/assets/report-data.json.readiness`. The validator recomputes readiness and rejects stale or forged summaries.
 
 Exit codes:
 
@@ -155,6 +158,25 @@ output/html_reports/assets/report-data.json
 The renderer also updates `output/delivery_result.json.html_reports`, `html_bundle_dir`, `child_skills`, `site_assets`, `interactive_features`, and `cleaning_summary`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
 
 Customer HTML is Chinese-facing by default. Raw English reviews and English review titles remain in `data_pack.json` for audit, while HTML uses Chinese summaries, themes, sentiment labels, and suggested actions.
+
+Local sample classifications are tracked in `references/sample-coverage-matrix.md`. Use that matrix to distinguish accepted samples, negative readiness samples, and unit-test demo samples.
+
+## run_acceptance_proof.py
+
+Runs the operator-facing proof bundle:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<task_id> --depth standard
+```
+
+It runs readiness, render, and final validation, then writes:
+
+```text
+output/acceptance_proof.json
+output/acceptance_proof.md
+```
+
+Use this as the preferred proof command when deciding whether a local sample is an `acceptance_sample`. Negative samples should return non-zero and still write proof output explaining the failed step.
 
 ## prototypes
 

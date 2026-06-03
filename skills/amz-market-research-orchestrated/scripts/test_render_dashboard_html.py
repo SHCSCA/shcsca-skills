@@ -5,6 +5,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import render_dashboard_html as renderer
 
 
 SCRIPT = Path(__file__).with_name("render_dashboard_html.py")
@@ -264,6 +267,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(delivery["html_reports"]["market_depth"], "output/html_reports/market-depth-report.html")
             self.assertEqual(delivery["html_reports"]["lifecycle_strategy"], "output/html_reports/lifecycle-strategy-report.html")
             self.assertEqual(delivery["html_reports"]["demand_gap"], "output/html_reports/demand-gap-report.html")
+            self.assertEqual(delivery["data_readiness"]["path"], "data/normalized/data_readiness_report.json")
+            self.assertTrue(delivery["data_readiness"]["acceptance_ready"])
+            self.assertEqual(delivery["data_readiness"]["sample_class"], "acceptance_sample")
+            self.assertEqual(delivery["data_readiness"]["counts"]["keywords"], 1000)
             self.assertEqual(
                 delivery["child_skills"],
                 {
@@ -296,6 +303,9 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn("removed_counts", delivery["cleaning_summary"])
             site_data = json.loads((report_dir / "output" / "html_reports" / "assets" / "report-data.json").read_text(encoding="utf-8"))
             self.assertEqual(site_data["report_files"]["market_depth"], "market-depth-report.html")
+            self.assertTrue(site_data["readiness"]["acceptance_ready"])
+            self.assertEqual(site_data["readiness"]["sample_class"], "acceptance_sample")
+            self.assertEqual(site_data["readiness"]["counts"]["products"], 1)
             self.assertEqual(site_data["cleaning_summary"]["after_counts"]["keywords"], 1000)
             self.assertIn("child_skills/demand-gap-report", site_data["child_skills"].values())
             self.assertIn("child_skills/market-research-critic", site_data["child_skills"].values())
@@ -337,6 +347,40 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
             self.assertFalse(readiness["acceptance_ready"])
             self.assertEqual(readiness["sample_class"], "non_acceptance_sample")
+
+    def test_renderer_stops_when_critic_still_fails_after_refinement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+
+            def failing_critic(*_args, **_kwargs):
+                write_json(
+                    report_dir / "analysis" / "critic_review.json",
+                    {
+                        "pass": False,
+                        "round_id": 0,
+                        "score": 61,
+                        "grade": "C",
+                        "findings": [],
+                        "blocking_issues": ["证据不足"],
+                        "resolved_findings": [],
+                        "remaining_findings": ["证据不足"],
+                        "report_issues": {},
+                        "data_confidence": {},
+                        "suggestions": [],
+                        "refinement_targets": [],
+                        "max_refinement_rounds": 2,
+                    },
+                )
+                write_json(report_dir / "analysis" / "refinement_plan.json", {"status": "needs_revision", "max_refinement_rounds": 2, "operations": []})
+                write_json(report_dir / "analysis" / "critic_decision.json", {"decision": "Watch", "pass": False, "score": 61})
+                return {"decision": "Watch", "pass": False, "score": 61}
+
+            with patch.object(renderer, "run_critic_child", side_effect=failing_critic):
+                with self.assertRaises(RuntimeError) as ctx:
+                    renderer.render(report_dir)
+
+            self.assertIn("critic did not pass after refinement", str(ctx.exception))
 
     def test_renderer_downgrades_partial_go_to_watch(self):
         with tempfile.TemporaryDirectory() as tmp:

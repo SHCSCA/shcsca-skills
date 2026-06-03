@@ -30,7 +30,7 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 7. 调用内部 critic 模块输出 `critic_review.json` 和 `refinement_plan.json`；如不通过，最多做两轮差量修正，不重新采集、不改写事实源。
 8. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开，且客户可见资产不泄露技术字段。
 
-详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)。
+详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)，样本登记见 [sample-coverage-matrix.md](references/sample-coverage-matrix.md)，100 分改进路线见 [100-point-improvement-plan.md](references/100-point-improvement-plan.md)。
 
 ## 触发场景
 
@@ -56,6 +56,30 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 6. 缺少成本、退货率、FBA 费用或广告数据时，只写成本门槛和利润红线，不写伪利润表。
 7. TikTok 热度只能作为需求、内容、场景和渠道证据，不能单独证明 Amazon 购买需求。
 8. 数据失败时保留模块、说明缺口和影响，不删除章节假装完整。
+
+## 100 分工作协议
+
+本 Skill 的核心不是测试脚本，而是一次完整市场调研交付的行为协议。Agent 使用本 Skill 时按以下优先级执行：
+
+1. **先交付调研判断框架**：明确研究对象、主要决策、市场范围、数据深度和输出方向；没有确认卡，不进入完整三报告采集。
+2. **再拿真实证据**：优先调用 Sorftime / Firecrawl / 本地可用采集工具；不能用 AI 编造产品、关键词、评论、供应商或网页证据。
+3. **再清洗和归一化**：Data Pack 是唯一事实底座；子报告只能读 `normalized_data_pack.json`，不能改写事实口径。
+4. **再编排子报告**：市场深度、生命周期、需求断层三个 child modules 分别产出自己的客户安全 view 和 HTML。
+5. **再让 critic 驳回或放行**：critic 不是装饰字段；二次修正后仍不通过时，主控必须停止交付宣称。
+6. **最后才做 proof**：`run_acceptance_proof.py` 只用于证明交付已闭环；不能用跑测试替代调研、分析、采集或报告质量。
+
+从 78-82 分推进到 100 分的主线见 [100-point-improvement-plan.md](references/100-point-improvement-plan.md)。该文件记录当前分数、已完成能力、剩余缺口和下一步推荐。
+
+执行中必须按“业务进度”汇报，而不是按“测试进度”汇报。有效进度包括：确认卡是否完成、真实数据是否拿到、Data Pack 是否去重归一、三个 child modules 是否产出报告 view、critic 是否驳回或放行、客户版 HTML 是否可交付。单元测试、脚本测试和 validator 只能作为这些动作之后的证明。
+
+Subagent 只能承担可隔离的侧翼任务，例如采集证据审计、HTML 客户安全审计、critic contract 审计或模板 parity 审计。主控 Agent 必须保留架构决策、Data Pack 口径、是否交付、是否降级为样本的最终责任。
+
+Fail-closed 停止规则：
+
+- `acceptance_ready=false` 时，不得继续生成客户版三报告；只能继续真实采集、说明缺口，或把目录登记为 `non_acceptance_sample`。
+- critic 二次修正后仍 `pass=false` 时，不得声明交付完成；必须输出未解决问题和下一轮差量修正计划。
+- 产品池、关键词、评论或网页证据不足时，不得用 AI 推断、模板样例或重复数据补齐。
+- 客户版 HTML 出现 `source_id`、ASIN、provider、raw path、英文原始评论等泄露字段时，必须停止交付并修正渲染层。
 
 ## Step 0: 解析并补齐用户输入
 
@@ -227,6 +251,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 - 幂等 baseline：首次归一化写入 `data/normalized/normalization_baseline.json`，后续反复渲染不得冲掉原始样本数和去重收益。
 - 样本门槛：标准版和深度版归一化后关键词不得少于 1000 条；不足时继续分页采集或在 `data_gaps` 标注为未达交付标准。
 - 准备度门槛：`data/normalized/data_readiness_report.json.acceptance_ready` 必须为 `true` 才能进入三报告渲染；`non_acceptance_sample` 只能作为历史/演示样本保留，不能用于交付宣称。
+- 状态一致性：最终交付必须让 `data_readiness_report.json`、`delivery_result.json.data_readiness`、`report-data.json.readiness` 三处一致；critic 通过不能覆盖 readiness 失败。
 
 标准化结果保存到：
 
@@ -353,10 +378,10 @@ python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py 
 完成后运行：
 
 ```bash
-python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/{task_id}
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/{task_id} --depth standard
 ```
 
-只有输出 `validate_ok` 才能宣称交付完成。
+只有 proof 输出 `overall_pass=true`，且其中 validator 步骤为通过，才能宣称交付完成。单独的 `delivery_result.status=complete` 或 `critic_review.pass=true` 都不是完成证明。
 
 ## 报告质量规则
 

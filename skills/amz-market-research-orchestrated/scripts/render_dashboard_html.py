@@ -182,11 +182,15 @@ def run_critic_child(report_dir: Path, decision: str, log: list[dict[str, Any]],
         "outputs": outputs,
         "output_sha256": {path: file_sha256(report_dir / path) for path in outputs if (report_dir / path).exists()},
     }
+    critic_decision = load_json(report_dir / "analysis" / "critic_decision.json", {})
+    if critic_decision:
+        entry["critic_pass"] = critic_decision.get("pass")
+        entry["critic_score"] = critic_decision.get("score")
     log.append(entry)
     write_invocation_log(report_dir, log)
     if result.returncode != 0:
         raise RuntimeError(f"Critic child failed: {result.stderr or result.stdout}")
-    return load_json(report_dir / "analysis" / "critic_decision.json", {})
+    return critic_decision
 
 
 def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> str:
@@ -771,8 +775,20 @@ def child_body_fragment(html_doc: str) -> str:
     return "\n".join(part for part in [styles, body, scripts] if part)
 
 
-def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> None:
-    write_basic_site_assets(report_dir, build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS))
+def delivery_readiness_summary(readiness: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "path": "data/normalized/data_readiness_report.json",
+        "acceptance_ready": readiness.get("acceptance_ready"),
+        "sample_class": readiness.get("sample_class"),
+        "depth": readiness.get("depth"),
+        "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
+        "warning_count": len(readiness.get("warnings") or []),
+        "counts": readiness.get("counts") or {},
+    }
+
+
+def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, readiness: dict[str, Any] | None = None) -> None:
+    write_basic_site_assets(report_dir, build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS, readiness))
 
 
 def primary_source_id(data_pack: dict[str, Any]) -> str:
@@ -1310,6 +1326,9 @@ def render(report_dir: Path) -> Path:
         (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(compat_index_html, data_pack), encoding="utf-8")
         invocation_log = run_child_report_renderers(report_dir)
         critic_decision = run_critic_child(report_dir, decision, invocation_log, draft_review_path, draft_plan_path)
+    if critic_decision.get("pass") is not True:
+        score = critic_decision.get("score")
+        raise RuntimeError(f"critic did not pass after refinement: score={score}")
     delivery = load_json(report_dir / "output" / "delivery_result.json", delivery)
     rendered_docs = {
         "index": (report_dir / HTML_REPORTS["index"]).read_text(encoding="utf-8"),
@@ -1317,9 +1336,11 @@ def render(report_dir: Path) -> Path:
         "lifecycle_strategy": (report_dir / HTML_REPORTS["lifecycle_strategy"]).read_text(encoding="utf-8"),
         "demand_gap": (report_dir / HTML_REPORTS["demand_gap"]).read_text(encoding="utf-8"),
     }
-    write_site_assets(report_dir, data_pack, analysis_plan, str(decision))
+    write_site_assets(report_dir, data_pack, analysis_plan, str(decision), readiness)
     write_report_brief(report_dir, data_pack, analysis_plan, str(decision), CHILD_SKILLS)
-    delivery["cleaning_summary"] = build_site_data(data_pack, analysis_plan, str(decision), CHILD_SKILLS)["cleaning_summary"]
+    site_data = build_site_data(data_pack, analysis_plan, str(decision), CHILD_SKILLS, readiness)
+    delivery["cleaning_summary"] = site_data["cleaning_summary"]
+    delivery["data_readiness"] = delivery_readiness_summary(readiness)
     critic_review = load_json(report_dir / "analysis" / "critic_review.json", {})
     delivery["critic_review"] = {
         "path": "analysis/critic_review.json",
