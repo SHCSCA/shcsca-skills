@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import re
 import sys
@@ -434,6 +435,51 @@ def raw_english_client_values(data_pack: dict[str, Any]) -> set[str]:
     return values
 
 
+def allowed_english_keyword_text(data_pack: dict[str, Any]) -> str:
+    values: list[str] = []
+    research_object = data_pack.get("research_object") or {}
+    if isinstance(research_object, dict):
+        values.append(normalized_visible_text(research_object.get("value")))
+        values.extend(normalized_visible_text(item) for item in (research_object.get("seed_keywords") or []))
+    elif research_object:
+        values.append(normalized_visible_text(research_object))
+    for keyword in data_pack.get("keywords") or []:
+        if isinstance(keyword, dict):
+            values.append(normalized_visible_text(keyword.get("keyword")))
+    return " | ".join(value.casefold() for value in values if value)
+
+
+def normalized_visible_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def raw_english_client_fragments(data_pack: dict[str, Any]) -> set[str]:
+    fragments: set[str] = set()
+    allowed_keywords = allowed_english_keyword_text(data_pack)
+    for value in raw_english_client_values(data_pack):
+        text = normalized_visible_text(value)
+        if not text or contains_cjk(text):
+            continue
+        words = re.findall(r"[A-Za-z][A-Za-z']+", text)
+        if len(words) >= 3:
+            if text.casefold() not in allowed_keywords:
+                fragments.add(text)
+            for size in range(3, min(8, len(words)) + 1):
+                for idx in range(0, len(words) - size + 1):
+                    fragment = " ".join(words[idx : idx + size])
+                    if len(fragment) >= 12 and fragment.casefold() not in allowed_keywords:
+                        fragments.add(fragment)
+    return fragments
+
+
+def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str, Any], artifact_label: str) -> None:
+    normalized_text = normalized_visible_text(text)
+    normalized_unescaped = normalized_visible_text(html.unescape(text))
+    for fragment in raw_english_client_fragments(data_pack):
+        if fragment in normalized_text or fragment in normalized_unescaped:
+            raise ValidationError(f"{rel_path} customer {artifact_label} leaks raw English review/client text fragment: {fragment[:72]}")
+
+
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
         require(literal not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {literal}")
@@ -446,8 +492,7 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
     for value in technical_values_from_data_pack(data_pack):
         require(value not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {value}")
 
-    for value in raw_english_client_values(data_pack):
-        require(value not in html_doc, f"{rel_path} customer HTML leaks raw English review/client text: {value[:72]}")
+    validate_no_raw_english_leaks(rel_path, html_doc, data_pack, "HTML")
 
     for term in CUSTOMER_HTML_REQUIRED_TERMS:
         require(term in html_doc, f"{rel_path} customer HTML missing required analysis term: {term}")
@@ -466,8 +511,7 @@ def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[st
             raise ValidationError(f"{rel_path} customer asset leaks technical identifier: {match.group(0)}")
     for value in technical_values_from_data_pack(data_pack):
         require(value not in text, f"{rel_path} customer asset leaks technical identifier: {value}")
-    for value in raw_english_client_values(data_pack):
-        require(value not in text, f"{rel_path} customer asset leaks raw English review/client text: {value[:72]}")
+    validate_no_raw_english_leaks(rel_path, text, data_pack, "asset")
 
 
 def validate_customer_visible_assets(report_dir: Path, data_pack: dict[str, Any]) -> None:

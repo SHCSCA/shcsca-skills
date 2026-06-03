@@ -425,7 +425,7 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             trend_text = f"{num(trend.get('first'))} → {num(trend.get('last'))}，增长 {trend.get('growth')}"
         traffic_tags = "".join(tag(kw.get("keyword")) for kw in traffic.get(asin, [])[:6])
         variations = product.get("variation_samples") or []
-        variation_text = "；".join(truncate(item, 42) for item in variations[:3]) or "待补样本"
+        variation_text = f"已识别 {len(variations)} 个颜色/尺寸组合，原始属性保留在审计数据。" if variations else "待补样本"
         image = product.get("image_url") or ""
         image_html = f"<img src=\"{esc(image)}\" alt=\"{esc(asin)}\">" if image else "<div></div>"
         cards.append(

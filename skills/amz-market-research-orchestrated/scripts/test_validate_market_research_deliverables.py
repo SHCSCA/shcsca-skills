@@ -122,7 +122,7 @@ def make_valid_report(root):
                     "confidence": "medium",
                 },
             ],
-            "products": [{"asin": "B0TEST1234", "title": "AI Plush Toy", "source_id": "src_001", "provider": "sorftime"}],
+            "products": [{"asin": "B0TEST1234", "title": "Interactive AI Plush Toy", "source_id": "src_001", "provider": "sorftime"}],
             "keywords": [
                 {"keyword": f"ai plush keyword {idx}", "source_id": "src_001", "provider": "sorftime"}
                 for idx in range(1000)
@@ -567,6 +567,30 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("raw English review", result.stderr + result.stdout)
 
+    def test_rejects_raw_english_review_fragment_in_customer_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "demand-gap-report.html"
+            write_text(html_path, html_path.read_text(encoding="utf-8") + "<p>stopped working after two days</p>")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("raw English review/client text fragment", result.stderr + result.stdout)
+
+    def test_rejects_html_escaped_raw_english_review_fragment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "demand-gap-report.html"
+            write_text(html_path, html_path.read_text(encoding="utf-8") + "<p>privacy&nbsp;policy&nbsp;is&nbsp;confusing</p>")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("raw English review/client text fragment", result.stderr + result.stdout)
+
     def test_rejects_raw_english_product_title_copied_into_customer_html(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -578,7 +602,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             result = self.run_validator(report_dir)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("raw English review/client text", result.stderr + result.stdout)
+            self.assertIn("raw English review/client text fragment", result.stderr + result.stdout)
 
     def test_rejects_duplicate_product_key_after_normalization(self):
         with tempfile.TemporaryDirectory() as tmp:

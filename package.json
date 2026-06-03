@@ -1,0 +1,10 @@
+{
+  "name": "shcsca-skills",
+  "private": true,
+  "scripts": {
+    "test:amz-browser": "python skills/amz-market-research-orchestrated/scripts/test_browser_report_smoke.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
