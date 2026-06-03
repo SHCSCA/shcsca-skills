@@ -51,6 +51,7 @@ python skills/amz-market-research-orchestrated/scripts/test_report_renderers.py
 python skills/amz-market-research-orchestrated/scripts/test_critic_runner.py
 python skills/amz-market-research-orchestrated/scripts/test_site_assets.py
 python skills/amz-market-research-orchestrated/scripts/test_site_interactions.py
+python skills/amz-market-research-orchestrated/scripts/test_check_data_readiness.py
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_keywords.py
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_reviews.py
 python skills/amz-market-research-orchestrated/scripts/test_normalize_data_pack.py
@@ -62,6 +63,24 @@ python skills/amz-market-research-orchestrated/scripts/test_validate_market_rese
 These tests build temporary report directories and verify that Sorftime keyword/review collection parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, customer copy and customer safety redaction stay intact, critic refinement records failed and passing rounds, the three child skills exist under the orchestrated skill, the renderer writes the portable static site bundle plus a compatibility entry, shared CSS/JS assets are local, `report.js` behaviors execute against a minimal DOM, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, customer HTML leaks, and incomplete report sections.
 
 The shared site assets intentionally borrow the local downloaded report templates as visual baselines: `downloadpage/143101` for market depth, `downloadpage/143511` for lifecycle strategy, and `downloadpage/143645` for demand gap. The generator extracts reusable CSS/JS patterns into local `report.css` and `report.js`; it does not ship `_next` chunks, CDN URLs, iframe shells, or hard-coded sample report data.
+
+## check_data_readiness.py
+
+Checks whether a Data Pack is ready to enter standard/deep report generation:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/<task_id> --depth standard --write
+```
+
+The script reads `data/normalized/normalized_data_pack.json` when present, otherwise `data/data_pack.json`, and writes `data/normalized/data_readiness_report.json` with `acceptance_ready`, `sample_class`, `blocking_gaps`, `warnings`, entity counts, and collector commands. Standard/deep runs are blocked when source lineage is empty, product samples are empty, or keyword samples are below 1000. Review, Web, TikTok, and supplier gaps are warnings so the report can degrade honestly when the final validator still accepts the structure and the limitations are visible. Review recommendations are 80 samples for standard reports and 200 samples for deep reports.
+
+When `sample_class=non_acceptance_sample`, keep the directory only as historical/demo evidence. Do not render or claim a completed client deliverable from it, even if older delivery or critic files contain `status=complete` or `pass=true`.
+
+Exit codes:
+
+- `0`: ready for the next step.
+- `1`: unreadable or invalid Data Pack.
+- `2`: valid Data Pack but not ready for standard/deep report generation.
 
 ## Rendering module boundaries
 

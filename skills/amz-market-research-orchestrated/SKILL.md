@@ -137,11 +137,20 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir reports/{task_id} --min-keywords 1200
 ```
 
+采集完成但进入归一化/渲染前，必须先运行数据准备度门禁：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
+```
+
+若输出 `acceptance_ready=false`，不得继续生成客户版三报告；只能继续真实采集或把当前目录标为历史/演示样本。尤其当产品池为 0 或关键词样本不足 1000 时，禁止用 AI 推断、模板样例或重复数据补足。
+
 采集策略：
 
 - `category_keywords` 按类目 nodeId 分页采集，Sorftime 每页 20 条。
 - `keyword_extends` 对主关键词、核心子方向词、已有高相关词分页采集。
 - 目标采集量默认 1200 条，给去重留余量；归一化后 `data_pack.keywords` 不得少于 1000 条。
+- 评论样本是置信度门槛：标准版建议 80 条以上，深度版建议 200 条以上；不足时 VOC 可降级展示，但不能写精确比例或强结论。
 - 原始 MCP 返回必须保存到 `data/raw/`，采集摘要保存到 `data/normalized/keyword_collection_summary.json`。
 
 所有原始返回保存到：
@@ -210,6 +219,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 - 噪声分层：核心关键词、相邻泛流量、ASIN 反查流量词必须分开展示，不能把泛词流量当成品类机会。
 - 幂等 baseline：首次归一化写入 `data/normalized/normalization_baseline.json`，后续反复渲染不得冲掉原始样本数和去重收益。
 - 样本门槛：标准版和深度版归一化后关键词不得少于 1000 条；不足时继续分页采集或在 `data_gaps` 标注为未达交付标准。
+- 准备度门槛：`data/normalized/data_readiness_report.json.acceptance_ready` 必须为 `true` 才能进入三报告渲染；`non_acceptance_sample` 只能作为历史/演示样本保留，不能用于交付宣称。
 
 标准化结果保存到：
 
@@ -313,19 +323,25 @@ HTML 主体必须使用真实结构化组件：
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir reports/{task_id} --min-keywords 1200
 ```
 
-3. 运行交叉验证 / 去重 / 中文映射：
+3. 运行数据准备度门禁，失败则停止交付生成并继续采集：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
+```
+
+4. 运行交叉验证 / 去重 / 中文映射：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir reports/{task_id}
 ```
 
-4. 再运行结构化 HTML 渲染器：
+5. 再运行结构化 HTML 渲染器：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py --dir reports/{task_id}
 ```
 
-5. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
+6. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
 
 完成后运行：
 

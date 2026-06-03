@@ -318,6 +318,26 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             validation = self.run_validator(report_dir)
             self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)
 
+    def test_renderer_stops_when_data_readiness_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+            data_pack_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_pack_path.read_text(encoding="utf-8"))
+            data_pack["products"] = []
+            data_pack["keywords"] = []
+            write_json(data_pack_path, data_pack)
+
+            result = self.run_renderer(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("data readiness failed before rendering", result.stderr + result.stdout)
+            readiness_path = report_dir / "data" / "normalized" / "data_readiness_report.json"
+            self.assertTrue(readiness_path.exists())
+            readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+            self.assertFalse(readiness["acceptance_ready"])
+            self.assertEqual(readiness["sample_class"], "non_acceptance_sample")
+
     def test_renderer_downgrades_partial_go_to_watch(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)

@@ -15,6 +15,7 @@ Required evidence:
 - `OrchestrationBrief.task_purpose.primary = new_market_entry`
 - Amazon keyword, product pool, competitor, review, and trend evidence from Sorftime
 - Standard/deep runs collect at least 1000 deduped keyword rows after normalization
+- `check_data_readiness.py --write` produces `acceptance_ready=true` and `sample_class=acceptance_sample`
 - TikTok similar product or explicit TikTok data gap
 - 1688 similar product or explicit supply data gap
 - Firecrawl public sources for reports, brand/review/policy evidence
@@ -54,6 +55,8 @@ Required evidence:
 - Final decision confidence is reduced when the missing module affects the purpose
 - `validate_market_research_deliverables.py` still passes if lineage and required files are intact
 
+This degradation scenario does not apply to empty source lineage, empty product samples, or keyword depth below 1000 in standard/deep runs. Those are readiness blockers and must produce `non_acceptance_sample` rather than a completed client report.
+
 ## Scenario 4: Three-Part Executive HTML Bundle
 
 Input:
@@ -77,6 +80,7 @@ Required evidence:
 - Competitor, demand, supplier, TikTok, web, SKU, and KANO/JTBD evidence are rendered as customer-readable insight tables
 - Customer HTML includes `证据强度`, `样本覆盖`, `数据缺口`, and `建议动作`
 - Customer HTML does not display `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables
+- `data/normalized/data_readiness_report.json` is present with `acceptance_ready=true`
 - Data Pack still contains at least 1000 deduped keyword samples for standard/deep reports
 - Competitor and VOC tables use Chinese-facing positioning, review summaries, themes, sentiment, and recommended actions rather than raw English titles/comments
 - Data coverage visibly shows cross-validation and dedupe counts
@@ -91,9 +95,12 @@ Required evidence:
 Every real run must pass:
 
 ```bash
+python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
 python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/{task_id}
 ```
 
 Passing the validator does not prove the business conclusion is correct; it proves the report is structurally auditable.
 
-For HTML, passing the validator also proves the bundle is not a raw Markdown shell, contains the required three-report modules, and meets the 1000-keyword minimum for standard/deep reports.
+For HTML, passing the validator also proves the bundle is not a raw Markdown shell, contains the required three-report modules, passes data readiness, and meets the 1000-keyword minimum for standard/deep reports.
+
+Historical directories that fail readiness may remain in the repository or local reports folder only as `non_acceptance_sample` evidence. They must not be used to claim delivery completion, even if older `delivery_result.json` or `critic_review.json` files contain `complete` or `pass=true`.

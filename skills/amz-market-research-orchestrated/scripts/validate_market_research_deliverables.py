@@ -22,6 +22,7 @@ from normalize_data_pack import (
     tiktok_video_dedupe_key,
     web_document_dedupe_key,
 )
+from check_data_readiness import assess as assess_data_readiness
 from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, INTERACTIVE_FEATURES as SITE_INTERACTIVE_FEATURES, SITE_ASSETS
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -355,6 +356,22 @@ def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, 
         not (status == "partial" and strong_decision),
         "partial delivery status cannot carry an unconditional Go decision",
     )
+
+
+def validate_data_readiness(report_dir: Path) -> None:
+    readiness = assess_data_readiness(report_dir, "auto")
+    modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
+    require(
+        readiness.get("acceptance_ready") is True,
+        f"data readiness must pass before final delivery validation: {modules}",
+    )
+
+    recorded_path = report_dir / "data" / "normalized" / "data_readiness_report.json"
+    if recorded_path.exists():
+        recorded = load_json(recorded_path)
+        require(isinstance(recorded, dict), "data_readiness_report.json must be an object")
+        require(recorded.get("acceptance_ready") is True, "data_readiness_report.json cannot be false for final delivery validation")
+        require(recorded.get("sample_class") == "acceptance_sample", "data_readiness_report.json sample_class must be acceptance_sample")
 
 
 def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) -> None:
@@ -819,6 +836,7 @@ def validate(report_dir: Path) -> None:
 
     source_ids = validate_sources(data_pack)
     validate_entity_lineage(data_pack, source_ids)
+    validate_data_readiness(report_dir)
     validate_normalized_data_pack_consistency(report_dir, data_pack)
     validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)

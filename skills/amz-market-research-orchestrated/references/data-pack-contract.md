@@ -77,6 +77,26 @@ For standard and deep research runs, keyword depth is a hard delivery gate:
 - keep at least 1000 deduped keyword rows in `data_pack.keywords`,
 - save the paginated collection summary to `data/normalized/keyword_collection_summary.json`.
 
+Before child report generation, run the readiness gate:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
+```
+
+The generated `data/normalized/data_readiness_report.json` must have:
+
+- `acceptance_ready = true`,
+- `sample_class = acceptance_sample`,
+- no `blocking_gaps`.
+
+Standard/deep runs are `non_acceptance_sample` when source lineage is empty, product samples are empty, or deduped keyword samples are below 1000. In that state the report directory may be retained as a historical or demo sample, but it must not be presented as a completed client deliverable. Do not use AI-generated placeholder entities, copied template rows, or duplicated rows to satisfy sample counts.
+
+Review depth is a confidence gate rather than a structural blocker:
+
+- standard reports should target at least 80 review samples,
+- deep reports should target at least 200 review samples,
+- below those targets, VOC sections must avoid precise percentages and the quality score must remain capped.
+
 ## Normalization Object
 
 ```json

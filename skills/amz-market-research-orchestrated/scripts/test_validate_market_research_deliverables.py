@@ -675,6 +675,32 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("at least 1000", result.stderr + result.stdout)
 
+    def test_rejects_complete_delivery_when_data_readiness_is_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            data_pack_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_pack_path.read_text(encoding="utf-8"))
+            data_pack["products"] = []
+            data_pack["normalization"]["after_counts"]["products"] = 0
+            data_pack["normalization"]["removed_counts"]["products"] = data_pack["normalization"]["before_counts"]["products"]
+            data_pack["cleaning_summary"] = data_pack["normalization"]
+            write_json(data_pack_path, data_pack)
+            write_json(report_dir / "data" / "normalized" / "normalized_data_pack.json", data_pack)
+            write_json(
+                report_dir / "data" / "normalized" / "data_readiness_report.json",
+                {
+                    "acceptance_ready": False,
+                    "sample_class": "non_acceptance_sample",
+                    "blocking_gaps": [{"module": "product_sample_depth", "current": 0, "required": 1}],
+                },
+            )
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("data readiness must pass", result.stderr + result.stdout)
+
     def test_entity_without_source_id_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)

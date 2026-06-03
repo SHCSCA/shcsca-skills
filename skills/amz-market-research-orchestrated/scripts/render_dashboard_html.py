@@ -50,6 +50,7 @@ from html_components import (
     truncate,
 )
 from normalize_data_pack import ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
+from check_data_readiness import assess as assess_data_readiness, write_json as write_readiness_json
 from report_renderers import build_report_documents
 from site_assets import (
     HTML_BUNDLE_DIR,
@@ -1229,6 +1230,11 @@ def renderer_callbacks() -> dict[str, Any]:
 
 def render(report_dir: Path) -> Path:
     normalize_data_pack(report_dir)
+    readiness = assess_data_readiness(report_dir, "auto")
+    write_readiness_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
+    if not readiness["acceptance_ready"]:
+        modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
+        raise RuntimeError(f"data readiness failed before rendering: {modules}")
     data_pack = load_json(report_dir / "data" / "data_pack.json", {})
     write_lineage_markdown(data_pack, report_dir / "data" / "lineage.md")
     analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
@@ -1315,7 +1321,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render the v2 three-report HTML bundle for amz-market-research-orchestrated reports.")
     parser.add_argument("--dir", required=True, help="Report directory containing data/ and analysis/.")
     args = parser.parse_args(argv)
-    output_path = render(Path(args.dir))
+    try:
+        output_path = render(Path(args.dir))
+    except RuntimeError as exc:
+        print(f"render_failed: {exc}", file=sys.stderr)
+        return 1
     print(output_path)
     return 0
 
