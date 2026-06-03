@@ -83,6 +83,7 @@ Required evidence:
 - Customer HTML includes `证据强度`, `样本覆盖`, `数据缺口`, and `建议动作`
 - Customer HTML does not display `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables
 - `data/normalized/data_readiness_report.json` is present with `acceptance_ready=true`
+- `analysis/critic_summary.md` is present and states readiness, critic score, final decision, unresolved findings, and failed-critic delivery guardrail
 - Data Pack still contains at least 1000 deduped keyword samples for standard/deep reports
 - Competitor and VOC tables use Chinese-facing positioning, review summaries, themes, sentiment, and recommended actions rather than raw English titles/comments
 - Data coverage visibly shows cross-validation and dedupe counts

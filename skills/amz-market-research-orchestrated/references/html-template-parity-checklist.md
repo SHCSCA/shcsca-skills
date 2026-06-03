@@ -1,0 +1,126 @@
+# HTML Template Parity Checklist
+
+This checklist turns the user's three downloaded HTML templates into enforceable design and interaction expectations for `amz-market-research-orchestrated`. It is not a request to copy those pages. The orchestrator must extract layout, component, and interaction patterns into portable local `report.css` and `report.js`, then render real report data from the normalized data pack.
+
+## Source Mapping
+
+| Report | Download folder | Local baseline | Required output |
+|---|---|---|---|
+| Market depth | `C:\Users\wz\Downloads\downloadpage\143101` | `references/template-baseline-manifest.json.baselines.market_depth` | `output/html_reports/market-depth-report.html` |
+| Lifecycle strategy | `C:\Users\wz\Downloads\downloadpage\143511` | `references/template-baseline-manifest.json.baselines.lifecycle_strategy` | `output/html_reports/lifecycle-strategy-report.html` |
+| Demand gap | `C:\Users\wz\Downloads\downloadpage\143645` | `references/template-baseline-manifest.json.baselines.demand_gap` | `output/html_reports/demand-gap-report.html` |
+
+## Global Rules
+
+- Do not copy `_next/static/chunks`, iframe shells, CDN scripts, or hard-coded sample data.
+- Do not expose ASIN, `source_id`, provider, raw path, or raw English review text in customer HTML.
+- Keep all shared runtime assets local under `output/html_reports/assets/`.
+- Preserve mobile behavior through CSS media rules and JS that does not depend on a build step.
+- Use generated view models from `normalized_data_pack.json`; never fill visual components with placeholder template data.
+
+## Market Depth Parity
+
+Baseline folder: `143101`.
+
+Required section density:
+
+- Executive market verdict and Go / Watch / No-Go summary.
+- TAM/SAM/SOM or market sizing equivalent when evidence exists; otherwise explicit data gap.
+- Demand trend and keyword structure.
+- Price band, competitor matrix, and opportunity matrix.
+- VOC pain points and benchmark competitor teardown.
+- TikTok signal and 1688 supply-chain signal.
+- Risk and action summary.
+
+Required components:
+
+- `report-header`, `header-meta`, `kpi-grid`, `kpi-card`.
+- `chart-container`, `mini-chart`, radar/bar/bubble fallback semantics.
+- `comp-table` or equivalent competitor evidence table.
+- `voc-grid`, `deep-dive-grid`, `comp-deep-card`.
+- `opportunity-matrix`.
+- Evidence drawer for methodology and limitations.
+
+Required interactions:
+
+- Section navigation.
+- Table search and sorting.
+- Filter chips for evidence or competitor group.
+- Chart rows linked to evidence tables where possible.
+
+## Lifecycle Strategy Parity
+
+Baseline folder: `143511`.
+
+Required section density:
+
+- Strategic dashboard.
+- Persona / segment grid.
+- Lifecycle journey or timeline.
+- Four-dimensional product ecosystem.
+- SKU / expansion pool with priority.
+- Bundle strategy.
+- 30 / 60 / 90 day roadmap.
+- Risk matrix.
+- Market validation summary.
+
+Required components:
+
+- `persona-grid`, `timeline-grid`, `bundle-grid`, `phase-grid`, `risk-grid`.
+- `sku-table-wrap`, sortable SKU table, priority bars.
+- `type-badge`, `supply-badge`, filter bar and filter buttons.
+- Bundle cards with price, savings, and dependency assumptions.
+
+Required interactions:
+
+- SKU table sort.
+- SKU or bundle filtering.
+- Tabs for roadmap / bundle / risk groups.
+- Collapsible evidence details for supply-chain and cost assumptions.
+
+## Demand Gap Parity
+
+Baseline folder: `143645`.
+
+Required section density:
+
+- Research object overview.
+- Decision board.
+- `$APPEALS` pain map.
+- Satisfaction gap.
+- KANO x JTBD classification.
+- User voice theater.
+- Need priority table.
+- Conversion opportunity actions.
+
+Required components:
+
+- `mode-r3` or equivalent demand-gap visual mode.
+- Dark or high-contrast report header when used by the template family.
+- `kpi-grid`, `chart`, `chart-interpretation`.
+- `quote-cn`, localized VOC cards, warning and opportunity callouts.
+- Prioritization table with evidence strength and confidence.
+
+Required interactions:
+
+- VOC tabs or filters.
+- Expandable quote/evidence drawers.
+- Radar or rose chart fallback rendered without CDN.
+- Mobile single-column layout with no text overlap.
+
+## Acceptance Checklist
+
+Before claiming template parity:
+
+- `template-baseline-manifest.json` lists all three source folders and excluded assets.
+- `assets/report.css` contains shared selectors for every required component family above.
+- `assets/report.js` contains local hooks for nav, search, sort, tabs, filters, drawers, and chart fallbacks.
+- `validate_market_research_deliverables.py` rejects missing static assets, missing required child sections, broken child links, non-portable paths, and customer HTML leaks.
+- At least one rendered acceptance sample passes the validator with all three child reports present.
+- A human visual review confirms the rendered reports carry the same density and interaction shape as the three downloaded baselines without copying sample data.
+
+## Known Remaining Gaps
+
+- The current validator checks component presence and interaction hooks, but it does not yet perform pixel-level visual parity.
+- The current repository has template manifests and local assets, but a fresh browser screenshot comparison against the three downloaded folders is still pending.
+- Real-data parity is not proven until `run_acceptance_proof.py` passes on an `acceptance_sample` generated from fresh Sorftime-backed data.

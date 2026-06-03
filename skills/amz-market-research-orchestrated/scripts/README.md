@@ -19,9 +19,13 @@ reports/<task_id>/
     data_pack.json
     normalized/
       normalized_data_pack.json
+      data_readiness_report.json
     lineage.md
   analysis/
     analysis_plan.json
+    critic_review.json
+    refinement_plan.json
+    critic_summary.md
   output/
     report.html                  # compatibility entry, links into html_reports/
     html_reports/
@@ -97,7 +101,7 @@ Supporting modules keep the renderer small and auditable:
 - `view_model_builder.py`: customer-safe view models and `report-data.json` payloads.
 - `report_renderers.py`: pure document assembly for the index, compatibility index, and three child reports.
 - `delivery_writer.py`: `lineage.md`, `report_brief.json`, and `delivery_result.json` writers.
-- `critic_runner.py`: asynchronous-style critic/refinement artifacts and failed-case logging.
+- `critic_runner.py`: asynchronous-style critic/refinement artifacts, operator-facing `critic_summary.md`, and failed-case logging.
 - `site_assets.py`: shared CSS, JS, asset paths, declared interactive features, and template-baseline selectors from the three downloaded HTML report references.
 
 ## collect_sorftime_keywords.py

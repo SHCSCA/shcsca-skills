@@ -362,6 +362,7 @@ def make_valid_report(root):
             "critic_review": {
                 "path": "analysis/critic_review.json",
                 "refinement_plan": "analysis/refinement_plan.json",
+                "summary": "analysis/critic_summary.md",
                 "pass": True,
                 "score": 82,
                 "max_refinement_rounds": 2,
@@ -422,6 +423,17 @@ def make_valid_report(root):
             "constraints": ["Do not recollect data during critic refinement."],
         },
     )
+    write_text(
+        root / "analysis" / "critic_summary.md",
+        "# Critic Summary\n\n"
+        "- readiness: `pass`\n"
+        "- final_pass: `true`\n"
+        "- final_score: `82`\n"
+        "- final_decision: `Watch`\n"
+        "- remaining_findings: `none`\n\n"
+        "## Guardrails\n\n"
+        "- If final_pass is false, the orchestrator must not claim delivery completion.\n",
+    )
     write_json(
         root / "analysis" / "child_skill_invocation_log.json",
         [
@@ -432,7 +444,7 @@ def make_valid_report(root):
                 root,
                 "child_skills/market-research-critic",
                 "child_skills/market-research-critic/scripts/run_critic.py",
-                outputs=["analysis/critic_review.json", "analysis/refinement_plan.json"],
+                outputs=["analysis/critic_review.json", "analysis/refinement_plan.json", "analysis/critic_summary.md"],
                 dispatch_mode="subprocess_critic_child",
             ),
         ],

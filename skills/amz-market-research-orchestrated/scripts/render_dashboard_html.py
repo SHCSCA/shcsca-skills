@@ -166,7 +166,7 @@ def run_critic_child(report_dir: Path, decision: str, log: list[dict[str, Any]],
     started_at = utc_now()
     result = subprocess.run(command, text=True, capture_output=True, check=False)
     finished_at = utc_now()
-    outputs = ["analysis/critic_review.json", "analysis/refinement_plan.json", "analysis/critic_decision.json"]
+    outputs = ["analysis/critic_review.json", "analysis/refinement_plan.json", "analysis/critic_summary.md", "analysis/critic_decision.json"]
     entry = {
         "module": CHILD_SKILLS["critic"],
         "renderer": relative_to_skill(CRITIC_RENDERER),
@@ -1345,6 +1345,7 @@ def render(report_dir: Path) -> Path:
     delivery["critic_review"] = {
         "path": "analysis/critic_review.json",
         "refinement_plan": "analysis/refinement_plan.json",
+        "summary": "analysis/critic_summary.md",
         "pass": critic_review["pass"],
         "score": critic_review["score"],
         "max_refinement_rounds": critic_review["max_refinement_rounds"],

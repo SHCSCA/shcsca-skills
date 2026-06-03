@@ -31,6 +31,7 @@ skills/amz-market-research-orchestrated/references/acceptance-scenarios.md
 ```text
 reports/{task_id}/analysis/critic_review.json
 reports/{task_id}/analysis/refinement_plan.json
+reports/{task_id}/analysis/critic_summary.md
 reports/{task_id}/training_data/failed_cases.jsonl
 ```
 
@@ -81,3 +82,5 @@ The critic output must be JSON with these fields:
 ## Refinement Protocol
 
 When the critic fails a draft, the orchestrator may run at most two refinement rounds. A refinement round may update `*_view.json`, child report HTML, `critic_review.json`, and `refinement_plan.json`. It must not recollect data or change the normalized facts unless the user explicitly starts a new data collection run.
+
+Every run must also write `analysis/critic_summary.md` for operator review. The summary must include final pass state, score, grade, readiness state, original decision, final decision, whether the decision was adjusted, unresolved findings, applied refinement operations, and the guardrail that failed critic rounds cannot be delivered as complete.

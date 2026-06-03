@@ -50,6 +50,7 @@ REQUIRED_FILES = [
     "analysis/demand_gap_view.json",
     "analysis/critic_review.json",
     "analysis/refinement_plan.json",
+    "analysis/critic_summary.md",
     "analysis/child_skill_invocation_log.json",
     COMPAT_INDEX_REPORT,
     BUNDLE_INDEX_REPORT,
@@ -785,6 +786,7 @@ def validate_interactive_dom(html_docs: dict[str, str]) -> None:
 def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None:
     review = load_json(report_dir / "analysis/critic_review.json")
     plan = load_json(report_dir / "analysis/refinement_plan.json")
+    summary_text = (report_dir / "analysis/critic_summary.md").read_text(encoding="utf-8")
     require(isinstance(review, dict), "critic_review.json must be an object")
     for key in ["pass", "score", "grade", "blocking_issues", "report_issues", "data_confidence", "suggestions", "refinement_targets"]:
         require(key in review, f"critic_review.json missing {key}")
@@ -803,6 +805,9 @@ def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None
     require(isinstance(plan.get("operations") or [], list), "refinement_plan.json operations must be a list")
     require("data/normalized/normalized_data_pack.json" not in json.dumps(plan.get("refinement_targets") or [], ensure_ascii=False), "refinement targets must not rewrite normalized facts")
     require("data/normalized/normalized_data_pack.json" not in json.dumps(plan.get("operations") or [], ensure_ascii=False), "refinement operations must not rewrite normalized facts")
+    for token in ["# Critic Summary", "readiness:", "final_pass:", "final_score:", "final_decision:", "remaining_findings:", "Guardrails"]:
+        require(token in summary_text, f"critic_summary.md missing {token}")
+    require("must not claim delivery completion" in summary_text, "critic_summary.md must state failed critic rounds cannot be delivered as complete")
     if plan.get("applied_operations"):
         history_path = report_dir / "analysis/refinement_history.jsonl"
         require(history_path.exists(), "applied critic refinements require analysis/refinement_history.jsonl")
@@ -865,7 +870,13 @@ def validate_child_skill_invocation_log(report_dir: Path) -> None:
         else:
             outputs = entry.get("outputs")
             output_sha = entry.get("output_sha256")
-            require(isinstance(outputs, list) and "analysis/critic_review.json" in outputs and "analysis/refinement_plan.json" in outputs, "critic invocation log missing outputs")
+            require(
+                isinstance(outputs, list)
+                and "analysis/critic_review.json" in outputs
+                and "analysis/refinement_plan.json" in outputs
+                and "analysis/critic_summary.md" in outputs,
+                "critic invocation log missing outputs",
+            )
             require(isinstance(output_sha, dict), "critic invocation log missing output_sha256 map")
             for output in outputs:
                 output_path = report_dir / str(output)
@@ -899,6 +910,7 @@ def validate_delivery(report_dir: Path) -> None:
     require(isinstance(critic, dict), "delivery_result.json missing critic_review summary")
     require(critic.get("path") == "analysis/critic_review.json", "delivery_result.json critic_review.path mismatch")
     require(critic.get("refinement_plan") == "analysis/refinement_plan.json", "delivery_result.json critic_review.refinement_plan mismatch")
+    require(critic.get("summary") == "analysis/critic_summary.md", "delivery_result.json critic_review.summary mismatch")
     require(critic.get("max_refinement_rounds") == 2, "delivery_result.json critic max_refinement_rounds must be 2")
     require(not (critic.get("pass") is True and not delivery_readiness.get("acceptance_ready")), "critic pass cannot override failed data readiness")
     features = set(delivery.get("interactive_features") or [])

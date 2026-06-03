@@ -43,7 +43,7 @@ CHILD_SKILL_INVOCATION_SPECS = {
             "output/html_reports/lifecycle-strategy-report.html",
             "output/html_reports/demand-gap-report.html",
         ],
-        "outputs": ["analysis/critic_review.json", "analysis/refinement_plan.json"],
+        "outputs": ["analysis/critic_review.json", "analysis/refinement_plan.json", "analysis/critic_summary.md"],
         "renderer": "child_skills/market-research-critic/scripts/run_critic.py",
         "template": "child_skills/market-research-critic/references/critic-contract.md",
         "dispatch_mode": "subprocess_critic_child",

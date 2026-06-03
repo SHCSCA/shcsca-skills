@@ -30,7 +30,7 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 7. 调用内部 critic 模块输出 `critic_review.json` 和 `refinement_plan.json`；如不通过，最多做两轮差量修正，不重新采集、不改写事实源。
 8. 用脚本校验交付物，确认报告可追溯、可复核、可离线打开，且客户可见资产不泄露技术字段。
 
-详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)，样本登记见 [sample-coverage-matrix.md](references/sample-coverage-matrix.md)，100 分改进路线见 [100-point-improvement-plan.md](references/100-point-improvement-plan.md)。
+详细工具映射见 [sorftime-firecrawl-tool-map.md](references/sorftime-firecrawl-tool-map.md)，数据契约见 [data-pack-contract.md](references/data-pack-contract.md)，HTML 设计规范见 [html-report-design-contract.md](references/html-report-design-contract.md)，模板 parity 清单见 [html-template-parity-checklist.md](references/html-template-parity-checklist.md)，验收场景见 [acceptance-scenarios.md](references/acceptance-scenarios.md)，样本登记见 [sample-coverage-matrix.md](references/sample-coverage-matrix.md)，100 分改进路线见 [100-point-improvement-plan.md](references/100-point-improvement-plan.md)。
 
 ## 触发场景
 

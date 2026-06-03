@@ -313,6 +313,88 @@ def apply_refinement_plan(delivery: dict[str, Any], plan: dict[str, Any], decisi
     return next_decision
 
 
+def readiness_label(delivery: dict[str, Any]) -> str:
+    readiness = delivery.get("data_readiness") or {}
+    if isinstance(readiness, dict) and "acceptance_ready" in readiness:
+        return "pass" if readiness.get("acceptance_ready") is True else "fail"
+    return "not_recorded"
+
+
+def write_critic_summary(
+    analysis_dir: Path,
+    data_pack: dict[str, Any],
+    delivery: dict[str, Any],
+    final_review: dict[str, Any],
+    final_plan: dict[str, Any],
+    *,
+    draft_review: dict[str, Any] | None = None,
+) -> None:
+    adjustment = delivery.get("decision_adjustment") or {}
+    operations = final_plan.get("applied_operations") or final_plan.get("operations") or []
+    remaining = final_review.get("remaining_findings") or []
+    resolved = final_review.get("resolved_findings") or []
+    lines = [
+        "# Critic Summary",
+        "",
+        f"- task_id: `{data_pack.get('task_id') or 'unknown'}`",
+        f"- readiness: `{readiness_label(delivery)}`",
+        f"- final_pass: `{str(final_review.get('pass')).lower()}`",
+        f"- final_score: `{final_review.get('score')}`",
+        f"- final_grade: `{final_review.get('grade')}`",
+        f"- round_id: `{final_review.get('round_id')}`",
+        f"- original_decision: `{delivery.get('original_decision') or delivery.get('decision') or 'unknown'}`",
+        f"- final_decision: `{delivery.get('decision') or 'unknown'}`",
+        f"- decision_adjusted: `{str(bool(adjustment)).lower()}`",
+        "",
+        "## Decision Adjustment",
+        "",
+    ]
+    if adjustment:
+        lines.extend(
+            [
+                f"- from: `{adjustment.get('from')}`",
+                f"- to: `{adjustment.get('to')}`",
+                f"- reasons: `{', '.join(str(item) for item in adjustment.get('reasons') or [])}`",
+                f"- note: {adjustment.get('note') or ''}",
+            ]
+        )
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Findings", ""])
+    if final_review.get("findings"):
+        for item in final_review.get("findings") or []:
+            lines.append(
+                f"- `{item.get('id')}` [{item.get('severity')}] {item.get('problem')} -> {item.get('required_refinement')}"
+            )
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Refinement", ""])
+    if operations:
+        for op in operations:
+            lines.append(
+                f"- `{op.get('type')}` finding=`{op.get('finding_id')}` target=`{op.get('target') or op.get('to') or 'n/a'}` reason=`{op.get('reason') or 'n/a'}`"
+            )
+    else:
+        lines.append("- none")
+    lines.extend(
+        [
+            "",
+            "## Resolution State",
+            "",
+            f"- draft_pass: `{str(draft_review.get('pass')).lower() if draft_review else 'not_recorded'}`",
+            f"- resolved_findings: `{', '.join(str(item) for item in resolved) if resolved else 'none'}`",
+            f"- remaining_findings: `{', '.join(str(item) for item in remaining) if remaining else 'none'}`",
+            "",
+            "## Guardrails",
+            "",
+            "- Critic refinement must not recollect data.",
+            "- Critic refinement must not modify `data/normalized/normalized_data_pack.json`.",
+            "- If final_pass is false, the orchestrator must not claim delivery completion.",
+        ]
+    )
+    (analysis_dir / "critic_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_critic_outputs(
     report_dir: Path,
     data_pack: dict[str, Any],
@@ -350,6 +432,7 @@ def write_critic_outputs(
     analysis_dir.mkdir(parents=True, exist_ok=True)
     (analysis_dir / "critic_review.json").write_text(json.dumps(final_review, ensure_ascii=False, indent=2), encoding="utf-8")
     (analysis_dir / "refinement_plan.json").write_text(json.dumps(final_plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_critic_summary(analysis_dir, data_pack, delivery, final_review, final_plan, draft_review=draft_review)
 
     if draft_review and not draft_review.get("pass"):
         history_path = analysis_dir / "refinement_history.jsonl"

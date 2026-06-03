@@ -103,6 +103,7 @@ def run_proof(report_dir: Path, depth: str, skip_render: bool = False) -> dict[s
         "delivery_status": delivery.get("status"),
         "critic_pass": critic.get("pass"),
         "critic_score": critic.get("score"),
+        "critic_summary": "analysis/critic_summary.md" if (report_dir / "analysis" / "critic_summary.md").exists() else None,
         "steps": steps,
     }
     write_json(report_dir / "output" / "acceptance_proof.json", proof)

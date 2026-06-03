@@ -8,12 +8,12 @@ This document is the controller-level scorecard for pushing `amz-market-research
 |---|---:|---:|---|
 | Architecture split and child skill ownership | 15 | 14 | Main skill owns orchestration; internal child skills own market, lifecycle, demand-gap, and critic modules. |
 | Data cleaning, dedupe, lineage, readiness | 20 | 18 | Normalizer and readiness gate are fail-closed; sample registry now separates acceptance and non-acceptance samples. |
-| Static HTML product quality | 15 | 13 | Three-report bundle, local CSS/JS, interactions, and template baseline are in place; remaining work is visual parity review against fresh real reports. |
-| Critic/refinement loop | 15 | 11 | Critic runs as an internal child process and final validator gates pass state; remaining work is richer asynchronous feedback history and operator-facing scoring. |
+| Static HTML product quality | 15 | 14 | Three-report bundle, local CSS/JS, interactions, template baseline, and parity checklist are in place; remaining work is visual parity review against fresh real reports. |
+| Critic/refinement loop | 15 | 12 | Critic runs as an internal child process, writes operator summaries, and final validator gates pass state; remaining work is richer asynchronous feedback history over real failed cases. |
 | Collector reliability | 15 | 11 | Keyword/review collectors now expose `collection_ready` and failure semantics; remaining work is live Sorftime replay evidence and broader product/category collector coverage. |
 | Customer safety and audit integrity | 10 | 9 | Client HTML rejects technical leaks and raw English review leakage; remaining work is more direct reviewer-facing audit summary. |
 | Verification and sample proof | 10 | 8 | Accepted/negative sample matrix exists and a unified proof command is implemented; remaining work is real-sample proof execution. |
-| **Total** | **100** | **84** | Improved from 78-82, but not yet complete. |
+| **Total** | **100** | **86** | Improved from 78-82, but not yet complete. |
 
 ## Completed Upgrades
 
@@ -23,6 +23,8 @@ This document is the controller-level scorecard for pushing `amz-market-research
 - Added `check_data_readiness.py` as a pre-render gate.
 - Added `data_readiness_report.json`, `delivery_result.data_readiness`, and `report-data.json.readiness` as a three-way status contract.
 - Added `run_acceptance_proof.py` as the operator-facing proof entrypoint for readiness, rendering, validation, and proof artifacts.
+- Added `analysis/critic_summary.md` as an operator-facing critic review summary.
+- Added `html-template-parity-checklist.md` to convert the three downloaded HTML baselines into explicit layout and interaction expectations.
 - Added collector failure semantics:
   - no keyword seed/node writes `keyword_collection_no_seed` and returns exit code `2`;
   - no review ASIN writes `review_collection_no_asin` and returns exit code `2`;
@@ -71,27 +73,26 @@ Acceptance:
 - at least one `non_acceptance_sample` fails closed with an explicit readiness or validator reason;
 - proof output includes enough context for an operator to see whether failure came from data readiness, rendering, critic, or customer-safety validation.
 
-### P1: Critic Feedback History
+### P1: Real Critic Feedback History
 
-The critic loop is present, but the operator-facing feedback stream is still thin.
+The critic loop and operator summary are present. The remaining gap is real failed-case history from production-like runs, not more synthetic cases.
 
 Required upgrade:
 
-- always write a compact `analysis/critic_summary.md`;
-- include readiness, critic score, decision adjustment, unresolved findings, and whether refinement changed customer HTML;
 - keep failed critic cases in `training_data/failed_cases.jsonl` only for real failed rounds.
+- review accumulated failed cases and tune SKILL.md only when a repeated failure pattern appears.
 
-### P2: Visual Parity Review
+### P2: Visual Parity Review Evidence
 
-The generated reports borrow local templates and have browser smoke coverage, but there is no explicit parity checklist against the three reference downloaded templates.
+The generated reports borrow local templates and now have an explicit parity checklist against the three reference downloaded templates. The remaining work is evidence: browser screenshots and human review against fresh rendered reports.
 
-Recommended artifact:
+Current artifact:
 
 ```text
 references/html-template-parity-checklist.md
 ```
 
-It should track market/depth/lifecycle/demand-gap sections, components, interactions, and responsive layout.
+It tracks market/depth/lifecycle/demand-gap sections, components, interactions, and responsive layout.
 
 ### P2: Product/Category Collector Coverage
 

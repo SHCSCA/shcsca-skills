@@ -57,6 +57,11 @@ class CriticRunnerTest(unittest.TestCase):
             self.assertTrue(refinement["applied_operations"])
             self.assertTrue((report_dir / "analysis" / "refinement_history.jsonl").exists())
             self.assertTrue((report_dir / "training_data" / "failed_cases.jsonl").exists())
+            summary = (report_dir / "analysis" / "critic_summary.md").read_text(encoding="utf-8")
+            self.assertIn("# Critic Summary", summary)
+            self.assertIn("final_pass: `true`", summary)
+            self.assertIn("decision_adjusted: `true`", summary)
+            self.assertIn("must not claim delivery completion", summary)
 
     def test_critic_reviews_rendered_html_and_view_models(self):
         data_pack = {
