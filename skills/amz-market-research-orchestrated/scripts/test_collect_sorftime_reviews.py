@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import collect_sorftime_reviews as collector
+
+
+SCRIPT = Path(__file__).with_name("collect_sorftime_reviews.py")
 
 
 def write_json(path: Path, data):
@@ -74,11 +79,53 @@ class CollectSorftimeReviewsTest(unittest.TestCase):
 
             data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["calls"], 2)
+            self.assertEqual(summary["reviews_total"], 1)
             self.assertEqual(summary["reviews_added"], 1)
+            self.assertEqual(summary["min_reviews"], 80)
+            self.assertFalse(summary["collection_ready"])
             self.assertEqual(len(summary["failures"]), 1)
             self.assertEqual(data_pack["reviews"][0]["asin"], "B0OK000002")
             self.assertEqual(data_pack["data_gaps"][0]["type"], "review_collection_failure")
             self.assertFalse((report_dir / "data" / "normalized" / "normalized_data_pack.json").exists())
+
+    def test_collect_without_asin_records_gap_without_mcp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "research_object": {"value": "neck massager"},
+                    "sources": [],
+                    "products": [],
+                    "reviews": [],
+                    "data_gaps": [],
+                },
+            )
+
+            with patch.object(collector, "mcp_url", side_effect=AssertionError("mcp should not be needed without ASIN")):
+                summary = collector.collect(report_dir, [], "Both", "US", 0)
+
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["calls"], 0)
+            self.assertEqual(summary["asin_count"], 0)
+            self.assertFalse(summary["collection_ready"])
+            self.assertEqual(summary["failures"][0]["type"], "review_collection_no_asin")
+            self.assertEqual(data_pack["data_gaps"][0]["type"], "review_collection_no_asin")
+
+    def test_cli_returns_two_when_review_sample_below_minimum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "data" / "data_pack.json", {"reviews": [], "products": [], "data_gaps": []})
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--dir", str(report_dir), "--min-reviews", "80"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('"collection_ready": false', result.stdout)
 
 
 if __name__ == "__main__":

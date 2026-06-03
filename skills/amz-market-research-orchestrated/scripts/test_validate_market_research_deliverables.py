@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import validate_market_research_deliverables as validator
 from delivery_writer import child_skill_invocations
 
 
@@ -403,6 +404,53 @@ def make_valid_report(root):
 
 
 class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
+    def test_customer_safety_context_is_cached_per_data_pack(self):
+        data_pack = {
+            "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+            "reviews": [{"title": "privacy issue", "text": "This toy stopped working after two days."}],
+        }
+
+        validator.CUSTOMER_SAFETY_CACHE.clear()
+        first = validator.customer_safety_context(data_pack)
+        second = validator.customer_safety_context(data_pack)
+
+        self.assertIs(first, second)
+        self.assertIn("src_001", first["technical_values"])
+        self.assertTrue(any("stopped working" in value for value in first["raw_english_values"]))
+
+    def test_raw_english_scan_ignores_non_visible_html_structure(self):
+        data_pack = {
+            "products": [{"title": "BesLowe Outdoor Wall Light Fixture"}],
+            "reviews": [],
+            "keywords": [],
+        }
+
+        validator.validate_no_raw_english_leaks(
+            "output/html_reports/report.html",
+            '<div class="light outdoor wall report-shell"><span>中文报告正文</span></div>',
+            data_pack,
+            "HTML",
+        )
+
+    def test_allowed_keyword_bigrams_can_form_category_phrase(self):
+        allowed = "outdoor wall | wall lantern"
+
+        self.assertTrue(validator.is_allowed_english_fragment("outdoor wall lantern", allowed))
+        self.assertTrue(validator.is_allowed_english_fragment("wall lantern", allowed))
+        self.assertFalse(validator.is_allowed_english_fragment("privacy policy confusing", allowed))
+
+    def test_visible_ngrams_do_not_cross_cjk_or_punctuation_boundaries(self):
+        ngrams = validator.visible_word_ngrams("备选方向：picture light、outdoor wall lantern")
+
+        self.assertIn("outdoor wall lantern", ngrams)
+        self.assertNotIn("light outdoor wall", ngrams)
+
+    def test_visible_ngrams_do_not_cross_html_tag_boundaries(self):
+        ngrams = validator.visible_word_ngrams("<td>plug into wall</td><td>night light</td>")
+
+        self.assertIn("plug into wall", ngrams)
+        self.assertNotIn("into wall night", ngrams)
+
     def run_validator(self, report_dir):
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--dir", str(report_dir)],

@@ -558,6 +558,21 @@ def customer_safe_signal_title(item: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+def web_document_theme(doc: dict[str, Any]) -> str:
+    text = clean(" ".join(str(doc.get(key) or "") for key in ("query", "title", "description", "summary", "url"))).casefold()
+    if any(term in text for term in ["cpsc", "recall", "hazard", "ul", "etl", "safety", "policy", "fire"]):
+        return "合规与召回风险"
+    if any(term in text for term in ["review", "best", "wirecutter", "consumer", "reddit", "youtube"]):
+        return "公开测评与口碑"
+    if any(term in text for term in ["amazon", "walmart", "target", "bestbuy", "retailer", "seller"]):
+        return "零售与平台对照"
+    if any(term in text for term in ["trend", "market", "report", "forecast"]):
+        return "市场趋势公开资料"
+    if any(term in text for term in ["brand", "official", "manufacturer"]):
+        return "品牌官网与产品资料"
+    return "公开网页补充证据"
+
+
 def render_tiktok(data_pack: dict[str, Any]) -> str:
     products = data_pack.get("tiktok_products") or []
     videos = sorted(data_pack.get("tiktok_videos") or [], key=lambda video: as_float(video.get("views"), 0), reverse=True)
@@ -634,8 +649,8 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
 
 def render_web_risk(data_pack: dict[str, Any]) -> str:
     docs = data_pack.get("web_documents") or []
-    query_counts = Counter(doc.get("query") for doc in docs)
-    rows = [[customer_safe_signal_title(doc, "公开网页样本"), "网页摘要已归纳到风险和机会判断", "网页链接保留在审计稿", first(doc.get("position"), "-"), doc.get("source_id")] for doc in docs]
+    theme_counts = Counter(web_document_theme(doc) for doc in docs)
+    rows = [[web_document_theme(doc), "网页摘要已归纳到风险和机会判断", "网页链接保留在审计稿", first(doc.get("position"), "-"), doc.get("source_id")] for doc in docs]
     risk_cards = (
         "<div class=\"risk-grid\">"
         "<article class=\"risk-card\"><h3>合规与召回</h3><p>涉及电气、户外、防水、发热、玻璃破损等风险，必须二次核查 CPSC、UL、ETL 和 Amazon policy。</p></article>"
@@ -643,7 +658,7 @@ def render_web_risk(data_pack: dict[str, Any]) -> str:
         "<article class=\"risk-card\"><h3>网页证据限制</h3><p>Firecrawl 搜索结果必须保留在 web_documents，不直接写成结论。</p></article>"
         "</div>"
     )
-    return "<div class=\"card\"><div class=\"card-title\">公开网页覆盖</div>" + mini_chart([(truncate(k, 36), v, v) for k, v in query_counts.most_common()]) + "</div>" + risk_cards + table(["标题", "摘要", "URL", "排名", "source_id"], rows)
+    return "<div class=\"card\"><div class=\"card-title\">公开网页覆盖</div>" + mini_chart([(k, v, v) for k, v in theme_counts.most_common()]) + "</div>" + risk_cards + table(["证据主题", "摘要", "URL", "排名", "source_id"], rows)
 
 
 def render_opportunities(opportunity: dict[str, Any]) -> str:

@@ -198,6 +198,7 @@ CUSTOMER_HTML_BANNED_PATTERNS = [
 
 REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
 RAW_CLIENT_TEXT_KEYS = {"title", "name", "description", "summary", "content", "body", "comment"}
+CUSTOMER_SAFETY_CACHE: dict[int, dict[str, Any]] = {}
 
 
 class ValidationError(Exception):
@@ -411,6 +412,21 @@ def technical_values_from_data_pack(data_pack: Any) -> set[str]:
     return values
 
 
+def customer_safety_context(data_pack: dict[str, Any]) -> dict[str, Any]:
+    cache_key = id(data_pack)
+    cached = CUSTOMER_SAFETY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    context = {
+        "technical_values": technical_values_from_data_pack(data_pack),
+        "raw_english_values": raw_english_client_values(data_pack),
+        "raw_english_fragments": raw_english_client_fragments(data_pack),
+        "allowed_keywords": allowed_english_keyword_text(data_pack),
+    }
+    CUSTOMER_SAFETY_CACHE[cache_key] = context
+    return context
+
+
 def contains_cjk(text: str) -> bool:
     return re.search(r"[\u4e00-\u9fff]", text) is not None
 
@@ -472,29 +488,86 @@ def normalized_visible_text(value: Any) -> str:
 
 def raw_english_client_fragments(data_pack: dict[str, Any]) -> set[str]:
     fragments: set[str] = set()
-    allowed_keywords = allowed_english_keyword_text(data_pack)
     for value in raw_english_client_values(data_pack):
         text = normalized_visible_text(value)
         if not text or contains_cjk(text):
             continue
-        words = re.findall(r"[A-Za-z][A-Za-z']+", text)
-        if len(words) >= 3:
-            if text.casefold() not in allowed_keywords:
-                fragments.add(text)
+        for words in english_word_segments(text):
+            if len(words) < 3:
+                continue
+            folded_text = " ".join(words)
+            fragments.add(folded_text)
             for size in range(3, min(8, len(words)) + 1):
                 for idx in range(0, len(words) - size + 1):
                     fragment = " ".join(words[idx : idx + size])
-                    if len(fragment) >= 12 and fragment.casefold() not in allowed_keywords:
+                    if len(fragment) >= 12:
                         fragments.add(fragment)
     return fragments
 
 
+def customer_visible_text(text: str) -> str:
+    without_scripts = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", text, flags=re.I | re.S)
+    visible_attrs = re.findall(r"\b(?:alt|title|aria-label)=['\"]([^'\"]+)['\"]", without_scripts, flags=re.I)
+    without_tags = re.sub(r"<[^>]+>", " . ", without_scripts)
+    return html.unescape(" ".join([without_tags, *visible_attrs]))
+
+
+def english_word_segments(text: str) -> list[list[str]]:
+    segments: list[list[str]] = []
+    for segment in re.findall(r"[A-Za-z][A-Za-z'\- ]*[A-Za-z]", normalized_visible_text(text)):
+        words = [word.casefold() for word in re.findall(r"[A-Za-z][A-Za-z']+", segment)]
+        if words:
+            segments.append(words)
+    return segments
+
+
+def visible_word_ngrams(text: str) -> set[str]:
+    ngrams: set[str] = set()
+    for words in english_word_segments(customer_visible_text(text)):
+        for size in range(3, min(8, len(words)) + 1):
+            for idx in range(0, len(words) - size + 1):
+                fragment = " ".join(words[idx : idx + size])
+                if len(fragment) >= 12:
+                    ngrams.add(fragment)
+    return ngrams
+
+
+def is_allowed_english_fragment(fragment: str, allowed_keywords: str) -> bool:
+    folded = fragment.casefold()
+    if folded in allowed_keywords:
+        return True
+    words = folded.split()
+    if len(words) < 3:
+        return False
+    return all(" ".join(words[idx : idx + 2]) in allowed_keywords for idx in range(0, len(words) - 1))
+
+
 def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str, Any], artifact_label: str) -> None:
-    normalized_text = normalized_visible_text(text)
-    normalized_unescaped = normalized_visible_text(html.unescape(text))
-    for fragment in raw_english_client_fragments(data_pack):
-        if fragment in normalized_text or fragment in normalized_unescaped:
-            raise ValidationError(f"{rel_path} customer {artifact_label} leaks raw English review/client text fragment: {fragment[:72]}")
+    visible_text = customer_visible_text(text)
+    normalized_text = normalized_visible_text(visible_text).casefold()
+    unescaped_text = html.unescape(visible_text)
+    normalized_unescaped = normalized_visible_text(unescaped_text).casefold()
+    visible_ngrams = visible_word_ngrams(text)
+    visible_ngrams.update(visible_word_ngrams(unescaped_text))
+    context = customer_safety_context(data_pack)
+    allowed_keywords = context["allowed_keywords"]
+
+    for raw_value in context["raw_english_values"]:
+        raw_text = normalized_visible_text(raw_value)
+        if not raw_text:
+            continue
+        raw_folded = raw_text.casefold()
+        if not is_allowed_english_fragment(raw_folded, allowed_keywords) and (raw_folded in normalized_text or raw_folded in normalized_unescaped):
+            raise ValidationError(f"{rel_path} customer {artifact_label} leaks raw English review/client text fragment: {raw_text[:72]}")
+
+    leaked_fragments = {
+        fragment
+        for fragment in (visible_ngrams & context["raw_english_fragments"])
+        if not is_allowed_english_fragment(fragment, allowed_keywords)
+    }
+    if leaked_fragments:
+        fragment = sorted(leaked_fragments, key=len, reverse=True)[0]
+        raise ValidationError(f"{rel_path} customer {artifact_label} leaks raw English review/client text fragment: {fragment[:72]}")
 
 
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
@@ -506,7 +579,7 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
         if match is not None:
             raise ValidationError(f"{rel_path} customer HTML leaks technical identifier: {match.group(0)}")
 
-    for value in technical_values_from_data_pack(data_pack):
+    for value in customer_safety_context(data_pack)["technical_values"]:
         require(value not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {value}")
 
     validate_no_raw_english_leaks(rel_path, html_doc, data_pack, "HTML")
@@ -526,7 +599,7 @@ def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[st
         match = pattern.search(text)
         if match is not None:
             raise ValidationError(f"{rel_path} customer asset leaks technical identifier: {match.group(0)}")
-    for value in technical_values_from_data_pack(data_pack):
+    for value in customer_safety_context(data_pack)["technical_values"]:
         require(value not in text, f"{rel_path} customer asset leaks technical identifier: {value}")
     validate_no_raw_english_leaks(rel_path, text, data_pack, "asset")
 

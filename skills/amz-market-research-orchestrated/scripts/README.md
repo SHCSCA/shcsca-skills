@@ -107,6 +107,18 @@ python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords
 
 Use this for standard and deep reports. Sorftime returns 20 rows per page, so the script pages through `category_keywords` and `keyword_extends`, saves raw MCP responses to `data/raw/`, and writes `data/normalized/keyword_collection_summary.json`. The validator requires at least 1000 deduped keyword rows in `data_pack.json`.
 
+The default `--max-pages` is 75 so a single seed can theoretically collect up to 1500 raw rows before dedupe. If no nodeId or seed keyword is available, the script writes a `keyword_collection_no_seed` gap and returns exit code `2`; it does not call MCP just to fail on environment configuration. `keyword_collection_summary.json` includes `collection_ready`, `planned_calls`, `theoretical_row_capacity`, and `warnings`.
+
+## collect_sorftime_reviews.py
+
+Collects Sorftime review rows after ASIN/product sampling:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_reviews.py --dir reports/<task_id> --review-type Both --min-reviews 80
+```
+
+The script infers ASINs from `--asin`, `research_object.seed_asins`, then top products. If no ASIN is available, it writes a `review_collection_no_asin` gap and returns exit code `2` without calling MCP. `review_collection_summary.json` includes `reviews_total`, `reviews_added`, `min_reviews`, `collection_ready`, `asin_count`, and `failures`. Standard reports should use `--min-reviews 80`; deep reports should use `--min-reviews 200` when VOC is a major decision input.
+
 ## normalize_data_pack.py
 
 Cross-validates, dedupes, and enriches `data/data_pack.json`:

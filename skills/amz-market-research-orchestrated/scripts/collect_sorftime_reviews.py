@@ -170,10 +170,9 @@ def add_data_gap(data_pack: dict[str, Any], gap: dict[str, Any]) -> None:
     gaps.append(gap)
 
 
-def collect(report_dir: Path, asins: list[str], review_type: str, amz_site: str, sleep_seconds: float) -> dict[str, Any]:
+def collect(report_dir: Path, asins: list[str], review_type: str, amz_site: str, sleep_seconds: float, min_reviews: int = 80) -> dict[str, Any]:
     data_path = report_dir / "data" / "data_pack.json"
     data_pack = load_json(data_path, {})
-    url = mcp_url()
     raw_dir = report_dir / "data" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     fetched_at = utc_now()
@@ -181,6 +180,34 @@ def collect(report_dir: Path, asins: list[str], review_type: str, amz_site: str,
     added = 0
     calls = 0
     failures: list[dict[str, Any]] = []
+
+    if not asin_list:
+        add_data_gap(
+            data_pack,
+            {
+                "type": "review_collection_no_asin",
+                "gap": "No ASIN was available for Sorftime review collection.",
+                "impact": "VOC coverage remains unavailable; readiness and critic must keep review confidence low.",
+                "next_action": "Provide --asin or collect product samples with ASINs before review collection.",
+                "fetched_at": fetched_at,
+            },
+        )
+        invalidate_normalization(report_dir, data_pack)
+        write_json(data_path, data_pack)
+        summary = {
+            "reviews_total": len(data_pack.get(ENTITY_KEY) or []),
+            "reviews_added": 0,
+            "min_reviews": min_reviews,
+            "collection_ready": False,
+            "calls": 0,
+            "review_type": review_type,
+            "asin_count": 0,
+            "failures": [{"type": "review_collection_no_asin", "error": "No ASIN available for review collection."}],
+        }
+        write_json(report_dir / "data" / "normalized" / "review_collection_summary.json", summary)
+        return summary
+
+    url = mcp_url()
 
     for asin in asin_list:
         args = {"asin": asin, "reviewType": review_type, "amzSite": amz_site}
@@ -233,7 +260,10 @@ def collect(report_dir: Path, asins: list[str], review_type: str, amz_site: str,
     invalidate_normalization(report_dir, data_pack)
     write_json(data_path, data_pack)
     summary = {
+        "reviews_total": len(data_pack.get(ENTITY_KEY) or []),
         "reviews_added": added,
+        "min_reviews": min_reviews,
+        "collection_ready": len(data_pack.get(ENTITY_KEY) or []) >= min_reviews,
         "calls": calls,
         "review_type": review_type,
         "asin_count": len(asin_list),
@@ -243,16 +273,19 @@ def collect(report_dir: Path, asins: list[str], review_type: str, amz_site: str,
     return summary
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", required=True, type=Path, help="Report directory, e.g. reports/foo")
     parser.add_argument("--asin", action="append", default=[], help="ASIN to collect. Repeatable.")
     parser.add_argument("--review-type", default="Both", choices=["Positive", "Neutral", "Negative", "Both"])
     parser.add_argument("--amz-site", default="US")
     parser.add_argument("--sleep", type=float, default=0.05)
-    args = parser.parse_args()
-    print(json.dumps(collect(args.dir, args.asin, args.review_type, args.amz_site, args.sleep), ensure_ascii=False, indent=2))
+    parser.add_argument("--min-reviews", type=int, default=80, help="Minimum review rows expected after collection.")
+    args = parser.parse_args(argv)
+    summary = collect(args.dir, args.asin, args.review_type, args.amz_site, args.sleep, args.min_reviews)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if summary["collection_ready"] else 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

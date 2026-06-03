@@ -182,7 +182,6 @@ def invalidate_normalization(report_dir: Path, data_pack: dict[str, Any]) -> Non
 def collect(report_dir: Path, min_keywords: int, node_id: str | None, seeds: list[str], max_pages: int, sleep_seconds: float) -> dict[str, Any]:
     data_path = report_dir / "data" / "data_pack.json"
     data_pack = load_json(data_path, {})
-    url = mcp_url()
     raw_dir = report_dir / "data" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     fetched_at = utc_now()
@@ -222,6 +221,37 @@ def collect(report_dir: Path, min_keywords: int, node_id: str | None, seeds: lis
         for page in range(1, max_pages + 1):
             tasks.append(("keyword_extends", {"keyword": seed, "page": page, "keywordSupportSite": "US"}))
 
+    theoretical_row_capacity = len(tasks) * 20
+    if not tasks:
+        data_pack.setdefault("data_gaps", []).append(
+            {
+                "type": "keyword_collection_no_seed",
+                "module": "keyword_sample_depth",
+                "gap": "No category nodeId or seed keyword was available for Sorftime keyword collection.",
+                "impact": "Keyword demand structure cannot be expanded; readiness must block standard/deep reports.",
+                "next_action": "Provide --node-id or --seed, or add a research_object.value before collection.",
+                "fetched_at": fetched_at,
+            }
+        )
+        invalidate_normalization(report_dir, data_pack)
+        write_json(data_path, data_pack)
+        summary = {
+            "keywords_total": len(data_pack.get(ENTITY_KEY) or []),
+            "keywords_added": 0,
+            "collection_ready": len(data_pack.get(ENTITY_KEY) or []) >= min_keywords,
+            "calls": 0,
+            "planned_calls": 0,
+            "theoretical_row_capacity": 0,
+            "min_keywords": min_keywords,
+            "node_id": inferred_node,
+            "seed_count": len(seed_terms),
+            "warnings": ["No keyword collection tasks were available."],
+        }
+        write_json(report_dir / "data" / "normalized" / "keyword_collection_summary.json", summary)
+        return summary
+
+    url = mcp_url()
+
     for tool, args in tasks:
         if len(data_pack.get(ENTITY_KEY) or []) >= min_keywords:
             break
@@ -244,10 +274,14 @@ def collect(report_dir: Path, min_keywords: int, node_id: str | None, seeds: lis
     summary = {
         "keywords_total": len(data_pack.get(ENTITY_KEY) or []),
         "keywords_added": added,
+        "collection_ready": len(data_pack.get(ENTITY_KEY) or []) >= min_keywords,
         "calls": calls,
+        "planned_calls": len(tasks),
+        "theoretical_row_capacity": theoretical_row_capacity,
         "min_keywords": min_keywords,
         "node_id": inferred_node,
         "seed_count": len(seed_terms),
+        "warnings": ["Theoretical row capacity is below min_keywords; add seeds, nodeId, or max-pages."] if theoretical_row_capacity < min_keywords else [],
     }
     write_json(report_dir / "data" / "normalized" / "keyword_collection_summary.json", summary)
     return summary
@@ -259,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-keywords", type=int, default=1000, help="Minimum keyword rows required in data_pack.json.")
     parser.add_argument("--node-id", default=None, help="Amazon category nodeId for category_keywords.")
     parser.add_argument("--seed", action="append", default=[], help="Seed keyword for keyword_extends. Can be repeated.")
-    parser.add_argument("--max-pages", type=int, default=50, help="Max pages per source. Sorftime returns 20 rows per page.")
+    parser.add_argument("--max-pages", type=int, default=75, help="Max pages per source. Sorftime returns 20 rows per page.")
     parser.add_argument("--sleep", type=float, default=0.15, help="Seconds between MCP calls.")
     args = parser.parse_args(argv)
     summary = collect(Path(args.dir), args.min_keywords, args.node_id, args.seed, args.max_pages, args.sleep)

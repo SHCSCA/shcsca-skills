@@ -137,6 +137,12 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir reports/{task_id} --min-keywords 1200
 ```
 
+评论样本采集建议在产品池/ASIN 明确后运行：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_reviews.py --dir reports/{task_id} --review-type Both --min-reviews 80
+```
+
 采集完成但进入归一化/渲染前，必须先运行数据准备度门禁：
 
 ```bash
@@ -151,6 +157,7 @@ python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py -
 - `keyword_extends` 对主关键词、核心子方向词、已有高相关词分页采集。
 - 目标采集量默认 1200 条，给去重留余量；归一化后 `data_pack.keywords` 不得少于 1000 条。
 - 评论样本是置信度门槛：标准版建议 80 条以上，深度版建议 200 条以上；不足时 VOC 可降级展示，但不能写精确比例或强结论。
+- 关键词和评论采集脚本低于门槛时返回退出码 `2`，这不是环境故障，而是数据深度未达标信号。
 - 原始 MCP 返回必须保存到 `data/raw/`，采集摘要保存到 `data/normalized/keyword_collection_summary.json`。
 
 所有原始返回保存到：
