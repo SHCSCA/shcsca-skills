@@ -49,6 +49,15 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def ensure_data_pack_defaults(data_pack: dict[str, Any]) -> None:
+    for key in ENTITY_KEYS + ["categories", "data_gaps"]:
+        if not isinstance(data_pack.get(key), list):
+            data_pack[key] = []
+    quality = data_pack.get("quality")
+    if not isinstance(quality, dict):
+        data_pack["quality"] = {"overall_score": 0.68, "grade": "low_confidence_watch"}
+
+
 def normalization_baseline_path(report_dir: Path) -> Path:
     return report_dir / "data" / "normalized" / "normalization_baseline.json"
 
@@ -130,6 +139,51 @@ def confidence_label(source_count: int) -> str:
     if source_count == 2:
         return "medium"
     return "single_source"
+
+
+def normalize_sources(data_pack: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Backfill legacy source metadata so every downstream lineage check has an audit handle."""
+    sources = data_pack.get("sources") or []
+    if not isinstance(sources, list):
+        sources = []
+    fetched_at = normalize_text(
+        first_existing(data_pack.get("created_at"), data_pack.get("generated_at"), data_pack.get("updated_at"))
+    ) or "unknown"
+
+    normalized_sources: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for idx, source in enumerate(sources, 1):
+        if not isinstance(source, dict):
+            source = {"name": normalize_text(source)}
+        source_id = normalize_text(source.get("source_id")) or f"src_legacy_{idx:03d}"
+        if source_id in seen:
+            suffix = 2
+            candidate = f"{source_id}_{suffix}"
+            while candidate in seen:
+                suffix += 1
+                candidate = f"{source_id}_{suffix}"
+            source_id = candidate
+        seen.add(source_id)
+        source["source_id"] = source_id
+        source["provider"] = normalize_text(first_existing(source.get("provider"), source.get("type"))) or "legacy_manual"
+        source["tool"] = normalize_text(first_existing(source.get("tool"), source.get("method"), source.get("type"))) or "legacy_fixture"
+        source["fetched_at"] = normalize_text(source.get("fetched_at")) or fetched_at
+        source["confidence"] = first_existing(source.get("confidence"), "low")
+        normalized_sources.append(source)
+
+    data_pack["sources"] = normalized_sources
+    return {source["source_id"]: source for source in normalized_sources}
+
+
+def attach_entity_provider(data_pack: dict[str, Any], source_index: dict[str, dict[str, Any]]) -> None:
+    for key in ENTITY_KEYS + ["categories"]:
+        for entity in data_pack.get(key) or []:
+            if not isinstance(entity, dict):
+                continue
+            source_id = normalize_text(entity.get("source_id"))
+            source = source_index.get(source_id) if source_id else None
+            if source and not entity.get("provider"):
+                entity["provider"] = source.get("provider")
 
 
 def prefer_value(current: Any, incoming: Any, field: str) -> Any:
@@ -530,7 +584,9 @@ def apply_quality_caps(data_pack: dict[str, Any], after_counts: dict[str, int], 
 def normalize(report_dir: Path) -> dict[str, Any]:
     data_path = report_dir / "data" / "data_pack.json"
     data_pack = load_json(data_path)
-    source_index = {source.get("source_id"): source for source in data_pack.get("sources", [])}
+    ensure_data_pack_defaults(data_pack)
+    source_index = normalize_sources(data_pack)
+    attach_entity_provider(data_pack, source_index)
     current_counts = {key: len(data_pack.get(key) or []) for key in ENTITY_KEYS}
     before_counts = baseline_counts(report_dir, data_pack, current_counts)
     seed_terms = infer_seed_terms(data_pack)

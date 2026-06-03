@@ -36,10 +36,15 @@ class DeliveryWriterTest(unittest.TestCase):
 
             self.assertIn("src_001", lineage)
             self.assertEqual(brief["child_skills"], CHILD_SKILLS)
+            self.assertEqual(brief["child_skill_invocations"]["market_depth"]["module"], "child_skills/market-depth-report")
+            self.assertIn("data/normalized/normalized_data_pack.json", brief["child_skill_invocations"]["market_depth"]["inputs"])
+            self.assertIn("output/html_reports/market-depth-report.html", brief["child_skill_invocations"]["market_depth"]["outputs"])
             self.assertEqual(brief["static_site"]["bundle_dir"], "output/html_reports")
             self.assertEqual(delivery["html_reports"]["index"], "output/html_reports/report.html")
             self.assertEqual(delivery["html_reports"]["compat_index"], "output/report.html")
             self.assertEqual(delivery["child_skills"]["critic"], "child_skills/market-research-critic")
+            self.assertEqual(delivery["child_skill_invocations"]["critic"]["renderer"], "scripts/critic_runner.py")
+            self.assertEqual(delivery["child_skill_invocations"]["critic"]["data_policy"], "read_only_normalized_data_pack")
             self.assertIn("html", delivery["formats"])
             self.assertIn("table_filter", delivery["interactive_features"])
 

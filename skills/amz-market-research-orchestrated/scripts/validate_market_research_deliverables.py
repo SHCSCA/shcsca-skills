@@ -213,7 +213,7 @@ def validate_unique_entity_keys(data_pack: dict[str, Any]) -> None:
         for idx, entity in enumerate(data_pack.get(entity_name) or []):
             if not isinstance(entity, dict):
                 continue
-            key = key_func(entity)
+            key = key_func(dict(entity))
             if not key:
                 continue
             if key in seen:
@@ -275,6 +275,20 @@ def validate_entity_lineage(data_pack: dict[str, Any], source_ids: set[str]) -> 
     for key in ["before_counts", "after_counts", "removed_counts", "cross_validated_counts"]:
         require(isinstance(normalization.get(key), dict), f"data_pack.normalization missing {key}")
     validate_unique_entity_keys(data_pack)
+
+
+def validate_normalized_data_pack_consistency(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    normalized_path = report_dir / "data/normalized/normalized_data_pack.json"
+    normalized_pack = load_json(normalized_path)
+    require(isinstance(normalized_pack, dict), "normalized_data_pack.json must be an object")
+    require(
+        normalized_pack == data_pack,
+        "data/normalized/normalized_data_pack.json must match data/data_pack.json after normalization",
+    )
+    require(
+        data_pack.get("cleaning_summary") == data_pack.get("normalization"),
+        "data_pack.cleaning_summary must match data_pack.normalization",
+    )
 
 
 def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, Any] | None = None) -> None:
@@ -616,6 +630,24 @@ def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None
         require(failed_cases.exists(), "failed critic review must append training_data/failed_cases.jsonl")
 
 
+def validate_child_skill_invocations(report_dir: Path, invocations: Any, rel_path: str) -> None:
+    require(isinstance(invocations, dict), f"{rel_path} missing child_skill_invocations")
+    for key, module_path in CHILD_SKILLS.items():
+        payload = invocations.get(key)
+        require(isinstance(payload, dict), f"{rel_path} child_skill_invocations missing {key}")
+        require(payload.get("module") == module_path, f"{rel_path} child invocation {key}.module mismatch")
+        require(payload.get("status") == "rendered", f"{rel_path} child invocation {key}.status must be rendered")
+        require(payload.get("dispatch_mode") == "internal_orchestrator", f"{rel_path} child invocation {key}.dispatch_mode mismatch")
+        require(payload.get("data_policy") == "read_only_normalized_data_pack", f"{rel_path} child invocation {key}.data_policy mismatch")
+        require("data/normalized/normalized_data_pack.json" in (payload.get("inputs") or []), f"{rel_path} child invocation {key} missing normalized data input")
+        for output in payload.get("outputs") or []:
+            require((report_dir / output).exists(), f"{rel_path} child invocation {key} output missing: {output}")
+        renderer = payload.get("renderer")
+        template = payload.get("template")
+        require(renderer and ((SKILL_DIR / renderer).exists() or (SKILL_DIR / "scripts" / Path(renderer).name).exists()), f"{rel_path} child invocation {key} renderer missing: {renderer}")
+        require(template and (SKILL_DIR / template).exists(), f"{rel_path} child invocation {key} template missing: {template}")
+
+
 def validate_delivery(report_dir: Path) -> None:
     delivery = load_json(report_dir / "output/delivery_result.json")
     require(isinstance(delivery, dict), "delivery_result.json must be an object")
@@ -628,6 +660,7 @@ def validate_delivery(report_dir: Path) -> None:
     for key, spec in CHILD_REPORTS.items():
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
     require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare internal report modules and critic")
+    validate_child_skill_invocations(report_dir, delivery.get("child_skill_invocations"), "delivery_result.json")
     require(delivery.get("site_assets") == SITE_ASSETS, "delivery_result.json site_assets must declare static site assets")
     critic = delivery.get("critic_review")
     require(isinstance(critic, dict), "delivery_result.json missing critic_review summary")
@@ -648,6 +681,7 @@ def validate_delivery(report_dir: Path) -> None:
 
     report_brief = load_json(report_dir / "report_brief.json")
     require(report_brief.get("child_skills") == CHILD_SKILLS, "report_brief.json child_skills mismatch")
+    validate_child_skill_invocations(report_dir, report_brief.get("child_skill_invocations"), "report_brief.json")
     require((report_brief.get("static_site") or {}).get("bundle_dir") == HTML_BUNDLE_DIR, "report_brief.json static_site.bundle_dir mismatch")
 
 
@@ -661,6 +695,7 @@ def validate(report_dir: Path) -> None:
 
     source_ids = validate_sources(data_pack)
     validate_entity_lineage(data_pack, source_ids)
+    validate_normalized_data_pack_consistency(report_dir, data_pack)
     validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)
     validate_text_artifacts(report_dir, source_ids, data_pack)

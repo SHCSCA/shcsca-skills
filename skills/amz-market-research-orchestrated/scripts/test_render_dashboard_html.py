@@ -276,6 +276,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(delivery["critic_review"]["path"], "analysis/critic_review.json")
             self.assertEqual(delivery["critic_review"]["refinement_plan"], "analysis/refinement_plan.json")
             self.assertEqual(delivery["critic_review"]["max_refinement_rounds"], 2)
+            self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["module"], "child_skills/market-depth-report")
+            self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["status"], "rendered")
+            self.assertIn("analysis/market_depth_view.json", delivery["child_skill_invocations"]["market_depth"]["outputs"])
+            self.assertEqual(delivery["child_skill_invocations"]["critic"]["dispatch_mode"], "internal_orchestrator")
             self.assertEqual(
                 delivery["site_assets"],
                 {
@@ -295,6 +299,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             report_brief = json.loads((report_dir / "report_brief.json").read_text(encoding="utf-8"))
             self.assertEqual(report_brief["task_id"], "ai_plush_us_20260526")
             self.assertEqual(report_brief["child_skills"], delivery["child_skills"])
+            self.assertEqual(report_brief["child_skill_invocations"], delivery["child_skill_invocations"])
             self.assertEqual(report_brief["static_site"]["bundle_dir"], "output/html_reports")
             self.assertTrue((report_dir / "analysis" / "critic_review.json").exists())
             self.assertTrue((report_dir / "analysis" / "refinement_plan.json").exists())

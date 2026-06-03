@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from delivery_writer import child_skill_invocations
+
 
 SCRIPT = Path(__file__).with_name("validate_market_research_deliverables.py")
 
@@ -109,6 +111,7 @@ def make_valid_report(root):
     )
     data_pack = json.loads((root / "data" / "data_pack.json").read_text(encoding="utf-8"))
     data_pack["cleaning_summary"] = data_pack["normalization"]
+    write_json(root / "data" / "data_pack.json", data_pack)
     write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
     child_skills = {
         "market_depth": "child_skills/market-depth-report",
@@ -122,11 +125,13 @@ def make_valid_report(root):
         "data": "output/html_reports/assets/report-data.json",
     }
     interactive_features = ["table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"]
+    child_invocations = child_skill_invocations(child_skills)
     write_json(
         root / "report_brief.json",
         {
             "task_id": "ai_plush_us_20260526",
             "child_skills": child_skills,
+            "child_skill_invocations": child_invocations,
             "static_site": {"bundle_dir": "output/html_reports", "assets": site_assets, "interactive_features": interactive_features},
             "data_inputs": {
                 "normalized_data_pack": "data/normalized/normalized_data_pack.json",
@@ -267,6 +272,7 @@ def make_valid_report(root):
             },
             "html_bundle_dir": "output/html_reports",
             "child_skills": child_skills,
+            "child_skill_invocations": child_invocations,
             "site_assets": site_assets,
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
@@ -352,6 +358,20 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertIn("validate_ok", result.stdout)
+
+    def test_rejects_normalized_data_pack_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            normalized_path = report_dir / "data" / "normalized" / "normalized_data_pack.json"
+            normalized_pack = json.loads(normalized_path.read_text(encoding="utf-8"))
+            normalized_pack["quality"]["overall_score"] = 0.99
+            write_json(normalized_path, normalized_pack)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("normalized_data_pack.json must match", result.stderr + result.stdout)
 
     def test_rejects_missing_child_html_report(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -496,7 +516,9 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             data_pack["quality"]["overall_score"] = 0.9
             data_pack["quality"]["grade"] = "A"
             data_pack["normalization"]["cross_validated_counts"] = {"keywords": 1000, "products": 0, "reviews": 0}
+            data_pack["cleaning_summary"] = data_pack["normalization"]
             write_json(data_pack_path, data_pack)
+            write_json(report_dir / "data" / "normalized" / "normalized_data_pack.json", data_pack)
             delivery_path = report_dir / "output" / "delivery_result.json"
             delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
             delivery["decision"] = "Go"

@@ -10,6 +10,43 @@ from typing import Any
 from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, HTML_REPORTS, INTERACTIVE_FEATURES, SITE_ASSETS
 
 
+CHILD_SKILL_INVOCATION_SPECS = {
+    "market_depth": {
+        "inputs": ["data/normalized/normalized_data_pack.json", "analysis/analysis_plan.json", "report_brief.json"],
+        "outputs": ["analysis/market_depth_view.json", "output/html_reports/market-depth-report.html"],
+        "renderer": "child_skills/market-depth-report/scripts/render_market_depth_report.py",
+        "template": "child_skills/market-depth-report/templates/market-depth-report.html",
+    },
+    "lifecycle_strategy": {
+        "inputs": ["data/normalized/normalized_data_pack.json", "analysis/analysis_plan.json", "report_brief.json"],
+        "outputs": ["analysis/lifecycle_strategy_view.json", "output/html_reports/lifecycle-strategy-report.html"],
+        "renderer": "child_skills/lifecycle-strategy-report/scripts/render_lifecycle_strategy_report.py",
+        "template": "child_skills/lifecycle-strategy-report/templates/lifecycle-strategy-report.html",
+    },
+    "demand_gap": {
+        "inputs": ["data/normalized/normalized_data_pack.json", "analysis/analysis_plan.json", "report_brief.json"],
+        "outputs": ["analysis/demand_gap_view.json", "output/html_reports/demand-gap-report.html"],
+        "renderer": "child_skills/demand-gap-report/scripts/render_demand_gap_report.py",
+        "template": "child_skills/demand-gap-report/templates/demand-gap-report.html",
+    },
+    "critic": {
+        "inputs": [
+            "data/normalized/normalized_data_pack.json",
+            "analysis/analysis_plan.json",
+            "analysis/market_depth_view.json",
+            "analysis/lifecycle_strategy_view.json",
+            "analysis/demand_gap_view.json",
+            "output/html_reports/market-depth-report.html",
+            "output/html_reports/lifecycle-strategy-report.html",
+            "output/html_reports/demand-gap-report.html",
+        ],
+        "outputs": ["analysis/critic_review.json", "analysis/refinement_plan.json"],
+        "renderer": "scripts/critic_runner.py",
+        "template": "child_skills/market-research-critic/references/critic-contract.md",
+    },
+}
+
+
 def first(*values: Any, default: Any = "-") -> Any:
     for value in values:
         if value is not None and value != "":
@@ -20,6 +57,23 @@ def first(*values: Any, default: Any = "-") -> Any:
 def truncate(value: Any, limit: int = 100) -> str:
     text = "" if value is None else str(value)
     return text if len(text) <= limit else text[: limit - 1] + "..."
+
+
+def child_skill_invocations(child_skills: dict[str, str]) -> dict[str, dict[str, Any]]:
+    invocations: dict[str, dict[str, Any]] = {}
+    for key, module_path in child_skills.items():
+        spec = CHILD_SKILL_INVOCATION_SPECS.get(key, {})
+        invocations[key] = {
+            "module": module_path,
+            "status": "rendered",
+            "dispatch_mode": "internal_orchestrator",
+            "inputs": spec.get("inputs") or [],
+            "outputs": spec.get("outputs") or [],
+            "renderer": spec.get("renderer"),
+            "template": spec.get("template"),
+            "data_policy": "read_only_normalized_data_pack",
+        }
+    return invocations
 
 
 def write_lineage_markdown(data_pack: dict[str, Any], path: Path) -> None:
@@ -41,6 +95,7 @@ def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_pla
         "research_object": brief.get("research_object") or data_pack.get("research_object") or {},
         "decision": decision,
         "child_skills": child_skills,
+        "child_skill_invocations": child_skill_invocations(child_skills),
         "static_site": {
             "bundle_dir": HTML_BUNDLE_DIR,
             "assets": SITE_ASSETS,
@@ -67,6 +122,7 @@ def write_delivery_result(report_dir: Path, delivery: dict[str, Any], child_skil
     delivery["html_reports"] = html_reports
     delivery["html_bundle_dir"] = HTML_BUNDLE_DIR
     delivery["child_skills"] = child_skills
+    delivery["child_skill_invocations"] = child_skill_invocations(child_skills)
     delivery["site_assets"] = SITE_ASSETS
     delivery["interactive_features"] = INTERACTIVE_FEATURES
     output_path.parent.mkdir(parents=True, exist_ok=True)

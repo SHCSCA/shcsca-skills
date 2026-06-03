@@ -248,6 +248,32 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertEqual(data_pack["quality"]["original_overall_score"], 0.92)
             self.assertTrue(any(gap.get("module") == "review_sample_depth" for gap in data_pack["data_gaps"] if isinstance(gap, dict)))
 
+    def test_backfills_legacy_source_metadata_and_entity_provider(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "created_at": "2026-05-25T10:00:00+08:00",
+                    "sources": [{"source_id": "src_legacy", "type": "market_report", "name": "Legacy market page"}],
+                    "products": [{"title": "Legacy Product", "source_id": "src_legacy"}],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            source = data_pack["sources"][0]
+            self.assertEqual(source["provider"], "market_report")
+            self.assertEqual(source["tool"], "market_report")
+            self.assertEqual(source["fetched_at"], "2026-05-25T10:00:00+08:00")
+            self.assertEqual(source["confidence"], "low")
+            self.assertEqual(data_pack["products"][0]["provider"], "market_report")
+            for key in ["keywords", "categories", "reviews", "tiktok_products", "tiktok_videos", "suppliers", "web_documents", "data_gaps"]:
+                self.assertIsInstance(data_pack[key], list)
+
 
 if __name__ == "__main__":
     unittest.main()
