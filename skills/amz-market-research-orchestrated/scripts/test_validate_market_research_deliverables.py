@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import subprocess
 import sys
@@ -10,6 +11,17 @@ from delivery_writer import child_skill_invocations
 
 
 SCRIPT = Path(__file__).with_name("validate_market_research_deliverables.py")
+SKILL_DIR = Path(__file__).resolve().parent.parent
+ENTITY_LIST_KEYS = [
+    "products",
+    "keywords",
+    "categories",
+    "reviews",
+    "tiktok_products",
+    "tiktok_videos",
+    "suppliers",
+    "web_documents",
+]
 
 
 def write_json(path, data):
@@ -20,6 +32,37 @@ def write_json(path, data):
 def write_text(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def invocation_entry(root, module, renderer, output=None, outputs=None, dispatch_mode="subprocess_child_renderer"):
+    entry = {
+        "module": module,
+        "renderer": renderer,
+        "renderer_sha256": file_sha256(SKILL_DIR / renderer),
+        "dispatch_mode": dispatch_mode,
+        "command": ["python", renderer, "--dir", str(root)],
+        "cwd": str(root.parent),
+        "started_at": "2026-05-26T10:00:00Z",
+        "finished_at": "2026-05-26T10:00:01Z",
+        "returncode": 0,
+        "stdout": output or "",
+        "stderr": "",
+    }
+    if output:
+        entry["output"] = output
+        entry["output_sha256"] = file_sha256(root / output)
+    if outputs:
+        entry["outputs"] = outputs
+        entry["output_sha256"] = {item: file_sha256(root / item) for item in outputs}
+    return entry
 
 
 def child_html(style, title, sections, extra_terms=""):
@@ -100,16 +143,19 @@ def make_valid_report(root):
             "web_documents": [{"url": "https://example.com/report", "source_id": "src_002", "provider": "firecrawl"}],
             "data_gaps": ["Keepa not used in this run"],
             "quality": {"overall_score": 0.82, "grade": "decision_grade"},
-            "normalization": {
-                "deduped": True,
-                "before_counts": {"products": 1, "keywords": 1000},
-                "after_counts": {"products": 1, "keywords": 1000},
-                "removed_counts": {"products": 0, "keywords": 0},
-                "cross_validated_counts": {"products": 0, "keywords": 0},
-            },
+            "normalization": {"deduped": True},
         },
     )
     data_pack = json.loads((root / "data" / "data_pack.json").read_text(encoding="utf-8"))
+    counts = {key: len(data_pack.get(key) or []) for key in ENTITY_LIST_KEYS}
+    data_pack["normalization"].update(
+        {
+            "before_counts": counts,
+            "after_counts": counts,
+            "removed_counts": {key: 0 for key in ENTITY_LIST_KEYS},
+            "cross_validated_counts": {key: 0 for key in ENTITY_LIST_KEYS},
+        }
+    )
     data_pack["cleaning_summary"] = data_pack["normalization"]
     write_json(root / "data" / "data_pack.json", data_pack)
     write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
@@ -338,6 +384,21 @@ def make_valid_report(root):
             "constraints": ["Do not recollect data during critic refinement."],
         },
     )
+    write_json(
+        root / "analysis" / "child_skill_invocation_log.json",
+        [
+            invocation_entry(root, "child_skills/market-depth-report", "child_skills/market-depth-report/scripts/render_market_depth_report.py", "output/html_reports/market-depth-report.html"),
+            invocation_entry(root, "child_skills/lifecycle-strategy-report", "child_skills/lifecycle-strategy-report/scripts/render_lifecycle_strategy_report.py", "output/html_reports/lifecycle-strategy-report.html"),
+            invocation_entry(root, "child_skills/demand-gap-report", "child_skills/demand-gap-report/scripts/render_demand_gap_report.py", "output/html_reports/demand-gap-report.html"),
+            invocation_entry(
+                root,
+                "child_skills/market-research-critic",
+                "child_skills/market-research-critic/scripts/run_critic.py",
+                outputs=["analysis/critic_review.json", "analysis/refinement_plan.json"],
+                dispatch_mode="subprocess_critic_child",
+            ),
+        ],
+    )
 
 
 class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
@@ -383,6 +444,47 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("demand-gap-report.html", result.stderr + result.stdout)
+
+    def test_rejects_missing_critic_child_invocation_log_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            log_path = report_dir / "analysis" / "child_skill_invocation_log.json"
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            write_json(log_path, [entry for entry in log if entry["module"] != "child_skills/market-research-critic"])
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("exactly one entry per subprocess child", result.stderr + result.stdout)
+
+    def test_rejects_child_invocation_sha_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            log_path = report_dir / "analysis" / "child_skill_invocation_log.json"
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            log[0]["output_sha256"] = "0" * 64
+            write_json(log_path, log)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("output_sha256 mismatch", result.stderr + result.stdout)
+
+    def test_rejects_child_invocation_returncode_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            log_path = report_dir / "analysis" / "child_skill_invocation_log.json"
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            log[1]["returncode"] = 1
+            write_json(log_path, log)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("did not exit cleanly", result.stderr + result.stdout)
 
     def test_rejects_index_without_child_links(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -485,8 +587,12 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             data_path = report_dir / "data" / "data_pack.json"
             data_pack = json.loads(data_path.read_text(encoding="utf-8"))
             data_pack["products"].append(dict(data_pack["products"][0]))
+            data_pack["normalization"]["before_counts"]["products"] = len(data_pack["products"])
             data_pack["normalization"]["after_counts"]["products"] = len(data_pack["products"])
+            data_pack["normalization"]["removed_counts"]["products"] = 0
+            data_pack["cleaning_summary"] = data_pack["normalization"]
             write_json(data_path, data_pack)
+            write_json(report_dir / "data" / "normalized" / "normalized_data_pack.json", data_pack)
 
             result = self.run_validator(report_dir)
 

@@ -16,6 +16,7 @@ from urllib.parse import urlsplit, urlunsplit
 ENTITY_KEYS = [
     "products",
     "keywords",
+    "categories",
     "reviews",
     "tiktok_products",
     "tiktok_videos",
@@ -294,6 +295,22 @@ def web_document_dedupe_key(item: dict[str, Any]) -> str:
         item["canonical_url"] = url
         return f"url|{url}"
     return f"title|{fingerprint(item.get('title'))}"
+
+
+def tiktok_product_dedupe_key(item: dict[str, Any]) -> str:
+    return normalized_key(item.get("product_id"))
+
+
+def tiktok_video_dedupe_key(item: dict[str, Any]) -> str:
+    return canonical_url(item.get("url")) or "|".join([normalized_key(item.get("product_id")), fingerprint(item.get("title")) or normalized_key(item.get("video_id"))])
+
+
+def category_dedupe_key(item: dict[str, Any]) -> str:
+    node_id = normalized_key(item.get("node_id") or item.get("category_id"))
+    if node_id:
+        return f"node|{node_id}"
+    name = fingerprint(item.get("name") or item.get("category") or item.get("title"))
+    return f"name|{name}" if name else ""
 
 
 STOP_WORDS = {
@@ -601,8 +618,9 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     data_pack["products"] = [enrich_product(product) for product in dedupe(data_pack.get("products") or [], product_dedupe_key, source_index)]
     data_pack["keywords"] = [enrich_keyword(keyword, seed_terms) for keyword in dedupe(data_pack.get("keywords") or [], keyword_dedupe_key, source_index)]
     data_pack["reviews"] = [enrich_review(review) for review in dedupe(data_pack.get("reviews") or [], review_dedupe_key, source_index)]
-    data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], lambda item: normalized_key(item.get("product_id")), source_index)
-    data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], lambda item: canonical_url(item.get("url")) or "|".join([normalized_key(item.get("product_id")), fingerprint(item.get("title"))]), source_index)
+    data_pack["categories"] = dedupe(data_pack.get("categories") or [], category_dedupe_key, source_index)
+    data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], tiktok_product_dedupe_key, source_index)
+    data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], tiktok_video_dedupe_key, source_index)
     data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)
     data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], web_document_dedupe_key, source_index)
 

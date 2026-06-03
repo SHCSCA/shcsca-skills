@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import statistics
+import subprocess
+import sys
 from collections import Counter, defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import critic_runner
 from customer_copy import (
     customer_product_message,
     customer_product_position,
@@ -81,11 +84,108 @@ CHILD_SKILLS = {
     "critic": "child_skills/market-research-critic",
 }
 
+CHILD_REPORT_RENDERERS = {
+    "market_depth": CHILD_SKILLS_DIR / "market-depth-report" / "scripts" / "render_market_depth_report.py",
+    "lifecycle_strategy": CHILD_SKILLS_DIR / "lifecycle-strategy-report" / "scripts" / "render_lifecycle_strategy_report.py",
+    "demand_gap": CHILD_SKILLS_DIR / "demand-gap-report" / "scripts" / "render_demand_gap_report.py",
+}
+CRITIC_RENDERER = CHILD_SKILLS_DIR / "market-research-critic" / "scripts" / "run_critic.py"
+
+CHILD_INVOCATION_LOG = Path("analysis") / "child_skill_invocation_log.json"
+
 
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def relative_to_skill(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(SKILL_DIR.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def write_invocation_log(report_dir: Path, log: list[dict[str, Any]]) -> None:
+    log_path = report_dir / CHILD_INVOCATION_LOG
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def run_child_report_renderers(report_dir: Path) -> list[dict[str, Any]]:
+    log: list[dict[str, Any]] = []
+    for key, script_path in CHILD_REPORT_RENDERERS.items():
+        command = [sys.executable, str(script_path), "--dir", str(report_dir)]
+        started_at = utc_now()
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+        finished_at = utc_now()
+        output_path = report_dir / HTML_REPORTS[key]
+        entry = {
+            "module": CHILD_SKILLS[key],
+            "renderer": relative_to_skill(script_path),
+            "renderer_sha256": file_sha256(script_path),
+            "dispatch_mode": "subprocess_child_renderer",
+            "command": [Path(sys.executable).name, relative_to_skill(script_path), "--dir", str(report_dir)],
+            "cwd": str(Path.cwd()),
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "returncode": result.returncode,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+            "output": HTML_REPORTS[key],
+            "output_sha256": file_sha256(output_path) if output_path.exists() else None,
+        }
+        log.append(entry)
+        if result.returncode != 0:
+            write_invocation_log(report_dir, log)
+            raise RuntimeError(f"Child renderer failed for {key}: {result.stderr or result.stdout}")
+    write_invocation_log(report_dir, log)
+    return log
+
+
+def run_critic_child(report_dir: Path, decision: str, log: list[dict[str, Any]], previous_review: Path | None = None, previous_plan: Path | None = None) -> dict[str, Any]:
+    command = [sys.executable, str(CRITIC_RENDERER), "--dir", str(report_dir), "--decision", decision]
+    command_log = [Path(sys.executable).name, relative_to_skill(CRITIC_RENDERER), "--dir", str(report_dir), "--decision", decision]
+    if previous_review and previous_plan:
+        command.extend(["--previous-review", str(previous_review), "--previous-plan", str(previous_plan)])
+        command_log.extend(["--previous-review", str(previous_review), "--previous-plan", str(previous_plan)])
+    started_at = utc_now()
+    result = subprocess.run(command, text=True, capture_output=True, check=False)
+    finished_at = utc_now()
+    outputs = ["analysis/critic_review.json", "analysis/refinement_plan.json", "analysis/critic_decision.json"]
+    entry = {
+        "module": CHILD_SKILLS["critic"],
+        "renderer": relative_to_skill(CRITIC_RENDERER),
+        "renderer_sha256": file_sha256(CRITIC_RENDERER),
+        "dispatch_mode": "subprocess_critic_child",
+        "command": command_log,
+        "cwd": str(Path.cwd()),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "returncode": result.returncode,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+        "outputs": outputs,
+        "output_sha256": {path: file_sha256(report_dir / path) for path in outputs if (report_dir / path).exists()},
+    }
+    log.append(entry)
+    write_invocation_log(report_dir, log)
+    if result.returncode != 0:
+        raise RuntimeError(f"Critic child failed: {result.stderr or result.stdout}")
+    return load_json(report_dir / "analysis" / "critic_decision.json", {})
 
 
 def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> str:
@@ -1160,41 +1260,35 @@ def render(report_dir: Path) -> Path:
     original_decision = str(first(delivery.get("decision"), "Watch", default="Watch"))
     rendered_docs, compat_index_html = build_safe_documents(original_decision)
     write_report_views(report_dir, data_pack, analysis_plan, original_decision)
-    draft_view_models = load_view_models()
-    draft_critic_review = critic_runner.build_critic_review(
-        data_pack,
-        analysis_plan,
-        delivery,
-        original_decision,
-        round_id=0,
-        rendered_docs={**rendered_docs, "compat_index": compat_index_html},
-        view_models=draft_view_models,
-    )
-    refinement_plan = critic_runner.build_refinement_plan(draft_critic_review, original_decision)
-    decision = critic_runner.apply_refinement_plan(delivery, refinement_plan, original_decision)
-    if str(decision) != original_decision:
-        rendered_docs, compat_index_html = build_safe_documents(str(decision))
-        write_report_views(report_dir, data_pack, analysis_plan, str(decision))
-    view_models = load_view_models()
-
-    for key, html_doc in rendered_docs.items():
-        (report_dir / HTML_REPORTS[key]).parent.mkdir(parents=True, exist_ok=True)
-        (report_dir / HTML_REPORTS[key]).write_text(html_doc, encoding="utf-8")
+    (report_dir / HTML_REPORTS["index"]).parent.mkdir(parents=True, exist_ok=True)
+    (report_dir / HTML_REPORTS["index"]).write_text(rendered_docs["index"], encoding="utf-8")
     (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(compat_index_html, data_pack), encoding="utf-8")
+    invocation_log = run_child_report_renderers(report_dir)
+    critic_decision = run_critic_child(report_dir, original_decision, invocation_log)
+    decision = str(critic_decision.get("decision") or original_decision)
+    if decision != original_decision:
+        draft_review_path = report_dir / "analysis" / "critic_review.draft.json"
+        draft_plan_path = report_dir / "analysis" / "refinement_plan.draft.json"
+        draft_review_path.write_text((report_dir / "analysis" / "critic_review.json").read_text(encoding="utf-8"), encoding="utf-8")
+        draft_plan_path.write_text((report_dir / "analysis" / "refinement_plan.json").read_text(encoding="utf-8"), encoding="utf-8")
+        delivery = load_json(report_dir / "output" / "delivery_result.json", delivery)
+        rendered_docs, compat_index_html = build_safe_documents(decision)
+        write_report_views(report_dir, data_pack, analysis_plan, decision)
+        (report_dir / HTML_REPORTS["index"]).write_text(rendered_docs["index"], encoding="utf-8")
+        (report_dir / COMPAT_INDEX_REPORT).write_text(redact_customer_html(compat_index_html, data_pack), encoding="utf-8")
+        invocation_log = run_child_report_renderers(report_dir)
+        critic_decision = run_critic_child(report_dir, decision, invocation_log, draft_review_path, draft_plan_path)
+    delivery = load_json(report_dir / "output" / "delivery_result.json", delivery)
+    rendered_docs = {
+        "index": (report_dir / HTML_REPORTS["index"]).read_text(encoding="utf-8"),
+        "market_depth": (report_dir / HTML_REPORTS["market_depth"]).read_text(encoding="utf-8"),
+        "lifecycle_strategy": (report_dir / HTML_REPORTS["lifecycle_strategy"]).read_text(encoding="utf-8"),
+        "demand_gap": (report_dir / HTML_REPORTS["demand_gap"]).read_text(encoding="utf-8"),
+    }
     write_site_assets(report_dir, data_pack, analysis_plan, str(decision))
     write_report_brief(report_dir, data_pack, analysis_plan, str(decision), CHILD_SKILLS)
     delivery["cleaning_summary"] = build_site_data(data_pack, analysis_plan, str(decision), CHILD_SKILLS)["cleaning_summary"]
-    critic_review = critic_runner.write_critic_outputs(
-        report_dir,
-        data_pack,
-        analysis_plan,
-        delivery,
-        str(decision),
-        draft_review=draft_critic_review,
-        refinement_plan=refinement_plan,
-        rendered_docs={**rendered_docs, "compat_index": compat_index_html},
-        view_models=view_models,
-    )
+    critic_review = load_json(report_dir / "analysis" / "critic_review.json", {})
     delivery["critic_review"] = {
         "path": "analysis/critic_review.json",
         "refinement_plan": "analysis/refinement_plan.json",

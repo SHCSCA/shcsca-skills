@@ -4,13 +4,23 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from normalize_data_pack import keyword_dedupe_key, product_dedupe_key, review_dedupe_key, supplier_dedupe_key, web_document_dedupe_key
+from normalize_data_pack import (
+    category_dedupe_key,
+    keyword_dedupe_key,
+    product_dedupe_key,
+    review_dedupe_key,
+    supplier_dedupe_key,
+    tiktok_product_dedupe_key,
+    tiktok_video_dedupe_key,
+    web_document_dedupe_key,
+)
 from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, INTERACTIVE_FEATURES as SITE_INTERACTIVE_FEATURES, SITE_ASSETS
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -37,6 +47,7 @@ REQUIRED_FILES = [
     "analysis/demand_gap_view.json",
     "analysis/critic_review.json",
     "analysis/refinement_plan.json",
+    "analysis/child_skill_invocation_log.json",
     COMPAT_INDEX_REPORT,
     BUNDLE_INDEX_REPORT,
     f"{HTML_BUNDLE_DIR}/market-depth-report.html",
@@ -139,6 +150,9 @@ CHILD_REPORTS = {
     },
 }
 
+SUBPROCESS_REPORT_KEYS = {"market_depth", "lifecycle_strategy", "demand_gap"}
+SUBPROCESS_CHILD_KEYS = {*SUBPROCESS_REPORT_KEYS, "critic"}
+
 BUNDLE_INDEX_REQUIRED_LINKS = [spec["filename"] for spec in CHILD_REPORTS.values()]
 COMPAT_INDEX_REQUIRED_LINKS = [f"html_reports/{spec['filename']}" for spec in CHILD_REPORTS.values()]
 
@@ -200,11 +214,22 @@ def require(condition: bool, message: str) -> None:
         raise ValidationError(message)
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def validate_unique_entity_keys(data_pack: dict[str, Any]) -> None:
     checks = [
         ("products", product_dedupe_key),
         ("keywords", keyword_dedupe_key),
+        ("categories", category_dedupe_key),
         ("reviews", review_dedupe_key),
+        ("tiktok_products", tiktok_product_dedupe_key),
+        ("tiktok_videos", tiktok_video_dedupe_key),
         ("suppliers", supplier_dedupe_key),
         ("web_documents", web_document_dedupe_key),
     ]
@@ -274,6 +299,17 @@ def validate_entity_lineage(data_pack: dict[str, Any], source_ids: set[str]) -> 
     require(normalization.get("deduped") is True, "data_pack.normalization.deduped must be true")
     for key in ["before_counts", "after_counts", "removed_counts", "cross_validated_counts"]:
         require(isinstance(normalization.get(key), dict), f"data_pack.normalization missing {key}")
+    before_counts = normalization["before_counts"]
+    after_counts = normalization["after_counts"]
+    removed_counts = normalization["removed_counts"]
+    cross_counts = normalization["cross_validated_counts"]
+    for key in ENTITY_LIST_KEYS:
+        if key in after_counts:
+            require(after_counts[key] == len(data_pack.get(key) or []), f"normalization.after_counts.{key} must equal data_pack.{key} length")
+        if key in before_counts and key in after_counts and key in removed_counts:
+            require(removed_counts[key] == before_counts[key] - after_counts[key], f"normalization.removed_counts.{key} must equal before-after")
+        if key in cross_counts and key in after_counts:
+            require(cross_counts[key] <= after_counts[key], f"normalization.cross_validated_counts.{key} cannot exceed after_counts")
     validate_unique_entity_keys(data_pack)
 
 
@@ -637,15 +673,57 @@ def validate_child_skill_invocations(report_dir: Path, invocations: Any, rel_pat
         require(isinstance(payload, dict), f"{rel_path} child_skill_invocations missing {key}")
         require(payload.get("module") == module_path, f"{rel_path} child invocation {key}.module mismatch")
         require(payload.get("status") == "rendered", f"{rel_path} child invocation {key}.status must be rendered")
-        require(payload.get("dispatch_mode") == "internal_orchestrator", f"{rel_path} child invocation {key}.dispatch_mode mismatch")
+        expected_dispatch = "subprocess_child_renderer" if key in SUBPROCESS_REPORT_KEYS else "subprocess_critic_child"
+        require(payload.get("dispatch_mode") == expected_dispatch, f"{rel_path} child invocation {key}.dispatch_mode mismatch")
         require(payload.get("data_policy") == "read_only_normalized_data_pack", f"{rel_path} child invocation {key}.data_policy mismatch")
         require("data/normalized/normalized_data_pack.json" in (payload.get("inputs") or []), f"{rel_path} child invocation {key} missing normalized data input")
+        if key in SUBPROCESS_CHILD_KEYS:
+            require(payload.get("invocation_log") == "analysis/child_skill_invocation_log.json", f"{rel_path} child invocation {key} missing invocation_log")
         for output in payload.get("outputs") or []:
             require((report_dir / output).exists(), f"{rel_path} child invocation {key} output missing: {output}")
         renderer = payload.get("renderer")
         template = payload.get("template")
         require(renderer and ((SKILL_DIR / renderer).exists() or (SKILL_DIR / "scripts" / Path(renderer).name).exists()), f"{rel_path} child invocation {key} renderer missing: {renderer}")
         require(template and (SKILL_DIR / template).exists(), f"{rel_path} child invocation {key} template missing: {template}")
+
+
+def validate_child_skill_invocation_log(report_dir: Path) -> None:
+    log = load_json(report_dir / "analysis/child_skill_invocation_log.json")
+    require(isinstance(log, list), "child_skill_invocation_log.json must be a list")
+    require(len(log) == len(SUBPROCESS_CHILD_KEYS), "child_skill_invocation_log.json must contain exactly one entry per subprocess child")
+    by_module = {entry.get("module"): entry for entry in log if isinstance(entry, dict)}
+    require(len(by_module) == len(log), "child_skill_invocation_log.json contains duplicate module entries")
+    for key in SUBPROCESS_CHILD_KEYS:
+        module_path = CHILD_SKILLS[key]
+        entry = by_module.get(module_path)
+        require(isinstance(entry, dict), f"child_skill_invocation_log.json missing module {module_path}")
+        expected_dispatch = "subprocess_child_renderer" if key in SUBPROCESS_REPORT_KEYS else "subprocess_critic_child"
+        require(entry.get("dispatch_mode") == expected_dispatch, f"child invocation log {key} dispatch_mode mismatch")
+        require(entry.get("returncode") == 0, f"child renderer {key} did not exit cleanly")
+        renderer = entry.get("renderer")
+        require(isinstance(renderer, str) and renderer, f"child invocation log {key} missing renderer")
+        renderer_path = SKILL_DIR / renderer
+        require(renderer_path.exists(), f"child invocation log {key} renderer missing: {renderer}")
+        require(entry.get("renderer_sha256") == file_sha256(renderer_path), f"child invocation log {key} renderer_sha256 mismatch")
+        command = entry.get("command")
+        require(isinstance(command, list) and renderer in command, f"child invocation log {key} command must include renderer")
+        require(entry.get("started_at") and entry.get("finished_at"), f"child invocation log {key} missing timestamps")
+        require(entry.get("cwd"), f"child invocation log {key} missing cwd")
+        if key in SUBPROCESS_REPORT_KEYS:
+            output = entry.get("output")
+            require(output == CHILD_REPORTS[key]["path"], f"child invocation log {key} output mismatch")
+            output_path = report_dir / str(output)
+            require(output_path.exists(), f"child invocation log {key} output missing: {output}")
+            require(entry.get("output_sha256") == file_sha256(output_path), f"child invocation log {key} output_sha256 mismatch")
+        else:
+            outputs = entry.get("outputs")
+            output_sha = entry.get("output_sha256")
+            require(isinstance(outputs, list) and "analysis/critic_review.json" in outputs and "analysis/refinement_plan.json" in outputs, "critic invocation log missing outputs")
+            require(isinstance(output_sha, dict), "critic invocation log missing output_sha256 map")
+            for output in outputs:
+                output_path = report_dir / str(output)
+                require(output_path.exists(), f"critic invocation output missing: {output}")
+                require(output_sha.get(output) == file_sha256(output_path), f"critic invocation output_sha256 mismatch: {output}")
 
 
 def validate_delivery(report_dir: Path) -> None:
@@ -661,6 +739,7 @@ def validate_delivery(report_dir: Path) -> None:
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
     require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare internal report modules and critic")
     validate_child_skill_invocations(report_dir, delivery.get("child_skill_invocations"), "delivery_result.json")
+    validate_child_skill_invocation_log(report_dir)
     require(delivery.get("site_assets") == SITE_ASSETS, "delivery_result.json site_assets must declare static site assets")
     critic = delivery.get("critic_review")
     require(isinstance(critic, dict), "delivery_result.json missing critic_review summary")

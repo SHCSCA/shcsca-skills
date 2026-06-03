@@ -278,8 +278,11 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(delivery["critic_review"]["max_refinement_rounds"], 2)
             self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["module"], "child_skills/market-depth-report")
             self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["status"], "rendered")
+            self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["dispatch_mode"], "subprocess_child_renderer")
+            self.assertEqual(delivery["child_skill_invocations"]["market_depth"]["invocation_log"], "analysis/child_skill_invocation_log.json")
             self.assertIn("analysis/market_depth_view.json", delivery["child_skill_invocations"]["market_depth"]["outputs"])
-            self.assertEqual(delivery["child_skill_invocations"]["critic"]["dispatch_mode"], "internal_orchestrator")
+            self.assertEqual(delivery["child_skill_invocations"]["critic"]["dispatch_mode"], "subprocess_critic_child")
+            self.assertEqual(delivery["child_skill_invocations"]["critic"]["invocation_log"], "analysis/child_skill_invocation_log.json")
             self.assertEqual(
                 delivery["site_assets"],
                 {
@@ -303,6 +306,14 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(report_brief["static_site"]["bundle_dir"], "output/html_reports")
             self.assertTrue((report_dir / "analysis" / "critic_review.json").exists())
             self.assertTrue((report_dir / "analysis" / "refinement_plan.json").exists())
+            invocation_log = json.loads((report_dir / "analysis" / "child_skill_invocation_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(invocation_log), 4)
+            self.assertEqual(
+                {entry["dispatch_mode"] for entry in invocation_log},
+                {"subprocess_child_renderer", "subprocess_critic_child"},
+            )
+            self.assertEqual({entry["returncode"] for entry in invocation_log}, {0})
+            self.assertTrue(all(entry.get("renderer_sha256") for entry in invocation_log))
 
             validation = self.run_validator(report_dir)
             self.assertEqual(validation.returncode, 0, validation.stderr + validation.stdout)

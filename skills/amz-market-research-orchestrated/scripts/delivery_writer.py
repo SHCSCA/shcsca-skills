@@ -16,18 +16,21 @@ CHILD_SKILL_INVOCATION_SPECS = {
         "outputs": ["analysis/market_depth_view.json", "output/html_reports/market-depth-report.html"],
         "renderer": "child_skills/market-depth-report/scripts/render_market_depth_report.py",
         "template": "child_skills/market-depth-report/templates/market-depth-report.html",
+        "dispatch_mode": "subprocess_child_renderer",
     },
     "lifecycle_strategy": {
         "inputs": ["data/normalized/normalized_data_pack.json", "analysis/analysis_plan.json", "report_brief.json"],
         "outputs": ["analysis/lifecycle_strategy_view.json", "output/html_reports/lifecycle-strategy-report.html"],
         "renderer": "child_skills/lifecycle-strategy-report/scripts/render_lifecycle_strategy_report.py",
         "template": "child_skills/lifecycle-strategy-report/templates/lifecycle-strategy-report.html",
+        "dispatch_mode": "subprocess_child_renderer",
     },
     "demand_gap": {
         "inputs": ["data/normalized/normalized_data_pack.json", "analysis/analysis_plan.json", "report_brief.json"],
         "outputs": ["analysis/demand_gap_view.json", "output/html_reports/demand-gap-report.html"],
         "renderer": "child_skills/demand-gap-report/scripts/render_demand_gap_report.py",
         "template": "child_skills/demand-gap-report/templates/demand-gap-report.html",
+        "dispatch_mode": "subprocess_child_renderer",
     },
     "critic": {
         "inputs": [
@@ -41,8 +44,9 @@ CHILD_SKILL_INVOCATION_SPECS = {
             "output/html_reports/demand-gap-report.html",
         ],
         "outputs": ["analysis/critic_review.json", "analysis/refinement_plan.json"],
-        "renderer": "scripts/critic_runner.py",
+        "renderer": "child_skills/market-research-critic/scripts/run_critic.py",
         "template": "child_skills/market-research-critic/references/critic-contract.md",
+        "dispatch_mode": "subprocess_critic_child",
     },
 }
 
@@ -66,12 +70,13 @@ def child_skill_invocations(child_skills: dict[str, str]) -> dict[str, dict[str,
         invocations[key] = {
             "module": module_path,
             "status": "rendered",
-            "dispatch_mode": "internal_orchestrator",
+            "dispatch_mode": spec.get("dispatch_mode") or "internal_orchestrator",
             "inputs": spec.get("inputs") or [],
             "outputs": spec.get("outputs") or [],
             "renderer": spec.get("renderer"),
             "template": spec.get("template"),
             "data_policy": "read_only_normalized_data_pack",
+            "invocation_log": "analysis/child_skill_invocation_log.json" if str(spec.get("dispatch_mode") or "").startswith("subprocess_") else None,
         }
     return invocations
 

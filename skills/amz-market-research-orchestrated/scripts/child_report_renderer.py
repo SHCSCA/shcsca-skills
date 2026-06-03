@@ -11,9 +11,19 @@ from typing import Any
 
 from site_assets import attach_site_chrome, write_basic_site_assets
 
+REPORT_KEY_BY_OUTPUT = {
+    "market-depth-report.html": "market_depth",
+    "lifecycle-strategy-report.html": "lifecycle_strategy",
+    "demand-gap-report.html": "demand_gap",
+}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_json_default(path: Path, default: Any) -> Any:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
 
 
 def esc(value: Any) -> str:
@@ -67,10 +77,47 @@ def body_from_view(title: str, view: dict[str, Any]) -> str:
 
 
 def render_child_report(report_dir: Path, module_dir: Path, view_file: str, output_file: str, title: str, title_token: str, body_token: str) -> Path:
-    view = load_json(report_dir / "analysis" / view_file)
-    template = next((module_dir / "templates").glob("*.html")).read_text(encoding="utf-8")
-    html_doc = template.replace(title_token, esc(title)).replace(body_token, body_from_view(title, view))
-    html_doc = attach_site_chrome(html_doc)
+    report_key = REPORT_KEY_BY_OUTPUT.get(output_file)
+    html_doc = ""
+    if report_key:
+        try:
+            from customer_safety import redact_customer_html
+            from render_dashboard_html import renderer_callbacks
+            from report_renderers import build_report_documents
+
+            data_pack = load_json_default(report_dir / "data" / "normalized" / "normalized_data_pack.json", {})
+            if not data_pack:
+                data_pack = load_json_default(report_dir / "data" / "data_pack.json", {})
+            analysis_plan = load_json_default(report_dir / "analysis" / "analysis_plan.json", {})
+            market_size = load_json_default(report_dir / "analysis" / "market_size.json", {})
+            voc = load_json_default(report_dir / "analysis" / "voc.json", {})
+            opportunity = load_json_default(report_dir / "analysis" / "opportunity.json", {})
+            profitability = load_json_default(report_dir / "analysis" / "profitability.json", {})
+            lifecycle = load_json_default(report_dir / "analysis" / "lifecycle_strategy.json", {})
+            demand_gap = load_json_default(report_dir / "analysis" / "demand_gap.json", {})
+            delivery = load_json_default(report_dir / "output" / "delivery_result.json", {})
+            decision = str(delivery.get("decision") or "Watch")
+            docs, _ = build_report_documents(
+                data_pack,
+                analysis_plan,
+                market_size,
+                voc,
+                opportunity,
+                profitability,
+                lifecycle,
+                demand_gap,
+                delivery,
+                decision,
+                renderer_callbacks(),
+            )
+            html_doc = redact_customer_html(docs[report_key], data_pack)
+        except Exception:
+            html_doc = ""
+    if not html_doc:
+        view = load_json(report_dir / "analysis" / view_file)
+        template = next((module_dir / "templates").glob("*.html")).read_text(encoding="utf-8")
+        html_doc = template.replace(title_token, esc(title)).replace(body_token, body_from_view(title, view))
+        html_doc = attach_site_chrome(html_doc)
     write_basic_site_assets(report_dir)
     output_path = report_dir / "output" / "html_reports" / output_file
     output_path.parent.mkdir(parents=True, exist_ok=True)
