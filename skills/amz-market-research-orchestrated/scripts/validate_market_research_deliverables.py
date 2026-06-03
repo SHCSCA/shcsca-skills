@@ -674,6 +674,7 @@ def validate_interactive_dom(html_docs: dict[str, str]) -> None:
     combined = "\n".join(html_docs.values())
     require("site-nav" in combined and "site-nav-toggle" in combined, "interactive_features declares mobile_nav but site nav DOM is missing")
     require("<table" in combined and "evidence-table" in combined, "interactive_features declares table behavior but report tables are missing")
+    require("filter-bar" in combined and "filter-btn" in combined and "data-filter" in combined, "interactive_features declares table_filter but filter DOM is missing")
     require("data-tabs" in combined and "data-tab-target" in combined and "data-tab-panel" in combined, "interactive_features declares tabs but tab DOM is missing")
     require("evidence-drawer" in combined, "interactive_features declares evidence_drawer but drawer DOM is missing")
     require("mini-chart" in combined and "bar-row" in combined, "interactive_features declares chart_linking but chart DOM is missing")

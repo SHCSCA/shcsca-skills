@@ -27,10 +27,18 @@ class HtmlComponentsTest(unittest.TestCase):
 
     def test_table_and_chart_render_structured_html(self):
         table_html = table(["名称", "值"], [["A&B", 10]])
+        filtered_table_html = table(
+            ["相关性", "值"],
+            [["高相关", 10], ["待判断", 1]],
+            filter_options=[("全部", "all"), ("高相关", "高相关")],
+            row_filters=["高相关", "待判断"],
+        )
         chart_html = mini_chart([("A", 10, "10"), ("B", 5, "5")])
 
         self.assertIn("<table", table_html)
         self.assertIn("A&amp;B", table_html)
+        self.assertIn("filter-bar", filtered_table_html)
+        self.assertIn('data-filter="高相关"', filtered_table_html)
         self.assertIn("bar-row", chart_html)
         self.assertIn("--w:100.0%", chart_html)
         self.assertIn("<b>raw</b>", kpi_card_html("HTML", "<b>raw</b>"))

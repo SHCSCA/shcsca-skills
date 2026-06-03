@@ -76,6 +76,17 @@ REPORT_JS = """
   const nav=document.querySelector('.site-nav');
   const toggle=document.querySelector('.site-nav-toggle');
   if(toggle&&nav){toggle.addEventListener('click',()=>nav.classList.toggle('is-open'));}
+  function applyTableFilters(table){
+    const q=(table.dataset.searchQuery||'').trim().toLowerCase();
+    const activeFilter=(table.dataset.activeFilter||'all').toLowerCase();
+    table.querySelectorAll('tbody tr').forEach(row=>{
+      const bucket=(row.dataset.filter||row.dataset.type||row.textContent).toLowerCase();
+      const text=row.textContent.toLowerCase();
+      const matchesSearch=!q||text.includes(q);
+      const matchesButton=activeFilter==='all'||bucket.includes(activeFilter);
+      row.classList.toggle('is-filtered-out',!(matchesSearch&&matchesButton));
+    });
+  }
   document.querySelectorAll('table').forEach((table,idx)=>{
     if(table.dataset.enhanced)return;
     table.dataset.enhanced='true';
@@ -88,10 +99,8 @@ REPORT_JS = """
     wrap.appendChild(input);
     table.parentNode.insertBefore(wrap,table);
     input.addEventListener('input',()=>{
-      const q=input.value.trim().toLowerCase();
-      table.querySelectorAll('tbody tr').forEach(row=>{
-        row.classList.toggle('is-filtered-out',q&&!row.textContent.toLowerCase().includes(q));
-      });
+      table.dataset.searchQuery=input.value;
+      applyTableFilters(table);
     });
     table.querySelectorAll('th').forEach((th,col)=>{
       th.dataset.sortable='true';
@@ -128,10 +137,8 @@ REPORT_JS = """
     buttons.forEach(button=>button.addEventListener('click',()=>{
       const filter=button.dataset.filter||'all';
       buttons.forEach(btn=>{btn.classList.toggle('active',btn===button);btn.setAttribute('aria-pressed',String(btn===button));});
-      table.querySelectorAll('tbody tr').forEach(row=>{
-        const bucket=(row.dataset.filter||row.dataset.type||row.textContent).toLowerCase();
-        row.classList.toggle('is-filtered-out',filter!=='all'&&!bucket.includes(filter.toLowerCase()));
-      });
+      table.dataset.activeFilter=filter;
+      applyTableFilters(table);
     }));
   });
   document.querySelectorAll('.mini-chart .bar-row').forEach(row=>{

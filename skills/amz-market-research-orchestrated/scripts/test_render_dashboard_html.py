@@ -24,8 +24,8 @@ def write_text(path, text):
 def make_renderable_report(root):
     keywords = [
         {
-            "keyword": f"ai plush toy {idx}",
-            "monthly_search_volume": 1200 - idx,
+            "keyword": f"ai plush toy {idx}" if idx >= 5 else f"robot companion {idx}",
+            "monthly_search_volume": 1200 - idx if idx >= 5 else 1500 - idx,
             "source_id": "src_001",
             "provider": "sorftime",
         }

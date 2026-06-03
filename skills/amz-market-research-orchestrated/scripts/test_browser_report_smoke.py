@@ -53,7 +53,9 @@ test('static bundle links navigate and render visible report pages', async ({ pa
 
 test('desktop interactions work on child reports', async ({ page }) => {
   await openReport(page, 'market-depth-report.html');
-  const search = page.locator('.table-tools input[type="search"]').first();
+  const filterable = page.locator('.filterable-table').first();
+  await expect(filterable).toBeVisible();
+  const search = filterable.locator('.table-tools input[type="search"]').first();
   await expect(search).toBeVisible();
   await search.fill('zzzz-no-match');
   const visibleRowsAfterFilter = await search.evaluate(input => {
@@ -61,6 +63,28 @@ test('desktop interactions work on child reports', async ({ page }) => {
     return table ? table.querySelectorAll('tbody tr:not(.is-filtered-out)').length : -1;
   });
   expect(visibleRowsAfterFilter).toBe(0);
+  await search.fill('');
+  const filterButton = filterable.locator('.filter-bar .filter-btn[data-filter="高相关"]').first();
+  await expect(filterButton).toBeVisible();
+  await filterButton.click();
+  await expect(filterButton).toHaveAttribute('aria-pressed', 'true');
+  const filteredState = await filterButton.evaluate(button => {
+    const table = button.closest('.filterable-table')?.querySelector('table');
+    const rows = [...table.querySelectorAll('tbody tr')];
+    return {
+      visible: rows.filter(row => !row.classList.contains('is-filtered-out')).map(row => row.dataset.filter || ''),
+      hidden: rows.filter(row => row.classList.contains('is-filtered-out')).map(row => row.dataset.filter || '')
+    };
+  });
+  expect(filteredState.visible.length).toBeGreaterThan(0);
+  expect(filteredState.visible.every(value => value.includes('高相关'))).toBeTruthy();
+  expect(filteredState.hidden.some(value => !value.includes('高相关'))).toBeTruthy();
+  await search.fill('zzzz-no-match');
+  const combinedVisible = await filterButton.evaluate(button => {
+    const table = button.closest('.filterable-table')?.querySelector('table');
+    return table.querySelectorAll('tbody tr:not(.is-filtered-out)').length;
+  });
+  expect(combinedVisible).toBe(0);
   await search.fill('');
   const firstHeader = page.locator('th[data-sortable]').first();
   await expect(firstHeader).toBeVisible();

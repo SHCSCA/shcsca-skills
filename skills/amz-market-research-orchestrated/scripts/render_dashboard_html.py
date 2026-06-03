@@ -298,11 +298,12 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
     traffic_keywords = [kw for kw in keywords if kw.get("source_type") == "product_traffic_terms"]
     relevant_keywords = [kw for kw in core_keywords if kw.get("is_core_relevant") or kw.get("relevance_cn") == "高相关"]
     adjacent_keywords = [kw for kw in core_keywords if kw not in relevant_keywords]
-    top_keywords = sorted(relevant_keywords or core_keywords or keywords, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
+    top_keywords = sorted(core_keywords or keywords, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
     source_type_counts = Counter(kw.get("source_type", "unknown") for kw in keywords)
     relevance_counts = Counter(kw.get("relevance_cn", "待判断") for kw in keywords)
     cpc_keywords = sorted([kw for kw in top_keywords if kw.get("recommended_cpc") not in (None, "")], key=lambda kw: as_float(kw.get("recommended_cpc"), 0), reverse=True)
     competition_keywords = sorted([kw for kw in top_keywords if kw.get("competitor_count") not in (None, "")], key=lambda kw: as_float(kw.get("competitor_count"), 0), reverse=True)
+    visible_keywords = top_keywords[:40]
     rows = [
         [
             kw.get("keyword_cn"),
@@ -317,8 +318,13 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
             first(kw.get("source_type"), default="-"),
             kw.get("source_id"),
         ]
-        for kw in top_keywords[:40]
+        for kw in visible_keywords
     ]
+    row_filters = [first(kw.get("relevance_cn"), default="待判断") for kw in visible_keywords]
+    filter_options = [("全部", "all")]
+    for bucket in ["高相关", "相邻相关", "待判断"]:
+        if bucket in set(row_filters):
+            filter_options.append((bucket, bucket))
     intent_cards = (
         "<div class=\"grid-3\">"
         + "<div class=\"card\"><div class=\"card-title\">需求强度 Top10</div>"
@@ -348,7 +354,12 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
     return (
         "<div class=\"insight\">关键词主表优先展示与研究对象高相关的需求词；相邻/泛流量词与 ASIN 反查词分别放入折叠明细，避免把流量噪声误判为进入机会。</div>"
         + intent_cards
-        + table(["关键词中文", "英文关键词", "相关性", "月搜索量", "周搜索量", "CPC", "竞争结果", "中文意图", "旺季", "来源", "source_id"], rows)
+        + table(
+            ["关键词中文", "英文关键词", "相关性", "月搜索量", "周搜索量", "CPC", "竞争结果", "中文意图", "旺季", "来源", "source_id"],
+            rows,
+            filter_options=filter_options,
+            row_filters=row_filters,
+        )
         + details("高竞争关键词明细", comp_table)
         + details("相邻与噪声关键词池（不直接作为进入判断）", adjacent_table)
         + details("关键词来源结构", source_table)

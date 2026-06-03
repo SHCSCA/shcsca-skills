@@ -81,6 +81,7 @@ def child_html(style, title, sections, extra_terms=""):
     interactions = """
 <nav class="site-nav"><button class="site-nav-toggle" type="button">目录</button><a href="report.html">三合一报告</a></nav>
 <div data-tabs><button class="tab-button" type="button" data-tab-target="evidence" aria-selected="true">证据</button><div data-tab-panel="evidence">证据强度：高</div></div>
+<div class="filter-bar"><button class="filter-btn active" type="button" data-filter="all" aria-pressed="true">全部</button><button class="filter-btn" type="button" data-filter="高" aria-pressed="false">高</button></div>
 <details class="evidence-drawer"><summary>证据抽屉</summary><div class="drawer-body">样本覆盖和数据缺口均已标注。</div></details>
 """
     return f"""<!doctype html>

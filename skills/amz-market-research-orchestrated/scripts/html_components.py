@@ -75,12 +75,31 @@ def has_cjk(value: Any) -> bool:
     return re.search(r"[\u4e00-\u9fff]", clean(value)) is not None
 
 
-def table(headers: list[str], rows: list[list[Any]], class_name: str = "evidence-table") -> str:
+def table(
+    headers: list[str],
+    rows: list[list[Any]],
+    class_name: str = "evidence-table",
+    filter_options: list[tuple[str, str]] | None = None,
+    row_filters: list[Any] | None = None,
+) -> str:
     head = "".join(f"<th>{esc(header)}</th>" for header in headers)
-    body = "\n".join(
-        "<tr>" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>" for row in rows
-    )
-    return f"<table class=\"{class_name}\"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    body_rows = []
+    for idx, row in enumerate(rows):
+        row_filter = row_filters[idx] if row_filters and idx < len(row_filters) else ""
+        filter_attr = f" data-filter=\"{esc(row_filter)}\"" if row_filter not in (None, "") else ""
+        body_rows.append("<tr" + filter_attr + ">" + "".join(f"<td>{esc(cell)}</td>" for cell in row) + "</tr>")
+    body = "\n".join(body_rows)
+    rendered_table = f"<table class=\"{class_name}\"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+    if not filter_options:
+        return rendered_table
+    buttons = []
+    for idx, (label, filter_value) in enumerate(filter_options):
+        active = " active" if idx == 0 else ""
+        pressed = "true" if idx == 0 else "false"
+        buttons.append(
+            f"<button class=\"filter-btn{active}\" type=\"button\" data-filter=\"{esc(filter_value)}\" aria-pressed=\"{pressed}\">{esc(label)}</button>"
+        )
+    return f"<div class=\"filterable-table\"><div class=\"filter-bar\">{''.join(buttons)}</div>{rendered_table}</div>"
 
 
 def table_inner(headers: list[str], rows: list[list[Any]]) -> str:
