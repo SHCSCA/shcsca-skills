@@ -70,7 +70,7 @@ def build_report_documents(
     )
     report_title = f"{object_value} · 三合一市场研究报告"
 
-    kpis = [
+    market_kpis = [
         call(fns, "kpi_card", "核心判断", decision, "Go / Watch / No-Go", "warning"),
         call(fns, "kpi_card", "Top100 估算月销量", call(fns, "num", category.get("top100_estimated_monthly_units")), "类目代理指标", "success"),
         call(
@@ -81,17 +81,6 @@ def build_report_documents(
             keywords[0].get("keyword") if keywords else "keyword gap",
         ),
         call(fns, "kpi_card", "相关竞品池", call(fns, "num", len(products)), "过滤泛词噪声后", ""),
-        call(fns, "kpi_card", "评论样本", call(fns, "num", len(data_pack.get("reviews") or [])), "已做中文摘要映射", ""),
-        call(fns, "kpi_card", "1688 样本", call(fns, "num", len(data_pack.get("suppliers") or [])), "供应端参考", "warning"),
-        call(fns, "kpi_card", "TikTok 商品", call(fns, "num", len(data_pack.get("tiktok_products") or [])), "内容端信号", ""),
-        call(
-            fns,
-            "kpi_card",
-            "数据质量",
-            call(fns, "first", quality.get("grade"), "-"),
-            f"score {call(fns, 'first', quality.get('overall_score'), '-')}",
-            "warning",
-        ),
     ]
 
     common = {
@@ -107,10 +96,11 @@ def build_report_documents(
     }
     market_replacements = {
         **common,
+        "{{OBJECT_VALUE}}": object_value,
         "{{MARKET_REPORT_TITLE}}": f"{object_value} · 市场深度调研报告",
         "{{REPORT_SUBTITLE}}": "客户版 AI 深度分析 · 大盘判断、需求结构、竞品格局、内容信号、供应链判断与行动建议",
-        "{{KPI_CARDS}}": "".join(kpis),
-        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{call(fns, 'esc', decision)}；置信等级：{call(fns, 'confidence_level', data_pack, analysis_plan)}。当前样本覆盖 {len(data_pack.get('products', []))} 个竞品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(data_pack.get('suppliers', []))} 条供应端样本。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
+        "{{KPI_CARDS}}": "".join(market_kpis),
+        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{call(fns, 'esc', decision)}；置信等级：{call(fns, 'confidence_level', data_pack, analysis_plan)}。当前数据覆盖 {len(data_pack.get('products', []))} 个竞品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(data_pack.get('suppliers', []))} 条供应端记录。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
         "{{MARKET_DASHBOARD}}": call(fns, "render_market", data_pack, market_size),
         "{{KEYWORD_TABLE_AND_INTENT_CARDS}}": call(fns, "render_keywords", data_pack),
         "{{COMPETITOR_TABLE}}": competitor_table,
@@ -120,12 +110,14 @@ def build_report_documents(
         "{{TIKTOK_VALIDATION}}": call(fns, "render_tiktok", data_pack),
         "{{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}": call(fns, "render_supply", data_pack, profitability),
         "{{WEB_RISK_SUPPLEMENT}}": call(fns, "render_web_risk", data_pack),
-        "{{CLIENT_ACTION_SUMMARY}}": call(fns, "render_client_action_summary", data_pack, analysis_plan, str(decision), object_value),
+        "{{CLIENT_ACTION_SUMMARY}}": call(fns, "render_market_conclusion", data_pack, analysis_plan, str(decision), object_value),
+        "{{PRODUCT_DEFINITION}}": call(fns, "render_opportunities", opportunity),
+        "{{VISUAL_DIRECTION}}": call(fns, "render_visual_direction", opportunity),
         "{{OPPORTUNITY_CARDS}}": call(fns, "render_opportunities", opportunity),
         "{{DECISION_ROADMAP}}": call(fns, "render_decision", delivery),
         "{{FULL_DATA_APPENDIX}}": call(fns, "render_full_appendix", data_pack, analysis_plan),
         "{{LINEAGE_TABLE}}": call(fns, "render_lineage", data_pack),
-        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · amz-market-research-orchestrated 生成 · market-depth-report-v2",
+        "{{REPORT_FOOTER}}": f"<span>{call(fns, 'esc', object_value)} 市场深度调研报告 · 数据覆盖：Amazon US · 1688 · 清洗后数据</span><span>Confidential · Client Use Only</span>",
     }
     skus = call(fns, "lifecycle_skus", data_pack, lifecycle, fallback_source)
     lifecycle_replacements = {
@@ -171,15 +163,12 @@ def build_report_documents(
     market_shell = call(fns, "render_legacy_child_template", "market_depth", market_replacements)
     lifecycle_shell = call(fns, "render_legacy_child_template", "lifecycle_strategy", lifecycle_replacements)
     demand_shell = call(fns, "render_legacy_child_template", "demand_gap", demand_replacements)
-    market_replacements["{{MARKET_DEPTH_REPORT_BODY}}"] = call(fns, "child_body_fragment", market_shell)
-    lifecycle_replacements["{{LIFECYCLE_STRATEGY_REPORT_BODY}}"] = call(fns, "child_body_fragment", lifecycle_shell)
-    demand_replacements["{{DEMAND_GAP_REPORT_BODY}}"] = call(fns, "child_body_fragment", demand_shell)
 
     rendered_docs = {
         "index": call(fns, "attach_site_chrome", call(fns, "render_template", "index", index_replacements)),
-        "market_depth": call(fns, "attach_site_chrome", call(fns, "render_template", "market_depth", market_replacements)),
-        "lifecycle_strategy": call(fns, "attach_site_chrome", call(fns, "render_template", "lifecycle_strategy", lifecycle_replacements)),
-        "demand_gap": call(fns, "attach_site_chrome", call(fns, "render_template", "demand_gap", demand_replacements)),
+        "market_depth": call(fns, "attach_site_chrome", market_shell),
+        "lifecycle_strategy": call(fns, "attach_site_chrome", lifecycle_shell),
+        "demand_gap": call(fns, "attach_site_chrome", demand_shell),
     }
     compat_index_html = call(
         fns,

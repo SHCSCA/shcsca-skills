@@ -26,3 +26,5 @@
 - Check that every major opportunity has supporting evidence or an explicit data gap.
 - Check that no child report silently upgrades AI inference into measured fact.
 - Check that missing metrics become customer-readable limitations.
+- Check that ASIN values appear only in approved benchmark/profitability scopes and that English review text appears only as short excerpts paired with Chinese summaries.
+- Check that supply-chain cost and gross-margin conclusions are blocked unless `supplier_quote_gate.passed=true` with at least 50 deduped valid 1688 quotes.

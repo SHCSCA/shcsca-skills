@@ -150,7 +150,15 @@ Keyword dedupe must not collapse global demand and ASIN traffic into one row:
 
 HTML should display global demand in the main keyword table, adjacent/noisy terms in a separate table, and ASIN traffic terms in an ASIN traffic foldout.
 
-Client HTML must not display raw English review text or English review titles. Keep original review fields in `data_pack.json` for audit, but render `summary_cn`, `title_cn`, `themes_cn`, sentiment, and suggested actions in customer-facing reports.
+Client HTML renders Chinese review summary first. It may also display a short English review excerpt when the element is marked `data-allow-english-review="short"` and paired with `summary_cn`, `title_cn`, `themes_cn`, sentiment, and suggested actions. Full raw English review text and English review titles remain audit-only.
+
+1688 supplier data is delivery-blocking for standard/deep supply and profitability sections:
+
+- Run multi-round Sorftime `ali1688_similar_product` collection until there are at least 50 deduped valid quotes or all configured rounds are exhausted.
+- A valid supplier quote has title, supplier/shop, positive RMB price, and canonical URL/product ID/title+shop identity.
+- Deduplicate suppliers by canonical URL, product ID, or title + store before counting the 50-quote gate.
+- `data_readiness_report.json`, `delivery_result.json`, and `report-data.json` must expose `supplier_quote_gate`.
+- Customer HTML must not render final 1688 cost or gross-margin conclusions when `supplier_quote_gate.passed=false`.
 
 ## Cleaning Boundary
 

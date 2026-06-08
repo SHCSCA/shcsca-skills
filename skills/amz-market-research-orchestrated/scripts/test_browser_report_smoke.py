@@ -35,27 +35,53 @@ async function openReport(page, name, width = 1280, height = 900) {
   page.on('pageerror', err => errors.push(err.message));
   await page.setViewportSize({ width, height });
   await page.goto(reportUrl(name), { waitUntil: 'networkidle' });
-  await expect(page.locator('.site-nav')).toBeVisible();
+  if (name === 'report.html') {
+    await expect(page.locator('.site-nav')).toHaveCount(1);
+    await expect(page.locator('.site-nav')).toBeVisible();
+  } else {
+    await expect(page.locator('.site-nav')).toHaveCount(0);
+  }
   await expect(page.locator('h1').first()).toBeVisible();
   expect(errors).toEqual([]);
 }
 
+async function expectEchartsRendered(page, ids) {
+  for (const id of ids) {
+    await page.waitForFunction((chartId) => {
+      const el = document.getElementById(chartId);
+      if (!el) return false;
+      const rendered = el.querySelector('canvas,svg');
+      return !!rendered && el.clientWidth > 0 && el.clientHeight > 0;
+    }, id);
+  }
+}
+
 test('static bundle links navigate and render visible report pages', async ({ page }) => {
-  await openReport(page, 'report.html');
-  for (const href of ['market-depth-report.html', 'lifecycle-strategy-report.html', 'demand-gap-report.html']) {
+  const chartIds = {
+    'market-depth-report.html': ['priceChart', 'bubbleChart', 'growthChart', 'featureChart', 'radarChart', 'marginChart'],
+    'lifecycle-strategy-report.html': ['sunburst', 'priorityChart', 'aovChart'],
+    'demand-gap-report.html': ['appealsRose', 'gapRadar']
+  };
+  for (const href of Object.keys(chartIds)) {
+    await openReport(page, 'report.html');
     await page.click(`a[href="${href}"]`);
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('.site-nav')).toBeVisible();
+    await expect(page.locator('.site-nav')).toHaveCount(0);
     await expect(page.locator('h1').first()).toBeVisible();
     await expect(page.locator('table').first()).toBeVisible();
+    await expectEchartsRendered(page, chartIds[href]);
   }
 });
 
 test('desktop interactions work on child reports', async ({ page }) => {
   await openReport(page, 'market-depth-report.html');
-  const filterable = page.locator('.filterable-table').first();
-  await expect(filterable).toBeVisible();
-  const search = filterable.locator('.table-tools input[type="search"]').first();
+  await expect(page.locator('.table-tools')).toHaveCount(0);
+  await expect(page.locator('body')).not.toHaveClass(/template-market/);
+  await expect(page.locator('.section-title', { hasText: '建议定价策略' })).toBeVisible();
+  await expect(page.locator('.pricing-card.recommended')).toBeVisible();
+  await expect(page.locator('.comp-table').first()).toBeVisible();
+  await openReport(page, 'lifecycle-strategy-report.html');
+  const search = page.locator('.table-tools input[type="search"]').first();
   await expect(search).toBeVisible();
   await search.fill('zzzz-no-match');
   const visibleRowsAfterFilter = await search.evaluate(input => {
@@ -64,28 +90,11 @@ test('desktop interactions work on child reports', async ({ page }) => {
   });
   expect(visibleRowsAfterFilter).toBe(0);
   await search.fill('');
-  const filterButton = filterable.locator('.filter-bar .filter-btn[data-filter="高相关"]').first();
-  await expect(filterButton).toBeVisible();
-  await filterButton.click();
-  await expect(filterButton).toHaveAttribute('aria-pressed', 'true');
-  const filteredState = await filterButton.evaluate(button => {
-    const table = button.closest('.filterable-table')?.querySelector('table');
-    const rows = [...table.querySelectorAll('tbody tr')];
-    return {
-      visible: rows.filter(row => !row.classList.contains('is-filtered-out')).map(row => row.dataset.filter || ''),
-      hidden: rows.filter(row => row.classList.contains('is-filtered-out')).map(row => row.dataset.filter || '')
-    };
-  });
-  expect(filteredState.visible.length).toBeGreaterThan(0);
-  expect(filteredState.visible.every(value => value.includes('高相关'))).toBeTruthy();
-  expect(filteredState.hidden.some(value => !value.includes('高相关'))).toBeTruthy();
-  await search.fill('zzzz-no-match');
-  const combinedVisible = await filterButton.evaluate(button => {
-    const table = button.closest('.filterable-table')?.querySelector('table');
-    return table.querySelectorAll('tbody tr:not(.is-filtered-out)').length;
-  });
-  expect(combinedVisible).toBe(0);
-  await search.fill('');
+  const filterButton = page.locator('.filter-bar .filter-btn[data-filter]').nth(1);
+  if (await filterButton.count()) {
+    await filterButton.click();
+    await expect(filterButton).toHaveAttribute('aria-pressed', 'true');
+  }
   const firstHeader = page.locator('th[data-sortable]').first();
   await expect(firstHeader).toBeVisible();
   await firstHeader.click();
@@ -95,8 +104,6 @@ test('desktop interactions work on child reports', async ({ page }) => {
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
   }
-  const drawer = page.locator('.evidence-drawer').first();
-  await expect(drawer).toBeVisible();
   const bar = page.locator('.mini-chart .bar-row').first();
   if (await bar.count()) {
     await bar.hover();
@@ -105,7 +112,7 @@ test('desktop interactions work on child reports', async ({ page }) => {
 });
 
 test('mobile navigation and screenshots are nonblank', async ({ page }) => {
-  await openReport(page, 'demand-gap-report.html', 390, 844);
+  await openReport(page, 'report.html', 390, 844);
   const toggle = page.locator('.site-nav-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();

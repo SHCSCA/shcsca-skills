@@ -420,8 +420,8 @@ def title_cn(title: Any, segment: Any = None) -> str:
         return text
     segment_text = normalize_text(segment)
     if has_cjk(segment_text):
-        return f"{segment_text}样本"
-    return "竞品样本"
+        return f"{segment_text}记录"
+    return "竞品记录"
 
 
 def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:

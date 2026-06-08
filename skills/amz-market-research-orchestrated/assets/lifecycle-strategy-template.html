@@ -15,7 +15,7 @@
     @media(max-width:1000px){.report-header{padding:38px 24px}.container{padding:0 24px 40px}.header-meta,.kpi-grid,.persona-grid,.timeline-grid,.bundle-grid,.phase-grid,.risk-grid,.deep-dive-grid,.opportunity-matrix{grid-template-columns:1fr}.section-header{align-items:flex-start}.section-desc{margin-left:0}}
   </style>
 </head>
-<body>
+<body class="template-lifecycle">
   <header class="report-header">
     <div class="header-badge">Lifecycle Strategy</div>
     <h1>{{LIFECYCLE_REPORT_TITLE}}</h1>
@@ -28,7 +28,6 @@
     </div>
   </header>
   <main class="container">
-    {{CLIENT_TRUST_STRIP}}
     <section id="strategy-dashboard" class="section"><div class="section-header"><span class="section-number">01</span><h2 class="section-title">战略仪表盘</h2><span class="section-desc">拓品全局概览</span></div>{{STRATEGY_DASHBOARD}}</section>
     <section id="personas" class="section"><div class="section-header"><span class="section-number">02</span><h2 class="section-title">用户画像</h2><span class="section-desc">人群 · 场景 · 价格接受带</span></div>{{USER_PERSONAS}}</section>
     <section id="lifecycle-journey" class="section"><div class="section-header"><span class="section-number">03</span><h2 class="section-title">生命周期旅程</h2><span class="section-desc">5阶段 · 触点覆盖</span></div>{{LIFECYCLE_JOURNEY}}</section>
@@ -37,8 +36,8 @@
     <section id="bundle-strategy" class="section"><div class="section-header"><span class="section-number">06</span><h2 class="section-title">Bundle 策略</h2><span class="section-desc">AOV 提升引擎</span></div>{{BUNDLE_STRATEGY}}</section>
     <section id="roadmap" class="section"><div class="section-header"><span class="section-number">07</span><h2 class="section-title">30/60/90 天路线图</h2><span class="section-desc">分批上线 · 验证动作</span></div>{{IMPLEMENTATION_ROADMAP}}</section>
     <section id="risk-matrix" class="section"><div class="section-header"><span class="section-number">08</span><h2 class="section-title">风险矩阵</h2><span class="section-desc">供应链 · 合规 · 跟进</span></div>{{RISK_MATRIX}}</section>
-    <section id="market-intelligence" class="section"><div class="section-header"><span class="section-number">09</span><h2 class="section-title">市场验证摘要</h2><span class="section-desc">样本覆盖 · 证据强度 · 数据缺口</span></div>{{MARKET_INTELLIGENCE}}</section>
+    <section id="market-intelligence" class="section"><div class="section-header"><span class="section-number">09</span><h2 class="section-title">市场验证摘要</h2><span class="section-desc">数据覆盖 · 证据强度 · 数据缺口</span></div>{{MARKET_INTELLIGENCE}}</section>
   </main>
-  <footer class="footer">{{REPORT_FOOTER}}</footer>
+  <footer class="report-footer footer">{{REPORT_FOOTER}}</footer>
 </body>
 </html>

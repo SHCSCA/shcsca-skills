@@ -36,7 +36,7 @@ class CustomerSafetyTest(unittest.TestCase):
         for leaked in ["source_id", "src_001", "provider", "sorftime", "raw_path", "data/raw", "B0TEST1234", "internal_product_1", "sf_分析方法"]:
             self.assertNotIn(leaked, redacted)
         self.assertIn("中文化评论摘要", redacted)
-        self.assertIn("竞品样本", redacted)
+        self.assertIn("竞品记录", redacted)
 
     def test_customer_safe_asset_text_redacts_internal_ids_without_destroying_normal_strength_words(self):
         text = "ASIN B0TEST1234 来源 src_评论_under 证据强度 高，data/raw/file.json"
@@ -48,6 +48,39 @@ class CustomerSafetyTest(unittest.TestCase):
         self.assertNotIn("src_评论_under", safe)
         self.assertNotIn("data/raw", safe)
         self.assertIn("证据强度 高", safe)
+
+    def test_redact_customer_html_preserves_benchmark_scoped_asin(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <section id="benchmark-sniper">
+          <span class="asin-token" data-allow-asin="benchmark-sniper">B0TEST1234</span>
+        </section>
+        <p>其他区域 B0TEST1234 仍要脱敏。</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-asin="benchmark-sniper">B0TEST1234</span>', redacted)
+        self.assertIn("其他区域 竞品记录 仍要脱敏", redacted)
+
+    def test_redact_customer_html_preserves_scoped_english_review_excerpt(self):
+        data_pack = {
+            "reviews": [
+                {
+                    "text": "This toy stopped working after two days and the privacy policy is confusing.",
+                    "source_id": "src_001",
+                }
+            ]
+        }
+        html = """
+        <p><span class="review-excerpt-en" data-allow-english-review="short">This toy stopped working after two days.</span></p>
+        <p>This toy stopped working after two days and the privacy policy is confusing.</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-english-review="short">This toy stopped working after two days.</span>', redacted)
+        self.assertIn("中文化评论摘要", redacted)
 
     def test_client_safe_view_payload_drops_blocked_keys_recursively(self):
         payload = {

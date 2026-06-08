@@ -72,9 +72,9 @@ class CriticRunnerTest(unittest.TestCase):
             "normalization": {"cross_validated_counts": {"keywords": 1000, "products": 3}},
         }
         rendered_docs = {
-            "market_depth": "<html><body>证据强度 样本覆盖 数据缺口 置信等级 建议动作 source_id</body></html>",
-            "lifecycle_strategy": "<html><body>证据强度 样本覆盖 数据缺口 置信等级 建议动作 成本</body></html>",
-            "demand_gap": "<html><body>证据强度 样本覆盖 数据缺口 置信等级 建议动作</body></html>",
+            "market_depth": "<html><body>证据强度 数据覆盖 数据缺口 置信等级 建议动作 source_id</body></html>",
+            "lifecycle_strategy": "<html><body>证据强度 数据覆盖 数据缺口 置信等级 建议动作 成本</body></html>",
+            "demand_gap": "<html><body>证据强度 数据覆盖 数据缺口 置信等级 建议动作</body></html>",
         }
         view_models = {
             "market_depth_view.json": {"client_safe_text": True},

@@ -15,12 +15,14 @@ MANIFEST = SKILL_DIR / "references" / "template-baseline-manifest.json"
 CHECKLIST = SKILL_DIR / "references" / "html-template-parity-checklist.md"
 SITE_ASSETS = SCRIPT_DIR / "site_assets.py"
 LOCAL_DOWNLOAD_ROOT = Path(r"C:\Users\wz\Downloads\downloadpage")
+CANONICAL_DIR = SKILL_DIR / "assets" / "canonical_templates"
 
 
 BASELINES = {
     "market_depth": {
         "folder": "143101",
         "template": SKILL_DIR / "assets" / "market-depth-template.html",
+        "canonical_asset": CANONICAL_DIR / "market-depth-reference.html",
         "report_style": "market-depth-report-v2",
         "css_signals": [
             "report-header",
@@ -47,6 +49,7 @@ BASELINES = {
     "lifecycle_strategy": {
         "folder": "143511",
         "template": SKILL_DIR / "assets" / "lifecycle-strategy-template.html",
+        "canonical_asset": CANONICAL_DIR / "lifecycle-strategy-reference.html",
         "report_style": "lifecycle-strategy-report-v2",
         "css_signals": [
             "persona-grid",
@@ -74,6 +77,7 @@ BASELINES = {
     "demand_gap": {
         "folder": "143645",
         "template": SKILL_DIR / "assets" / "demand-gap-template.html",
+        "canonical_asset": CANONICAL_DIR / "demand-gap-reference.html",
         "report_style": "demand-gap-report-v2",
         "css_signals": [
             "mode-r3",
@@ -90,7 +94,7 @@ BASELINES = {
         "required_sections": [
             "研究对象概述",
             "决策看板",
-            "$APPEALS 痛点图",
+            "市场痛点全景图（$APPEALS）",
             "满意度鸿沟",
             "KANO",
             "JTBD",
@@ -110,6 +114,19 @@ JS_SIGNALS = [
     "dataset.filter",
     "mini-chart .bar-row",
     "addEventListener('click'",
+    "renderer:isIOSWebKit",
+    "priceChart",
+    "bubbleChart",
+    "growthChart",
+    "featureChart",
+    "radarChart",
+    "marginChart",
+    "type:'sunburst'",
+    "priorityChart",
+    "aovChart",
+    "type:'sankey'",
+    "appealsRose",
+    "gapRadar",
 ]
 
 EXCLUDED_ASSETS = [
@@ -149,6 +166,9 @@ def validate_contract(require_downloads: bool = False) -> dict[str, object]:
         baseline = baselines.get(report_key) or {}
         folder = str(spec["folder"])
         require(folder in str(baseline.get("download_folder") or ""), f"{report_key} baseline download folder mismatch")
+        require(str(baseline.get("canonical_asset") or "") == str(spec["canonical_asset"].relative_to(SKILL_DIR)).replace("\\", "/"), f"{report_key} canonical asset mismatch")
+        require(spec["canonical_asset"].exists(), f"{report_key} canonical reference HTML missing")
+        require("<style" in read(spec["canonical_asset"]), f"{report_key} canonical reference missing inline style")
         require(folder in checklist, f"checklist missing folder {folder}")
         require(str(spec["report_style"]) in read(spec["template"]), f"{report_key} template missing report style")
         for section in spec["required_sections"]:
@@ -162,6 +182,10 @@ def validate_contract(require_downloads: bool = False) -> dict[str, object]:
 
     for signal in JS_SIGNALS:
         require(signal in site_assets, f"shared report.js missing interaction signal: {signal}")
+    require((CANONICAL_DIR / "echarts.min.js").exists(), "canonical local echarts runtime missing")
+    require("echarts.min.js" in site_assets, "site asset writer must copy local echarts runtime")
+    require("<script src=\"https://cdn.jsdelivr.net" not in site_assets, "site asset writer must not inject CDN echarts")
+    require("canonical_asset_policy" in manifest, "template manifest missing canonical asset policy")
 
     return {
         "template_parity_contract": True,

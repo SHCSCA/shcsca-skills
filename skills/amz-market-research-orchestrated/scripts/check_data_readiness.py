@@ -18,7 +18,7 @@ MIN_QUICK_PRODUCTS = 1
 RECOMMENDED_STANDARD_REVIEW_SAMPLE = 80
 RECOMMENDED_DEEP_REVIEW_SAMPLE = 200
 RECOMMENDED_WEB_DOCUMENTS = 1
-RECOMMENDED_SUPPLIERS = 1
+MIN_VALID_1688_QUOTES = 50
 RECOMMENDED_TIKTOK_SIGNALS = 1
 
 
@@ -99,11 +99,58 @@ def warning(module: str, current: int, recommended: int, impact: str, next_step:
     }
 
 
+def to_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(str(value).replace(",", "").replace("，", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def supplier_identity(supplier: dict[str, Any]) -> str:
+    for key in ("canonical_url", "url", "product_url"):
+        value = str(supplier.get(key) or "").strip().split("?", 1)[0].split("#", 1)[0].lower()
+        if value:
+            return f"url|{value.rstrip('/')}"
+    product_id = str(supplier.get("product_id") or supplier.get("offer_id") or "").strip().lower()
+    if product_id:
+        return f"id|{product_id}"
+    title = " ".join(str(supplier.get("title") or supplier.get("title_cn") or supplier.get("name") or "").casefold().split())
+    shop = " ".join(str(supplier.get("supplier_name") or supplier.get("store_name") or supplier.get("shop") or "").casefold().split())
+    return f"title_shop|{title}|{shop}" if title and shop else ""
+
+
+def valid_supplier_quotes(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    valid: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for supplier in data_pack.get("suppliers") or []:
+        if not isinstance(supplier, dict):
+            continue
+        price = to_float(
+            supplier.get("price_rmb")
+            if supplier.get("price_rmb") not in (None, "")
+            else supplier.get("factory_price_rmb")
+            if supplier.get("factory_price_rmb") not in (None, "")
+            else supplier.get("price")
+        )
+        title = supplier.get("title") or supplier.get("title_cn") or supplier.get("name")
+        shop = supplier.get("supplier_name") or supplier.get("store_name") or supplier.get("shop")
+        identity = supplier_identity(supplier)
+        if price is None or price <= 0 or not title or not shop or not identity or identity in seen:
+            continue
+        seen.add(identity)
+        valid.append(supplier)
+    return valid
+
+
 def collector_commands(report_dir: Path) -> list[str]:
     report = str(report_dir)
     return [
         f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir {report} --min-keywords 1200",
         f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_reviews.py --dir {report} --review-type Both",
+        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_tiktok_signals.py --dir {report} --site US --max-seeds 4 --max-pages 1 --max-products-detail 3 --video-pages 1",
+        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir {report} --min-valid-quotes {MIN_VALID_1688_QUOTES} --max-rounds 5",
         f"python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir {report}",
     ]
 
@@ -116,6 +163,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     required_keywords = MIN_STANDARD_KEYWORDS if standard_like else MIN_QUICK_KEYWORDS
     required_products = MIN_STANDARD_PRODUCTS if standard_like else MIN_QUICK_PRODUCTS
 
+    supplier_quotes = valid_supplier_quotes(data_pack)
     counts = {
         "sources": count(data_pack, "sources"),
         "products": count(data_pack, "products"),
@@ -125,6 +173,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "tiktok_products": count(data_pack, "tiktok_products"),
         "tiktok_videos": count(data_pack, "tiktok_videos"),
         "suppliers": count(data_pack, "suppliers"),
+        "valid_supplier_quotes": len(supplier_quotes),
         "web_documents": count(data_pack, "web_documents"),
         "data_gaps": count(data_pack, "data_gaps"),
     }
@@ -184,14 +233,20 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 "用 Firecrawl 补行业/品牌/测评/合规网页；不可用时写 data_gaps。",
             )
         )
-    if counts["suppliers"] < RECOMMENDED_SUPPLIERS:
-        warnings.append(
-            warning(
-                "supplier_evidence_depth",
-                counts["suppliers"],
-                RECOMMENDED_SUPPLIERS,
-                "供应链和成本红线只能做方向判断。",
-                "补 1688/Alibaba 相似货源；不可用时保留供应链缺口。",
+    supplier_gate = {
+        "required": MIN_VALID_1688_QUOTES if standard_like else 1,
+        "actual": counts["valid_supplier_quotes"],
+        "passed": counts["valid_supplier_quotes"] >= (MIN_VALID_1688_QUOTES if standard_like else 1),
+        "policy": "1688 去重有效报价不足时必须多轮 Sorftime 采集，不得生成最终供应链毛利率结论。",
+    }
+    if not supplier_gate["passed"]:
+        blocking_gaps.append(
+            gap(
+                "supplier_quote_depth",
+                counts["valid_supplier_quotes"],
+                supplier_gate["required"],
+                "1688 去重有效报价不足 50 条，不能支撑供应链成本和毛利率测算。",
+                "运行 collect_sorftime_1688_suppliers.py 多轮切换搜索词补采；5 轮仍不足时阻断供应链结论并输出诊断。",
             )
         )
     if counts["tiktok_products"] + counts["tiktok_videos"] < RECOMMENDED_TIKTOK_SIGNALS:
@@ -201,7 +256,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 counts["tiktok_products"] + counts["tiktok_videos"],
                 RECOMMENDED_TIKTOK_SIGNALS,
                 "内容场景和渠道热度只能降级为未知。",
-                "补 TikTok 商品/视频/达人链路；不可用时保留 TikTok 缺口。",
+                "运行 collect_sorftime_tiktok_signals.py 补 TikTok 商品/视频/达人链路；不可用时保留 TikTok 缺口。",
             )
         )
 
@@ -215,6 +270,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "blocking_gaps": blocking_gaps,
         "warnings": warnings,
         "counts": counts,
+        "supplier_quote_gate": supplier_gate,
         "collector_commands": collector_commands(report_dir),
     }
 

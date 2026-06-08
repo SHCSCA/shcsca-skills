@@ -41,7 +41,23 @@ reports/<task_id>/
     delivery_result.json
 ```
 
-The script prints `validate_ok` on success and `validate_failed: ...` on failure. It also rejects HTML reports that are Markdown wrappers, expose technical audit identifiers, or copy raw English review text into the client-facing pages instead of the v2 entry page plus three client-readable analysis reports.
+The script prints `validate_ok` on success and `validate_failed: ...` on failure. It also rejects HTML reports that are Markdown wrappers, expose technical audit identifiers, expose ASIN values outside approved benchmark/profitability scopes, copy full raw English reviews, or render 1688 profitability conclusions before the 50 valid quote gate passes.
+
+## collect_sorftime_1688_suppliers.py
+
+Collects 1688 supplier quotes with multi-round Sorftime `ali1688_similar_product` searches. It derives Chinese search seeds from Amazon competitors and keywords, retries up to five seed rounds, dedupes quote identities, and writes `supplier_1688_collection_summary.json`.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir reports/<task_id> --min-valid-quotes 50 --max-rounds 5
+```
+
+## collect_sorftime_tiktok_signals.py
+
+Collects TikTok Shop product, trend, video, and creator signals with Sorftime's documented schemas. Similar-product and creator search use `searchName/page/site`; product detail, trend, video, and creator chain calls use `productId/site`, with `page` only for video lists.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_tiktok_signals.py --dir reports/<task_id> --site US --max-seeds 4 --max-pages 1 --max-products-detail 3 --video-pages 1
+```
 
 ## Tests
 
@@ -58,6 +74,8 @@ python skills/amz-market-research-orchestrated/scripts/test_site_interactions.py
 python skills/amz-market-research-orchestrated/scripts/test_check_data_readiness.py
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_keywords.py
 python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_reviews.py
+python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_1688_suppliers.py
+python skills/amz-market-research-orchestrated/scripts/test_collect_sorftime_tiktok_signals.py
 python skills/amz-market-research-orchestrated/scripts/test_normalize_data_pack.py
 python skills/amz-market-research-orchestrated/scripts/test_render_dashboard_html.py
 python skills/amz-market-research-orchestrated/scripts/test_child_skill_split.py
@@ -84,6 +102,24 @@ python skills/amz-market-research-orchestrated/scripts/validate_template_parity_
 ```
 
 `run_acceptance_proof.py` runs this contract first. If template parity fails, the proof stops before readiness/render/validator.
+
+## run_visual_parity_audit.py
+
+Runs a real browser screenshot audit against an already rendered report directory:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/run_visual_parity_audit.py --dir reports/<task_id>
+```
+
+The audit opens `output/html_reports/report.html` plus the three child reports in desktop and mobile viewports, verifies core selectors, text density, table/section density, horizontal overflow, and nonblank screenshots. It writes:
+
+```text
+output/visual_parity_audit/visual_parity_audit.json
+output/visual_parity_audit/visual_parity_audit.md
+output/visual_parity_audit/*.png
+```
+
+This is the screenshot-level evidence layer for the template parity checklist. It still does not replace human visual review for final brand/design approval.
 
 ## check_data_readiness.py
 

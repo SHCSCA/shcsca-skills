@@ -47,7 +47,8 @@ python skills/amz-market-research-orchestrated/child_skills/market-depth-report/
 
 ## 质量门禁
 
-- 客户版 HTML 不展示 `source_id`、ASIN、provider、raw path 或英文原始评论。
+- 客户版 HTML 不展示 `source_id`、provider、raw path、Product ID 等技术字段。ASIN 只允许在标杆竞品狙击和竞品参考毛利率组件中作用域展示；VOC 可展示中文摘要 + 英文短摘，完整英文原评保留在审计文件。
+- 1688 供应链和毛利率结论必须等待主控 `supplier_quote_gate.passed=true`，即去重有效报价不少于 50 条。
 - 优先消费 `market_depth_view.json` 的 `kpis`、`charts`、`tables`、`cards`、`evidence_strength`、`sample_coverage`、`limitations`、`client_safe_text`。
 - 表格必须支持静态站点包的筛选、排序和证据抽屉交互。
 - 结论必须先写商业含义，再写建议动作。

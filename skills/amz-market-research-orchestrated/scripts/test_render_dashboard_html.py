@@ -24,6 +24,23 @@ def write_text(path, text):
     path.write_text(text, encoding="utf-8")
 
 
+def supplier_rows(count=50):
+    return [
+        {
+            "title": f"智能玩具外壳工厂款 {idx}",
+            "supplier_name": f"供应商 {idx}",
+            "url": f"https://detail.1688.com/offer/{idx}.html",
+            "price_rmb": 20 + idx,
+            "sales_30d": 500 + idx,
+            "shipping_origin": "广东",
+            "seed_keyword": "智能玩具",
+            "source_id": "src_001",
+            "provider": "sorftime",
+        }
+        for idx in range(count)
+    ]
+
+
 def make_renderable_report(root):
     keywords = [
         {
@@ -85,7 +102,7 @@ def make_renderable_report(root):
             ],
             "tiktok_products": [{"product_id": "tk_1", "title": "AI plush", "sold_count": 100, "source_id": "src_001", "provider": "sorftime"}],
             "tiktok_videos": [{"video_id": "v_1", "title": "AI plush demo", "views": 10000, "source_id": "src_001", "provider": "sorftime"}],
-            "suppliers": [{"supplier_name": "1688 supplier", "price": 18, "moq": 100, "source_id": "src_001", "provider": "sorftime"}],
+            "suppliers": supplier_rows(50),
             "web_documents": [{"url": "https://example.com/report", "title": "AI toy safety", "source_id": "src_002", "provider": "firecrawl"}],
             "data_gaps": ["No internal landed cost sheet."],
             "quality": {"overall_score": 0.7, "grade": "B"},
@@ -183,7 +200,6 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 "source_id",
                 "src_001",
                 "src_002",
-                "B0TEST1234",
                 "Product ID",
                 "product_id",
                 "raw_path",
@@ -207,12 +223,21 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                     "demand-gap-report.html",
                 ]
             )
-            self.assertIn('body class="template-market"', rendered_text)
+            market_html = (report_dir / "output" / "html_reports" / "market-depth-report.html").read_text(encoding="utf-8")
+            self.assertIn('data-report-style="market-depth-report-v2"', market_html)
+            self.assertNotIn('body class="template-market"', market_html)
+            demand_html = (report_dir / "output" / "html_reports" / "demand-gap-report.html").read_text(encoding="utf-8")
+            self.assertIn('data-chart-source="appealsRows"', demand_html)
+            self.assertIn('data-chart-source="gapRows"', demand_html)
+            self.assertIn('id="appealsRose" class="chart demand-chart"', demand_html)
+            self.assertIn('id="gapRadar" class="chart demand-chart"', demand_html)
+            self.assertNotIn('id="appealsRose" class="chart"><div class="mini-chart"', demand_html)
+            self.assertNotIn('id="gapRadar" class="chart"><div class="mini-chart"', demand_html)
             self.assertIn('body class="template-lifecycle"', rendered_text)
             self.assertIn('body class="template-demand mode-r3"', rendered_text)
             for name in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
                 child_html = (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
-                self.assertIn("site-nav", child_html)
+                self.assertNotIn("site-nav", child_html)
                 self.assertIn('href="assets/report.css"', child_html)
                 self.assertIn('src="assets/report.js"', child_html)
             self.assertNotIn("壁灯", rendered_text)
@@ -222,7 +247,6 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 "source_id",
                 "src_001",
                 "src_002",
-                "B0TEST1234",
                 "Product ID",
                 "product_id",
                 "internal_product_1",
@@ -238,7 +262,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 "来源",
             ]:
                 self.assertNotIn(leaked, rendered_text)
-            for client_term in ["证据强度", "样本覆盖", "数据缺口", "建议动作", "置信等级"]:
+            for client_term in ["证据强度", "数据覆盖", "数据缺口", "建议动作", "置信等级"]:
                 self.assertIn(client_term, rendered_text)
             self.assertNotIn("1000 关键词 / 1 竞品 / 1 评论 / 1 供应样本", rendered_text)
             self.assertNotIn("1 个竞品 / 1 条评论 / 1000 个关键词", rendered_text)
@@ -247,13 +271,18 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn('class="metric-tags"', rendered_text)
             self.assertIn('class="metric-tag"><b>1000</b><span>关键词</span></span>', rendered_text)
             self.assertIn('class="metric-tag"><b>1</b><span>竞品</span></span>', rendered_text)
-            self.assertNotIn("This toy stopped working after two days", rendered_text)
-            self.assertNotIn("privacy policy is confusing", rendered_text)
+            self.assertIn('data-allow-english-review="short"', rendered_text)
+            self.assertIn("This toy stopped working after two days", rendered_text)
             self.assertNotIn("privacy issue", rendered_text)
             self.assertNotIn("Interactive AI Plush Toy", rendered_text)
             self.assertIn("短期使用后出现失效", rendered_text)
             self.assertIn("隐私政策和数据使用说明不够清晰", rendered_text)
             self.assertNotIn("{{", rendered_text)
+            self.assertIn("竞品参考毛利率测算", rendered_text)
+            self.assertIn("参考竞品 ASIN", rendered_text)
+            self.assertIn("1688 成本分位数", rendered_text)
+            self.assertIn("B0TEST1234", market_html)
+            self.assertIn('data-allow-asin="benchmark-sniper"', market_html)
 
             lineage = (report_dir / "data" / "lineage.md").read_text(encoding="utf-8")
             report_md = (report_dir / "output" / "report.md").read_text(encoding="utf-8")
@@ -296,10 +325,12 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                     "css": "output/html_reports/assets/report.css",
                     "js": "output/html_reports/assets/report.js",
                     "data": "output/html_reports/assets/report-data.json",
+                    "echarts": "output/html_reports/assets/echarts.min.js",
                 },
             )
-            for feature in ["table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"]:
+            for feature in ["table_filter", "table_sort", "tabs", "chart_linking", "mobile_nav"]:
                 self.assertIn(feature, delivery["interactive_features"])
+            self.assertNotIn("evidence_drawer", delivery["interactive_features"])
             self.assertIn("removed_counts", delivery["cleaning_summary"])
             site_data = json.loads((report_dir / "output" / "html_reports" / "assets" / "report-data.json").read_text(encoding="utf-8"))
             self.assertEqual(site_data["report_files"]["market_depth"], "market-depth-report.html")
@@ -347,6 +378,24 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
             self.assertFalse(readiness["acceptance_ready"])
             self.assertEqual(readiness["sample_class"], "non_acceptance_sample")
+
+    def test_renderer_stops_when_1688_valid_quotes_under_50(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+            data_pack_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_pack_path.read_text(encoding="utf-8"))
+            data_pack["suppliers"] = supplier_rows(9)
+            write_json(data_pack_path, data_pack)
+
+            result = self.run_renderer(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("data readiness failed before rendering", result.stderr + result.stdout)
+            readiness = json.loads((report_dir / "data" / "normalized" / "data_readiness_report.json").read_text(encoding="utf-8"))
+            self.assertFalse(readiness["acceptance_ready"])
+            self.assertEqual(readiness["supplier_quote_gate"]["actual"], 9)
+            self.assertEqual(readiness["supplier_quote_gate"]["required"], 50)
 
     def test_renderer_stops_when_critic_still_fails_after_refinement(self):
         with tempfile.TemporaryDirectory() as tmp:

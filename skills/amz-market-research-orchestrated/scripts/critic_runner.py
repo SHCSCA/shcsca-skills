@@ -25,6 +25,22 @@ def as_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def strip_allowed_customer_exceptions(html_doc: str) -> str:
+    html_doc = re.sub(
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        "竞品ASIN",
+        html_doc,
+        flags=re.IGNORECASE,
+    )
+    html_doc = re.sub(
+        r"<([a-z0-9]+)\b(?=[^>]*\bdata-allow-english-review=[\"']short[\"'])[^>]*>.*?</\1>",
+        "英文评论短摘",
+        html_doc,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return html_doc
+
+
 def evidence_profile(data_pack: dict[str, Any], analysis_plan: dict[str, Any], delivery: dict[str, Any]) -> dict[str, Any]:
     normalization = data_pack.get("normalization") or {}
     cross_counts = normalization.get("cross_validated_counts") or {}
@@ -125,7 +141,7 @@ def build_critic_review(
         )
 
     rendered_docs = rendered_docs or {}
-    combined_html = "\n".join(rendered_docs.values())
+    combined_html = strip_allowed_customer_exceptions("\n".join(rendered_docs.values()))
     if rendered_docs:
         for pattern in HTML_LEAK_PATTERNS:
             match = pattern.search(combined_html)
@@ -143,7 +159,7 @@ def build_critic_review(
                     )
                 )
                 break
-        for required_term in ["证据强度", "样本覆盖", "数据缺口", "置信等级", "建议动作"]:
+        for required_term in ["证据强度", "数据覆盖", "数据缺口", "置信等级", "建议动作"]:
             if required_term not in combined_html:
                 findings.append(
                     finding(

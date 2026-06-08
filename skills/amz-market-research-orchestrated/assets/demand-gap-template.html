@@ -14,28 +14,22 @@
     @media(max-width:920px){.report-header{padding:38px 24px}.container{padding:24px}.header-meta,.kpi-grid,.quote-grid,.deep-dive-grid,.opportunity-matrix,.grid-2,.grid-3,.risk-grid,.metric-strip{grid-template-columns:1fr}.section-desc{margin-left:0}.section-header{align-items:flex-start}}
   </style>
 </head>
-<body>
-  <header class="report-header">
-    <div class="header-badge">Demand Gap Analysis</div>
+<body class="template-demand mode-r3">
+  <div class="wrap mode-r3">
+  <section class="hero">
+    <div class="eyebrow">Demand Gap Analysis</div>
     <h1>{{DEMAND_REPORT_TITLE}}</h1>
-    <p class="subtitle">用 $APPEALS + Gap Analysis + KANO × JTBD，把心智断层、负面触发点和转化机会转成可执行需求。</p>
-    <div class="header-meta">
-      <div class="header-meta-item"><span class="label">报告日期</span><span class="value">{{REPORT_DATE}}</span></div>
-      <div class="header-meta-item"><span class="label">目标市场</span><span class="value">{{TARGET_MARKET}}</span></div>
-      <div class="header-meta-item"><span class="label">核心判断</span><span class="value">{{DECISION}}</span></div>
-      <div class="header-meta-item"><span class="label">置信等级</span><span class="value">{{CONFIDENCE_LEVEL}}</span></div>
-    </div>
-  </header>
-  <main class="container">
-    {{CLIENT_TRUST_STRIP}}
-    <section id="target-anchor" class="section"><div class="section-header"><span class="section-number">01</span><h2 class="section-title">研究对象概述</h2><span class="section-desc">研究边界</span></div>{{TARGET_ANCHOR}}</section>
-    <section id="decision-board" class="section"><div class="section-header"><span class="section-number">02</span><h2 class="section-title">决策看板</h2><span class="section-desc">执行摘要</span></div>{{DECISION_BOARD}}</section>
-    <section id="appeals-map" class="section"><div class="section-header"><span class="section-number">03</span><h2 class="section-title">$APPEALS 痛点图</h2><span class="section-desc">维度 → 痛点 → 动作</span></div>{{APPEALS_MAP}}</section>
-    <section id="gap-analysis" class="section"><div class="section-header"><span class="section-number">04</span><h2 class="section-title">满意度鸿沟</h2><span class="section-desc">Gap Analysis 差距分析</span></div>{{GAP_ANALYSIS}}</section>
-    <section id="kano-jtbd" class="section"><div class="section-header"><span class="section-number">05</span><h2 class="section-title">KANO × JTBD</h2><span class="section-desc">场景化机会</span></div>{{KANO_JTBD_MATRIX}}</section>
-    <section id="voice-theater" class="section"><div class="section-header"><span class="section-number">06</span><h2 class="section-title">用户原声</h2><span class="section-desc">真实评论剧场</span></div>{{VOICE_THEATER}}</section>
-    <section id="priority-table" class="section"><div class="section-header"><span class="section-number">07</span><h2 class="section-title">需求优先级</h2><span class="section-desc">从洞察到动作</span></div>{{PRIORITY_TABLE}}</section>
-  </main>
+    <div class="sub">目标：用 $APPEALS + KANO + JTBD 把评论转成可执行需求洞察。</div>
+    <div class="lead">报告日期：{{REPORT_DATE}} ｜ 目标市场：{{TARGET_MARKET}} ｜ 核心判断：{{DECISION}} ｜ 置信等级：{{CONFIDENCE_LEVEL}}</div>
+  </section>
+  <section id="target-anchor" class="sec"><h2>研究对象概述</h2>{{TARGET_ANCHOR}}</section>
+  <section id="decision-board" class="sec"><h2>决策看板（执行摘要）</h2>{{DECISION_BOARD}}</section>
+  <section id="appeals-map" class="sec"><h2>市场痛点全景图（$APPEALS）</h2>{{APPEALS_MAP}}</section>
+  <section id="gap-analysis" class="sec"><h2>满意度鸿沟雷达（Gap Analysis 差距分析）</h2>{{GAP_ANALYSIS}}</section>
+  <section id="kano-jtbd" class="sec"><h2>场景化机会矩阵（KANO × JTBD）</h2>{{KANO_JTBD_MATRIX}}</section>
+  <section id="voice-theater" class="sec"><h2>真实原声剧场（用户原声）</h2>{{VOICE_THEATER}}</section>
+  <section id="priority-table" class="sec"><h2>需求优先级</h2>{{PRIORITY_TABLE}}</section>
+  </div>
   <footer class="footer">{{REPORT_FOOTER}}</footer>
 </body>
 </html>

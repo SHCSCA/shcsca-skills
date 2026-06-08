@@ -17,6 +17,21 @@ def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def supplier_rows(count=50):
+    return [
+        {
+            "title": f"1688 supplier product {idx}",
+            "supplier_name": f"Supplier {idx}",
+            "url": f"https://detail.1688.com/offer/{idx}.html",
+            "price_rmb": 10 + idx,
+            "sales_30d": 1000 + idx,
+            "source_id": "src_001",
+            "provider": "sorftime",
+        }
+        for idx in range(count)
+    ]
+
+
 def base_pack(**overrides):
     data = {
         "sources": [{"source_id": "src_001", "provider": "sorftime", "fetched_at": "2026-05-26T10:00:00Z", "confidence": "high"}],
@@ -26,7 +41,7 @@ def base_pack(**overrides):
         "reviews": [],
         "tiktok_products": [],
         "tiktok_videos": [],
-        "suppliers": [],
+        "suppliers": supplier_rows(50),
         "web_documents": [],
         "data_gaps": [],
         "quality": {"overall_score": 0.8, "grade": "watch"},
@@ -73,6 +88,22 @@ class DataReadinessTest(unittest.TestCase):
             self.assertIn("product_sample_depth", modules)
             self.assertIn("keyword_sample_depth", modules)
             self.assertTrue(any("collect_sorftime_keywords.py" in command for command in report["collector_commands"]))
+            self.assertTrue(any("collect_sorftime_1688_suppliers.py" in command for command in report["collector_commands"]))
+
+    def test_standard_pack_blocks_when_valid_1688_quotes_under_50(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(root / "data" / "data_pack.json", base_pack(suppliers=supplier_rows(49)))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertEqual(report["sample_class"], "non_acceptance_sample")
+            supply_gap = next(item for item in report["blocking_gaps"] if item["module"] == "supplier_quote_depth")
+            self.assertEqual(supply_gap["current"], 49)
+            self.assertEqual(supply_gap["required"], 50)
+            self.assertEqual(report["supplier_quote_gate"]["actual"], 49)
+            self.assertFalse(report["supplier_quote_gate"]["passed"])
 
     def test_deep_pack_uses_higher_review_recommendation(self):
         with tempfile.TemporaryDirectory() as tmp:

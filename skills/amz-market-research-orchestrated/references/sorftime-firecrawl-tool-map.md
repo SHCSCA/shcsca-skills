@@ -35,6 +35,19 @@ For standard/deep keyword depth, page `category_keywords` and `keyword_extends` 
 | Product detail | `tiktok_product_detail`, `tiktok_product_trend` | TikTok product IDs are found. |
 | Video and creator evidence | `tiktok_product_video`, `tiktok_product_video_author`, `tiktok_author` | Deep reports and content/channel strategy. |
 
+Use `scripts/collect_sorftime_tiktok_signals.py` for standard/deep runs. Current Sorftime MCP schemas:
+
+- `tiktok_similar_product`: `searchName`, optional `page`, optional `site`.
+- `tiktok_author`: `searchName`, optional `page`, optional `site`.
+- `tiktok_product_detail`: `productId`, optional `site`.
+- `tiktok_product_trend`: `productId`, optional `site`.
+- `tiktok_product_video`: `productId`, optional `page`, optional `site`.
+- `tiktok_product_video_author`: `productId`, optional `site`.
+- `tiktok_category_name_search`: `searchName`, optional `site`.
+- `tiktok_category_report`: `nodeId`, optional `site`.
+
+Do not use `keyword` for TikTok search calls, and do not use `product_id` when the MCP schema requires `productId`.
+
 For v2 three-report output, TikTok evidence feeds both `market-depth-report.html` and `demand-gap-report.html`: treat it as content/channel and scene evidence, not Amazon purchase proof.
 
 ## 1688 Tool
@@ -42,6 +55,8 @@ For v2 three-report output, TikTok evidence feeds both `market-depth-report.html
 | Need | Preferred Sorftime tool | Required when |
 |---|---|---|
 | Supplier and cost proxy | `ali1688_similar_product` | Standard/deep reports and supply/profit validation. |
+
+Current Sorftime MCP schema for `ali1688_similar_product` is `searchName` only. Do not send `keyword` or `page`.
 
 Use 1688 data as a cost and supply maturity proxy. Do not treat listed supplier prices as landed cost. In v2, `ali1688_similar_product` also feeds the lifecycle report's SKU supply-chain and risk sections.
 

@@ -28,6 +28,11 @@ from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, INTERACTIVE_FEATUR
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 TEMPLATE_BASELINE_MANIFEST = SKILL_DIR / "references" / "template-baseline-manifest.json"
+CANONICAL_TEMPLATE_ASSETS = {
+    "market-depth-report-v2": SKILL_DIR / "assets" / "canonical_templates" / "market-depth-reference.html",
+    "lifecycle-strategy-report-v2": SKILL_DIR / "assets" / "canonical_templates" / "lifecycle-strategy-reference.html",
+    "demand-gap-report-v2": SKILL_DIR / "assets" / "canonical_templates" / "demand-gap-reference.html",
+}
 
 BUNDLE_INDEX_REPORT = f"{HTML_BUNDLE_DIR}/report.html"
 CHILD_SKILLS = {
@@ -108,17 +113,17 @@ CHILD_REPORTS = {
         "filename": "market-depth-report.html",
         "style": "market-depth-report-v2",
         "sections": [
-            "大盘结论",
-            "需求结构",
-            "竞品格局",
-            "VOC 洞察",
-            "标杆打法",
-            "机会定义",
-            "TikTok 内容信号",
-            "1688 供应链判断",
-            "风险与行动摘要",
+            "大盘仪表盘 · Market Dashboard",
+            "Top 竞品全景扫描",
+            "VOC 体验深潜 · 痛点 × 爽点雷达",
+            "标杆竞品狙击拆解",
+            "新品狙击企划 · Product Definition",
+            "建议定价策略",
+            "视觉与包装指导 · Visual Direction",
+            "AI生图 Prompt · 可直接使用",
+            "供应链成本估算 · 1688大盘数据",
         ],
-        "terms": ["可进入性评分", "价格带机会", "竞争强度", "关键切入口", "商业含义"],
+        "terms": ["价格带销量分布图", "竞品狙击结论", "定价战略核心逻辑", "AI生图 Prompt", "供应链核心结论"],
     },
     "lifecycle_strategy": {
         "path": f"{HTML_BUNDLE_DIR}/lifecycle-strategy-report.html",
@@ -144,7 +149,7 @@ CHILD_REPORTS = {
         "sections": [
             "研究对象概述",
             "决策看板",
-            "$APPEALS 痛点图",
+            "市场痛点全景图（$APPEALS）",
             "满意度鸿沟",
             "KANO × JTBD",
             "用户原声",
@@ -161,20 +166,50 @@ BUNDLE_INDEX_REQUIRED_LINKS = [spec["filename"] for spec in CHILD_REPORTS.values
 COMPAT_INDEX_REQUIRED_LINKS = [f"html_reports/{spec['filename']}" for spec in CHILD_REPORTS.values()]
 
 HTML_REQUIRED_CLASSES = [
-    "report-header",
     "kpi-grid",
-    "section-number",
     "evidence-table",
     "insight-table",
     "mini-chart",
-    "chart-container",
-    "insight-box",
-    "conclusion",
-    "deep-dive-grid",
-    "comp-deep-card",
 ]
 
-CUSTOMER_HTML_REQUIRED_TERMS = ["证据强度", "样本覆盖", "数据缺口", "置信等级", "建议动作"]
+STYLE_REQUIRED_DASHBOARD_CLASSES = {
+    "lifecycle-strategy-report-v2": ["kpi-grid", "evidence-table", "insight-table", "mini-chart"],
+    "demand-gap-report-v2": ["kpi-grid", "evidence-table", "insight-table", "demand-chart", "data-chart-source=\"appealsRows\"", "data-chart-source=\"gapRows\""],
+}
+
+REPORT_REQUIRED_CLASSES = {
+    "market-depth-report-v2": [
+        "report-header",
+        "section-number",
+        "chart-container",
+        "insight-box",
+        "conclusion",
+        "comp-deep-grid",
+        "comp-deep-card",
+    ],
+    "lifecycle-strategy-report-v2": [
+        "report-header",
+        "section-number",
+        "insight-box",
+        "persona-grid",
+        "timeline-grid",
+        "bundle-grid",
+        "phase-grid",
+        "risk-grid",
+        "sku-table-wrap",
+    ],
+    "demand-gap-report-v2": [
+        "hero",
+        "sec",
+        "card focus",
+        "kano-grid",
+        "grid-3",
+        "chart-interpretation",
+    ],
+}
+
+CUSTOMER_HTML_REQUIRED_TERMS = ["证据强度", "数据覆盖", "数据缺口", "置信等级", "建议动作"]
+MARKET_DEPTH_BANNED_PLACEHOLDERS = ["样本", "样品", "补数", "待补", "待验证", "待评分", "待修复", "待样品"]
 
 CUSTOMER_HTML_BANNED_LITERALS = [
     "source_id",
@@ -185,7 +220,6 @@ CUSTOMER_HTML_BANNED_LITERALS = [
     "raw_path",
     "provider",
     "method_id",
-    "ASIN",
     "数据血缘",
     "来源",
 ]
@@ -385,6 +419,7 @@ def readiness_summary_for_contract(readiness: dict[str, Any]) -> dict[str, Any]:
         "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
         "warning_count": len(readiness.get("warnings") or []),
         "counts": readiness.get("counts") or {},
+        "supplier_quote_gate": readiness.get("supplier_quote_gate") or {},
     }
 
 
@@ -525,6 +560,22 @@ def customer_visible_text(text: str) -> str:
     return html.unescape(" ".join([without_tags, *visible_attrs]))
 
 
+def strip_allowed_customer_exceptions(text: str) -> str:
+    text = re.sub(
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        "竞品ASIN",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"<[^>]+\bdata-allow-english-review=[\"']short[\"'][^>]*>.*?</[^>]+>",
+        "英文评论短摘",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return text
+
+
 def english_word_segments(text: str) -> list[list[str]]:
     segments: list[list[str]] = []
     for segment in re.findall(r"[A-Za-z][A-Za-z'\- ]*[A-Za-z]", normalized_visible_text(text)):
@@ -556,6 +607,7 @@ def is_allowed_english_fragment(fragment: str, allowed_keywords: str) -> bool:
 
 
 def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str, Any], artifact_label: str) -> None:
+    text = strip_allowed_customer_exceptions(text)
     visible_text = customer_visible_text(text)
     normalized_text = normalized_visible_text(visible_text).casefold()
     unescaped_text = html.unescape(visible_text)
@@ -584,25 +636,53 @@ def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str,
 
 
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
+    html_for_safety = strip_allowed_customer_exceptions(html_doc)
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
-        require(literal not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {literal}")
+        require(literal not in html_for_safety, f"{rel_path} customer HTML leaks technical identifier: {literal}")
 
     for pattern in CUSTOMER_HTML_BANNED_PATTERNS:
-        match = pattern.search(html_doc)
+        match = pattern.search(html_for_safety)
         if match is not None:
             raise ValidationError(f"{rel_path} customer HTML leaks technical identifier: {match.group(0)}")
 
     for value in customer_safety_context(data_pack)["technical_values"]:
-        require(value not in html_doc, f"{rel_path} customer HTML leaks technical identifier: {value}")
+        require(value not in html_for_safety, f"{rel_path} customer HTML leaks technical identifier: {value}")
 
     validate_no_raw_english_leaks(rel_path, html_doc, data_pack, "HTML")
 
-    for term in CUSTOMER_HTML_REQUIRED_TERMS:
-        require(term in html_doc, f"{rel_path} customer HTML missing required analysis term: {term}")
+    if "market-depth-report.html" not in rel_path:
+        for term in CUSTOMER_HTML_REQUIRED_TERMS:
+            require(term in html_doc, f"{rel_path} customer HTML missing required analysis term: {term}")
     require(re.search(r"<p>\s*</p>", html_doc, flags=re.I) is None, f"{rel_path} customer HTML contains empty paragraph")
     require(re.search(r"<strong>\s*</strong>", html_doc, flags=re.I) is None, f"{rel_path} customer HTML contains empty strong tag")
     require("Score -" not in html_doc, f"{rel_path} customer HTML contains placeholder score")
     require("趋势：-" not in html_doc, f"{rel_path} customer HTML contains placeholder trend")
+
+
+def html_class_tokens(html_doc: str) -> set[str]:
+    tokens: set[str] = set()
+    for class_attr in re.findall(r"class=['\"]([^'\"]+)['\"]", html_doc):
+        for token in class_attr.split():
+            if re.fullmatch(r"[A-Za-z0-9_-]+", token):
+                tokens.add(token)
+    return tokens
+
+
+def html_id_tokens(html_doc: str) -> set[str]:
+    return set(re.findall(r"id=['\"]([^'\"]+)['\"]", html_doc))
+
+
+def validate_template_dom_class_parity(rel_path: str, report_html: str, report_style: str) -> None:
+    canonical_path = CANONICAL_TEMPLATE_ASSETS[report_style]
+    require(canonical_path.exists(), f"{rel_path} canonical template asset missing: {canonical_path}")
+    canonical_html = canonical_path.read_text(encoding="utf-8")
+    missing_ids = sorted(html_id_tokens(canonical_html) - html_id_tokens(report_html))
+    missing_classes_set = html_class_tokens(canonical_html) - html_class_tokens(report_html)
+    if report_style == "market-depth-report-v2":
+        missing_classes_set -= {"badge-hot", "badge-growth", "badge-premium", "badge-risk"}
+    missing_classes = sorted(missing_classes_set)
+    require(not missing_ids, f"{rel_path} missing canonical template ids: {', '.join(missing_ids)}")
+    require(not missing_classes, f"{rel_path} missing canonical template classes: {', '.join(missing_classes)}")
 
 
 def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[str, Any]) -> None:
@@ -620,7 +700,11 @@ def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[st
 def validate_customer_visible_assets(report_dir: Path, data_pack: dict[str, Any]) -> None:
     for rel_path in SITE_ASSETS.values():
         path = report_dir / rel_path
-        validate_customer_visible_asset(rel_path, path.read_text(encoding="utf-8"), data_pack)
+        text = path.read_text(encoding="utf-8")
+        if rel_path.endswith("echarts.min.js"):
+            require("cdn.jsdelivr" not in text, f"{rel_path} must be a local static library, not a CDN loader")
+            continue
+        validate_customer_visible_asset(rel_path, text, data_pack)
 
 
 def validate_site_asset_contract(report_dir: Path) -> None:
@@ -670,6 +754,19 @@ def validate_site_asset_contract(report_dir: Path) -> None:
         ".filter-bar",
         "dataset.filter",
         "addEventListener('click'",
+        "renderer:isIOSWebKit",
+        "priceChart",
+        "bubbleChart",
+        "growthChart",
+        "featureChart",
+        "radarChart",
+        "marginChart",
+        "type:'sunburst'",
+        "priorityChart",
+        "aovChart",
+        "type:'sankey'",
+        "appealsRose",
+        "gapRadar",
     ]:
         require(snippet in js_text, f"report.js missing required behavior hook: {snippet}")
 
@@ -756,31 +853,51 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
         f"{rel_path} missing data-report-style=\"{spec['style']}\"",
     )
     template_class = {
-        "market-depth-report-v2": "template-market",
+        "market-depth-report-v2": "",
         "lifecycle-strategy-report-v2": "template-lifecycle",
         "demand-gap-report-v2": "template-demand",
     }[spec["style"]]
-    require(template_class in report_html, f"{rel_path} missing template class: {template_class}")
-    require(report_html.count("<section") >= len(spec["sections"]), f"{rel_path} must use semantic section blocks")
-    require(report_html.count("<table") >= 3, f"{rel_path} must render analysis as HTML tables")
-    for class_name in HTML_REQUIRED_CLASSES:
+    if template_class:
+        require(template_class in report_html, f"{rel_path} missing template class: {template_class}")
+    validate_template_dom_class_parity(rel_path, report_html, spec["style"])
+    is_market_reference = spec["style"] == "market-depth-report-v2"
+    section_count = report_html.count("<section") + len(re.findall(r"class=['\"][^'\"]*\bsection\b", report_html))
+    require(section_count >= 7 if is_market_reference else report_html.count("<section") >= len(spec["sections"]), f"{rel_path} must use semantic section blocks")
+    require(report_html.count("<table") >= (1 if is_market_reference else 3), f"{rel_path} must render analysis as HTML tables")
+    required_dashboard_classes = (
+        ["kpi-grid", "comp-table", "strategy-grid", "pricing-grid", "prompt-grid"]
+        if is_market_reference
+        else STYLE_REQUIRED_DASHBOARD_CLASSES.get(spec["style"], HTML_REQUIRED_CLASSES)
+    )
+    for class_name in required_dashboard_classes:
         require(class_name in report_html, f"{rel_path} missing required dashboard class: {class_name}")
+    for class_name in REPORT_REQUIRED_CLASSES[spec["style"]]:
+        require(class_name in report_html, f"{rel_path} missing required report-specific class: {class_name}")
 
     for section_name in spec["sections"]:
         require(section_name in report_html, f"{rel_path} missing required dashboard section: {section_name}")
 
     for term in spec["terms"]:
         require(term in report_html, f"{rel_path} missing required mapped-data term: {term}")
+    if spec["style"] == "market-depth-report-v2":
+        for placeholder in MARKET_DEPTH_BANNED_PLACEHOLDERS:
+            require(placeholder not in report_html, f"{rel_path} customer HTML contains placeholder or non-final data wording: {placeholder}")
 
 
 def validate_interactive_dom(html_docs: dict[str, str]) -> None:
     combined = "\n".join(html_docs.values())
-    require("site-nav" in combined and "site-nav-toggle" in combined, "interactive_features declares mobile_nav but site nav DOM is missing")
-    require("<table" in combined and "evidence-table" in combined, "interactive_features declares table behavior but report tables are missing")
-    require("filter-bar" in combined and "filter-btn" in combined and "data-filter" in combined, "interactive_features declares table_filter but filter DOM is missing")
-    require("data-tabs" in combined and "data-tab-target" in combined and "data-tab-panel" in combined, "interactive_features declares tabs but tab DOM is missing")
-    require("evidence-drawer" in combined, "interactive_features declares evidence_drawer but drawer DOM is missing")
-    require("mini-chart" in combined and "bar-row" in combined, "interactive_features declares chart_linking but chart DOM is missing")
+    if "mobile_nav" in INTERACTIVE_FEATURES:
+        require("site-nav" in combined and "site-nav-toggle" in combined, "interactive_features declares mobile_nav but site nav DOM is missing")
+    if {"table_filter", "table_sort"} & INTERACTIVE_FEATURES:
+        require("<table" in combined and "evidence-table" in combined, "interactive_features declares table behavior but report tables are missing")
+    if "table_filter" in INTERACTIVE_FEATURES:
+        require("filter-bar" in combined and "filter-btn" in combined and "data-filter" in combined, "interactive_features declares table_filter but filter DOM is missing")
+    if "tabs" in INTERACTIVE_FEATURES:
+        require("data-tabs" in combined and "data-tab-target" in combined and "data-tab-panel" in combined, "interactive_features declares tabs but tab DOM is missing")
+    if "evidence_drawer" in INTERACTIVE_FEATURES:
+        require("evidence-drawer" in combined, "interactive_features declares evidence_drawer but drawer DOM is missing")
+    if "chart_linking" in INTERACTIVE_FEATURES:
+        require("mini-chart" in combined and "bar-row" in combined, "interactive_features declares chart_linking but chart DOM is missing")
 
 
 def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None:

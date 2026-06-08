@@ -43,6 +43,21 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
+def supplier_rows(count=50):
+    return [
+        {
+            "title": f"智能玩具工厂货源 {idx}",
+            "supplier_name": f"供应商 {idx}",
+            "url": f"https://detail.1688.com/offer/{idx}.html",
+            "price_rmb": 12 + idx,
+            "sales_30d": 100 + idx,
+            "source_id": "src_001",
+            "provider": "sorftime",
+        }
+        for idx in range(count)
+    ]
+
+
 def invocation_entry(root, module, renderer, output=None, outputs=None, dispatch_mode="subprocess_child_renderer"):
     entry = {
         "module": module,
@@ -68,38 +83,81 @@ def invocation_entry(root, module, renderer, output=None, outputs=None, dispatch
 
 def child_html(style, title, sections, extra_terms=""):
     body_class = {
-        "market-depth-report-v2": "template-market",
+        "market-depth-report-v2": "",
         "lifecycle-strategy-report-v2": "template-lifecycle",
         "demand-gap-report-v2": "template-demand mode-r3",
     }[style]
+    body_attr = f' class="{body_class}"' if body_class else ""
+    market_scaffold = ""
+    lifecycle_scaffold = ""
+    demand_scaffold = ""
+    if style == "market-depth-report-v2":
+        market_scaffold = """
+<div class="container header-badge subtitle header-meta header-meta-item label value section section-header section-title section-desc kpi-card kpi-label kpi-value kpi-sub kpi-trend up hot success warning lavender card chart-grid chart-title chart-subtitle chart-body product-name product-brand price-tag rating-stars badge voc-card-title voc-item voc-content conclusion-title conclusion-grid conclusion-item conclusion-item-title conclusion-item-text"></div>
+<div id="priceChart"></div><div id="bubbleChart"></div><div id="growthChart"></div><div id="featureChart"></div><div id="radarChart"></div><div id="marginChart"></div>
+<table class="comp-table"><tr><th>产品</th></tr><tr><td>样本</td></tr></table>
+<div class="voc-grid"><article class="pain-card"><div class="voc-rank pain-rank">P1</div><div class="voc-title">痛点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill pain-fill"></div></div></article><article class="joy-card"><div class="voc-rank joy-rank">J1</div><div class="voc-title">爽点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill joy-fill"></div></div></article></div>
+<div class="comp-deep-grid"><div class="comp-deep-card"><div class="comp-deep-header"><div class="comp-deep-name">标杆</div><div class="comp-deep-price">$89</div></div><div class="comp-deep-body"><div class="comp-deep-section"><div class="comp-deep-section-title">逻辑</div><div class="comp-deep-text">文本</div><div class="comp-tag-list"><span class="comp-tag red">痛点</span><span class="comp-tag green">机会</span></div></div></div></div></div>
+<div class="strategy-hero"><div class="strategy-hero-label">Core Product Concept</div><div class="strategy-slogan">不只是产品，是<span>方案</span></div><div class="strategy-desc">定义</div></div>
+<div class="strategy-grid"><div class="strategy-card"><div class="strategy-card-icon">1</div><div class="strategy-card-title">支柱</div><div class="strategy-card-text">文本</div><div class="strategy-card-highlight">高</div></div></div>
+<div class="pricing-grid"><div class="pricing-card recommended"><div class="pricing-tier">Tier</div><div class="pricing-price">$89</div><div class="pricing-desc">描述</div><div class="pricing-features"><div class="pricing-feature check">功能</div></div></div></div>
+<div class="visual-grid"><div class="visual-card"><div class="visual-card-title">主图</div><div class="visual-item"><div class="visual-item-title">标题</div><div class="visual-item-text">文本</div></div></div></div>
+<div class="prompt-grid"><div class="prompt-card"><div class="prompt-number">Prompt 01</div><div class="prompt-scene">场景</div><div class="prompt-text">prompt</div><div class="prompt-note">note</div></div></div>
+<div class="supply-grid"><div class="supply-card"><div class="supply-label">成本</div><div class="supply-value">¥10</div><div class="supply-note">说明</div></div></div>
+<div class="report-footer"><span>footer</span><span>footer</span></div>
+"""
+    if style == "lifecycle-strategy-report-v2":
+        lifecycle_scaffold = """
+<div class="accent archetype arrow badge blue bundle-body bundle-card bundle-grid bundle-header bundle-items bundle-pricing bundle-target card chart-grid chart-subtitle chart-title conclusion-grid conclusion-item conclusion-item-text conclusion-item-title conclusion-title container desc detail emoji fill final gold green header-badge header-meta header-meta-item kpi-card kpi-label kpi-sub kpi-value label mitigation name orig p1 p2 p3 persona-body persona-card persona-grid persona-header persona-price phase-body phase-card phase-grid phase-header priority-bar purple quotes red report-footer risk-card risk-grid save section section-desc section-header section-title sku-table-wrap source-card source-grid subtitle supply-badge timeline-grid tl-body tl-card tl-header tl-pain tl-skus tl-time type-badge value"></div>
+<div id="sunburst"></div><div id="priorityChart"></div><div id="aovChart"></div>
+<table id="skuTable" class="sku"><tbody id="skuBody"></tbody></table>
+"""
+    if style == "demand-gap-report-v2":
+        demand_scaffold = """
+<div class="hero sec card focus kano-grid grid-3 chart-interpretation chart demand-chart eyebrow k kpi kpi-grid lead muted ok quote-cn quote-origin sub v warn wrap"></div>
+<div hidden data-chart-source="appealsRows"><span data-label="痛点" data-value="5"></span></div><div id="appealsRose" class="chart demand-chart"></div>
+<div hidden data-chart-source="gapRows"><span data-label="鸿沟" data-value="90"></span></div><div id="gapRadar" class="chart demand-chart"></div>
+"""
     section_html = "\n".join(
         f'<section id="{slug}"><span class="section-number">{idx:02d}</span><h2>{name}</h2>'
         f'<div class="chart-container"><div class="mini-chart"><div class="bar-row"><span>样本</span><div class="bar"><span style="--w:50%"></span></div><b>中</b></div></div></div>'
         f'<table class="evidence-table insight-table"><tr><th>结论</th><th>证据强度</th><th>商业含义</th><th>建议动作</th></tr>'
-        f'<tr><td>{name}</td><td>高</td><td>样本覆盖足以支撑方向判断</td><td>优先转成页面卖点和打样清单</td></tr></table></section>'
+        f'<tr><td>{name}</td><td>高</td><td>数据覆盖足以支撑方向判断</td><td>优先转成页面卖点和实物测试清单</td></tr></table></section>'
         for idx, (slug, name) in enumerate(sections, 1)
     )
     interactions = """
 <nav class="site-nav"><button class="site-nav-toggle" type="button">目录</button><a href="report.html">三合一报告</a></nav>
 <div data-tabs><button class="tab-button" type="button" data-tab-target="evidence" aria-selected="true">证据</button><div data-tab-panel="evidence">证据强度：高</div></div>
 <div class="filter-bar"><button class="filter-btn active" type="button" data-filter="all" aria-pressed="true">全部</button><button class="filter-btn" type="button" data-filter="高" aria-pressed="false">高</button></div>
-<details class="evidence-drawer"><summary>证据抽屉</summary><div class="drawer-body">样本覆盖和数据缺口均已标注。</div></details>
+<details class="evidence-drawer"><summary>证据抽屉</summary><div class="drawer-body">数据覆盖和数据缺口均已标注。</div></details>
 """
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html lang="zh-CN" data-report-style="{style}">
 <head><meta charset="utf-8"><link rel="stylesheet" href="assets/report.css"><style>.report-header{{}}.kpi-grid{{}}.section-number{{}}.evidence-table{{}}.insight-table{{}}.chart-container{{}}.mini-chart{{}}.insight-box{{}}.conclusion{{}}.deep-dive-grid{{}}.comp-deep-card{{}}.opportunity-matrix{{}}</style></head>
-<body class="{body_class}">
-<header class="report-header"><h1>{title}</h1><div class="kpi-grid"><article>Go / Watch / No-Go</article><article>证据强度：高</article><article>样本覆盖：充分</article><article>数据缺口：已标注</article></div></header>
+<body{body_attr}>
+<header class="report-header"><h1>{title}</h1><div class="kpi-grid"><article>Go / Watch / No-Go</article><article>证据强度：高</article><article>数据覆盖：充分</article><article>数据缺口：已标注</article></div></header>
 <main>
 <div class="insight-box">客户版 AI 深度分析报告：先给判断，再给原因，最后给建议动作。</div>
 {interactions}
+{market_scaffold}
+{lifecycle_scaffold}
+{demand_scaffold}
 {section_html}
 <section><div class="deep-dive-grid"><div class="comp-deep-card">标杆样本 · 溢价逻辑 · 未满足需求</div></div></section>
-<section><div class="insight-box">置信等级：中高；样本覆盖与数据缺口已进入判断。</div><div class="conclusion">结论：优先执行高确定性动作。</div></section>
+<section><div class="insight-box">置信等级：中高；数据覆盖与数据缺口已进入判断。</div><div class="conclusion">结论：优先执行高确定性动作。</div></section>
 {extra_terms}
 </main>
 <script src="assets/report.js" defer></script>
 </body></html>"""
+    if style == "market-depth-report-v2":
+        html = (
+            html.replace("样本", "数据")
+            .replace("样品", "实物")
+            .replace("补数", "成本与转化核对")
+            .replace("待补", "数据已采集")
+            .replace("待验证", "按真实数据判断")
+        )
+    return html
 
 
 def make_valid_report(root):
@@ -141,7 +199,7 @@ def make_valid_report(root):
             ],
             "tiktok_products": [{"product_id": "tk_1", "source_id": "src_001", "provider": "sorftime"}],
             "tiktok_videos": [{"video_id": "v_1", "source_id": "src_001", "provider": "sorftime"}],
-            "suppliers": [{"name": "supplier", "source_id": "src_001", "provider": "sorftime"}],
+            "suppliers": supplier_rows(50),
             "web_documents": [{"url": "https://example.com/report", "source_id": "src_002", "provider": "firecrawl"}],
             "data_gaps": ["Keepa not used in this run"],
             "quality": {"overall_score": 0.82, "grade": "decision_grade"},
@@ -169,9 +227,16 @@ def make_valid_report(root):
         "reviews": 1,
         "tiktok_products": 1,
         "tiktok_videos": 1,
-        "suppliers": 1,
+        "suppliers": 50,
+        "valid_supplier_quotes": 50,
         "web_documents": 1,
         "data_gaps": 1,
+    }
+    supplier_quote_gate = {
+        "required": 50,
+        "actual": 50,
+        "passed": True,
+        "policy": "1688 去重有效报价不足时必须多轮 Sorftime 采集，不得生成最终供应链毛利率结论。",
     }
     readiness = {
         "report_dir": str(root),
@@ -183,6 +248,7 @@ def make_valid_report(root):
         "blocking_gaps": [],
         "warnings": [{"module": "review_sample_depth", "current": 1, "recommended": 80}],
         "counts": readiness_counts,
+        "supplier_quote_gate": supplier_quote_gate,
         "collector_commands": [],
     }
     readiness_summary = {
@@ -192,6 +258,7 @@ def make_valid_report(root):
         "blocking_gap_count": 0,
         "warning_count": 1,
         "counts": readiness_counts,
+        "supplier_quote_gate": supplier_quote_gate,
     }
     delivery_readiness = {"path": "data/normalized/data_readiness_report.json", **readiness_summary}
     write_json(root / "data" / "normalized" / "data_readiness_report.json", readiness)
@@ -205,6 +272,7 @@ def make_valid_report(root):
         "css": "output/html_reports/assets/report.css",
         "js": "output/html_reports/assets/report.js",
         "data": "output/html_reports/assets/report-data.json",
+        "echarts": "output/html_reports/assets/echarts.min.js",
     }
     interactive_features = ["table_filter", "table_sort", "tabs", "evidence_drawer", "chart_linking", "mobile_nav"]
     child_invocations = child_skill_invocations(child_skills)
@@ -268,7 +336,7 @@ def make_valid_report(root):
 <a href="html_reports/market-depth-report.html">市场深度调研报告</a>
 <a href="html_reports/lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
 <a href="html_reports/demand-gap-report.html">用户心智断层与需求机会报告</a>
-<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
+<p>Go / Watch / No-Go · 证据强度 · 数据覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
 </main><script src="html_reports/assets/report.js" defer></script></body></html>""",
     )
     write_text(
@@ -281,7 +349,7 @@ def make_valid_report(root):
 <a href="market-depth-report.html">市场深度调研报告</a>
 <a href="lifecycle-strategy-report.html">产品全生命周期拓品战略报告</a>
 <a href="demand-gap-report.html">用户心智断层与需求机会报告</a>
-<p>Go / Watch / No-Go · 证据强度 · 样本覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
+<p>Go / Watch / No-Go · 证据强度 · 数据覆盖 · 数据缺口 · 置信等级 · 建议动作</p>
 </main><script src="assets/report.js" defer></script></body></html>""",
     )
     write_text(
@@ -290,17 +358,17 @@ def make_valid_report(root):
             "market-depth-report-v2",
             "市场深度调研报告",
             [
-                ("market-dashboard", "大盘结论"),
-                ("keyword-demand", "需求结构"),
-                ("competitor-landscape", "竞品格局"),
-                ("voc", "VOC 洞察"),
-                ("competitor-deep-dive", "标杆打法"),
-                ("opportunity", "机会定义"),
-                ("tiktok-validation", "TikTok 内容信号"),
-                ("supply-chain", "1688 供应链判断"),
-                ("web-risk", "风险与行动摘要"),
+                ("market-dashboard", "大盘仪表盘 · Market Dashboard"),
+                ("competitor-landscape", "Top 竞品全景扫描"),
+                ("voc", "VOC 体验深潜 · 痛点 × 爽点雷达"),
+                ("competitor-deep-dive", "标杆竞品狙击拆解"),
+                ("opportunity", "新品狙击企划 · Product Definition"),
+                ("pricing", "建议定价策略"),
+                ("visual-direction", "视觉与包装指导 · Visual Direction"),
+                ("prompt", "AI生图 Prompt · 可直接使用"),
+                ("supply-chain", "供应链成本估算 · 1688大盘数据"),
             ],
-            "可进入性评分 价格带机会 竞争强度 关键切入口 商业含义",
+            "价格带销量分布图 竞品狙击结论 定价战略核心逻辑 AI生图 Prompt 供应链核心结论",
         ),
     )
     write_text(
@@ -330,7 +398,7 @@ def make_valid_report(root):
             [
                 ("target-anchor", "研究对象概述"),
                 ("decision-board", "决策看板"),
-                ("appeals-map", "$APPEALS 痛点图"),
+                ("appeals-map", "市场痛点全景图（$APPEALS）"),
                 ("gap-analysis", "满意度鸿沟"),
                 ("kano-jtbd", "KANO × JTBD"),
                 ("voice-theater", "用户原声"),
@@ -382,7 +450,9 @@ def make_valid_report(root):
         "document.querySelector('.site-nav-toggle');input.type='search';document.querySelectorAll('th');"
         "document.querySelector('[data-tabs]');document.querySelector('[data-tab-target]');"
         "document.querySelectorAll('.mini-chart .bar-row');document.querySelector('.filter-bar');"
-        "row.dataset.filter;addEventListener('click',()=>{});\n",
+        "row.dataset.filter;addEventListener('click',()=>{});"
+        "renderer:isIOSWebKit;priceChart;bubbleChart;growthChart;featureChart;radarChart;marginChart;"
+        "type:'sunburst';priorityChart;aovChart;type:'sankey';appealsRose;gapRadar;\n",
     )
     write_json(
         root / "output" / "html_reports" / "assets" / "report-data.json",
@@ -393,6 +463,7 @@ def make_valid_report(root):
             "cleaning_summary": data_pack["normalization"],
         },
     )
+    write_text(root / "output" / "html_reports" / "assets" / "echarts.min.js", "window.echarts=window.echarts||{};\n")
     write_json(
         root / "analysis" / "critic_review.json",
         {
@@ -613,12 +684,12 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             report_dir = Path(tmp)
             make_valid_report(report_dir)
             html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
-            write_text(html_path, html_path.read_text(encoding="utf-8").replace("TikTok 内容信号", "TikTok"))
+            write_text(html_path, html_path.read_text(encoding="utf-8").replace("AI生图 Prompt · 可直接使用", "AI生图"))
 
             result = self.run_validator(report_dir)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TikTok 内容信号", result.stderr + result.stdout)
+            self.assertIn("AI生图 Prompt · 可直接使用", result.stderr + result.stdout)
 
     def test_rejects_customer_html_leaking_technical_identifiers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -640,7 +711,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_path = report_dir / "output" / "report.html"
             write_text(html_path, html_path.read_text(encoding="utf-8").replace("证据强度", "证据"))
 
             result = self.run_validator(report_dir)
@@ -692,7 +763,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
             make_valid_report(report_dir)
-            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_path = report_dir / "output" / "report.html"
             html = html_path.read_text(encoding="utf-8").replace("</main>", "<p>AI Plush Toy</p></main>")
             write_text(html_path, html)
 

@@ -101,8 +101,8 @@ def customer_product_label(product: dict[str, Any]) -> str:
             return value[:80]
     segment = clean(product.get("segment"))
     if segment:
-        return f"{segment} 竞品样本"
-    return "竞品样本"
+        return f"{segment} 竞品记录"
+    return "竞品记录"
 
 
 def product_sales(product: dict[str, Any]) -> Any:
@@ -206,6 +206,7 @@ def readiness_summary(readiness: dict[str, Any] | None) -> dict[str, Any]:
         "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
         "warning_count": len(readiness.get("warnings") or []),
         "counts": readiness.get("counts") or {},
+        "supplier_quote_gate": readiness.get("supplier_quote_gate") or {},
     }
 
 
@@ -256,12 +257,12 @@ def safe_kpis(data_pack: dict[str, Any], decision: str) -> list[dict[str, Any]]:
     return [
         {"label": "核心判断", "value": decision, "subtext": "Go / Watch / No-Go"},
         {"label": "Top100 估算月销量", "value": category.get("top100_estimated_monthly_units"), "subtext": "第三方类目代理指标"},
-        {"label": "关键词样本", "value": len(data_pack.get("keywords") or []), "subtext": "归一化后样本"},
-        {"label": "评论样本", "value": len(data_pack.get("reviews") or []), "subtext": "客户版只展示中文摘要"},
-        {"label": "竞品样本", "value": len(data_pack.get("products") or []), "subtext": "Amazon 产品池"},
-        {"label": "供应端样本", "value": len(data_pack.get("suppliers") or []), "subtext": "1688 参考"},
+        {"label": "关键词记录", "value": len(data_pack.get("keywords") or []), "subtext": "归一化后数据"},
+        {"label": "评论记录", "value": len(data_pack.get("reviews") or []), "subtext": "客户版只展示中文摘要"},
+        {"label": "竞品记录", "value": len(data_pack.get("products") or []), "subtext": "Amazon 产品池"},
+        {"label": "供应端记录", "value": len(data_pack.get("suppliers") or []), "subtext": "1688 参考"},
         {"label": "TikTok 商品", "value": len(data_pack.get("tiktok_products") or []), "subtext": "内容端信号"},
-        {"label": "最大关键词月搜索", "value": keywords[0].get("monthly_search_volume") if keywords else None, "subtext": keywords[0].get("keyword_cn") if keywords else "待补采"},
+        {"label": "最大关键词月搜索", "value": keywords[0].get("monthly_search_volume") if keywords else None, "subtext": keywords[0].get("keyword_cn") if keywords else "需增加关键词采集"},
     ]
 
 

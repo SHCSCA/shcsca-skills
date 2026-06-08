@@ -78,7 +78,7 @@ def customer_product_position(product: dict[str, Any]) -> str:
         value = clean(product.get(key))
         if value and has_cjk(value):
             return truncate(value, 90)
-    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品样本")
+    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品记录")
     price = money(product_price(product))
     rating = first(product.get("rating"), default="-")
     reviews = num(product_reviews(product))

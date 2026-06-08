@@ -8,7 +8,7 @@ This document is the controller-level scorecard for pushing `amz-market-research
 |---|---:|---:|---|
 | Architecture split and child skill ownership | 15 | 14 | Main skill owns orchestration; internal child skills own market, lifecycle, demand-gap, and critic modules. |
 | Data cleaning, dedupe, lineage, readiness | 20 | 18 | Normalizer and readiness gate are fail-closed; sample registry now separates acceptance and non-acceptance samples. |
-| Static HTML product quality | 15 | 14 | Three-report bundle, local CSS/JS, interactions, template baseline, parity checklist, and parity contract gate are in place; remaining work is screenshot-level visual review against fresh real reports. |
+| Static HTML product quality | 15 | 14 | Three-report bundle, local CSS/JS, interactions, template baseline, parity checklist, parity contract gate, and screenshot audit tooling are in place; remaining work is accepted-sample screenshot evidence. |
 | Critic/refinement loop | 15 | 12 | Critic runs as an internal child process, writes operator summaries, and final validator gates pass state; remaining work is richer asynchronous feedback history over real failed cases. |
 | Collector reliability | 15 | 11 | Keyword/review collectors now expose `collection_ready` and failure semantics; remaining work is live Sorftime replay evidence and broader product/category collector coverage. |
 | Customer safety and audit integrity | 10 | 10 | Client HTML rejects technical leaks and raw English review leakage; critic summary and proof run log provide reviewer-facing audit pointers. |
@@ -26,6 +26,7 @@ This document is the controller-level scorecard for pushing `amz-market-research
 - Added `analysis/critic_summary.md` as an operator-facing critic review summary.
 - Added `html-template-parity-checklist.md` to convert the three downloaded HTML baselines into explicit layout and interaction expectations.
 - Added `validate_template_parity_contract.py` and wired it into `run_acceptance_proof.py`.
+- Added `run_visual_parity_audit.py` for desktop/mobile screenshot evidence on real rendered report directories.
 - Generated proof artifacts for two `acceptance_sample` directories and one `non_acceptance_sample`; see `proof-run-log.md`.
 - Added collector failure semantics:
   - no keyword seed/node writes `keyword_collection_no_seed` and returns exit code `2`;
@@ -101,6 +102,7 @@ Current artifact:
 ```text
 references/html-template-parity-checklist.md
 scripts/validate_template_parity_contract.py
+scripts/run_visual_parity_audit.py
 ```
 
 These track and verify market/depth/lifecycle/demand-gap sections, components, interactions, and responsive layout signals.

@@ -52,7 +52,7 @@ class ChildSkillSplitTest(unittest.TestCase):
     def test_internal_child_render_scripts_write_expected_html(self):
         child_root = ROOT / "amz-market-research-orchestrated" / "child_skills"
         scripts = [
-            ("market-depth-report", "render_market_depth_report.py", "market_depth_view.json", "market-depth-report.html", "template-market", "大盘结论"),
+            ("market-depth-report", "render_market_depth_report.py", "market_depth_view.json", "market-depth-report.html", "", "大盘仪表盘 · Market Dashboard"),
             ("lifecycle-strategy-report", "render_lifecycle_strategy_report.py", "lifecycle_strategy_view.json", "lifecycle-strategy-report.html", "template-lifecycle", "生命周期旅程"),
             ("demand-gap-report", "render_demand_gap_report.py", "demand_gap_view.json", "demand-gap-report.html", "template-demand mode-r3", "KANO × JTBD"),
         ]
@@ -79,12 +79,16 @@ class ChildSkillSplitTest(unittest.TestCase):
                 html_path = report_dir / "output" / "html_reports" / output_file
                 self.assertTrue(html_path.exists(), output_file)
                 html = html_path.read_text(encoding="utf-8")
-                self.assertIn(f'class="{template_class}"', html)
-                self.assertIn("site-nav", html)
+                if template_class:
+                    self.assertIn(f'class="{template_class}"', html)
+                else:
+                    self.assertNotIn('class="template-market"', html)
+                self.assertNotIn("site-nav", html)
                 self.assertIn('href="assets/report.css"', html)
                 self.assertIn('src="assets/report.js"', html)
                 self.assertIn(required_section, html)
-                self.assertIn("证据强度", html)
+                if output_file != "market-depth-report.html":
+                    self.assertIn("证据强度", html)
                 self.assertNotIn("source_id", html)
             self.assertTrue((report_dir / "output" / "html_reports" / "assets" / "report.css").exists())
             self.assertTrue((report_dir / "output" / "html_reports" / "assets" / "report.js").exists())

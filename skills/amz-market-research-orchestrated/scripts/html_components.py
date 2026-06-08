@@ -109,22 +109,28 @@ def table_inner(headers: list[str], rows: list[list[Any]]) -> str:
 
 def kpi_card(label: str, value: Any, sub: Any = "", tone: str = "") -> str:
     tone_class = f" {tone}" if tone else ""
+    trend_class = "hot" if tone in ("danger", "warning") else "up" if tone == "success" else ""
+    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(tone or 'up')}</div>" if trend_class else ""
     return (
         f"<article class=\"kpi-card{tone_class}\">"
         f"<div class=\"kpi-label\">{esc(label)}</div>"
         f"<div class=\"kpi-value\">{esc(value)}</div>"
         f"<div class=\"kpi-sub\">{esc(sub)}</div>"
+        f"{trend}"
         "</article>"
     )
 
 
 def kpi_card_html(label: str, value_html: str, sub: Any = "", tone: str = "") -> str:
     tone_class = f" {tone}" if tone else ""
+    trend_class = "hot" if tone in ("danger", "warning") else "up" if tone == "success" else ""
+    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(tone or 'up')}</div>" if trend_class else ""
     return (
         f"<article class=\"kpi-card{tone_class}\">"
         f"<div class=\"kpi-label\">{esc(label)}</div>"
         f"<div class=\"kpi-value has-tags\">{value_html}</div>"
         f"<div class=\"kpi-sub\">{esc(sub)}</div>"
+        f"{trend}"
         "</article>"
     )
 

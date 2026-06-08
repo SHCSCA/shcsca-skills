@@ -35,11 +35,11 @@ The four files inside `output/html_reports/` must:
 - Use semantic sections in child reports, not a single Markdown blob.
 - Never wrap Markdown in `<pre>`, `.markdown-body`, or raw Markdown tables.
 - Render analysis as real HTML tables, cards, score grids, timelines, or CSS/SVG charts.
-- Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, `product_id`, or ASIN values.
-- Use client-readable credibility language: `证据强度`, `样本覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
+- Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, or `product_id`. ASIN values are allowed only inside scoped customer components marked `data-allow-asin="benchmark-sniper"` or `data-allow-asin="profit-model"`; all other ASIN values are leaks.
+- Use client-readable credibility language: `证据强度`, `数据覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
 - Support static-site interactions without CDN: top navigation, mobile directory, table search, table sorting, collapsible evidence drawers, and lightweight chart hover/link states.
 - Support template-derived report interactions without CDN: lifecycle-style `.filter-bar` / `.filter-btn[data-filter]` controls, sortable/searchable SKU and evidence tables, tabs, and chart fallback hover states.
-- Use Chinese-facing content by default. English review text, English review titles, raw scraped comments, and raw field values must be mapped into Chinese summaries, themes, sentiment labels, business meaning, and suggested actions before appearing in client HTML.
+- Use Chinese-facing content by default. VOC cards may show a short English review excerpt only when paired with Chinese summary and marked `data-allow-english-review="short"`. Full raw English reviews, English review titles, raw scraped comments, and raw field values remain audit-only.
 
 Required `data-report-style` markers:
 
@@ -82,7 +82,7 @@ Required visible sections:
 5. 标杆打法
 6. 机会定义
 7. TikTok 内容信号
-8. 1688 供应链判断
+8. 1688 供应链判断：必须基于去重有效 1688 报价 `>=50`；不足时阻断供应链成本结论并继续多轮 Sorftime 1688 采集。
 9. 风险与行动摘要
 
 Required client-analysis terms: `可进入性评分`, `价格带机会`, `竞争强度`, `关键切入口`, `商业含义`.

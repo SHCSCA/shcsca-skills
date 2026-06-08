@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 毛绒玩具 · 全生命周期拓品战略报告</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+:root{
+  --primary:#1a2744;--primary-light:#243460;--accent:#3d6b9e;--accent2:#5b8db8;
+  --morandi-sage:#8fa89a;--morandi-rose:#c4a09a;--morandi-blue:#7a9bb5;
+  --morandi-warm:#c9b99a;--morandi-lavender:#9a8fb5;--morandi-green:#8aab8a;
+  --bg:#f4f2ef;--bg-card:#ffffff;--bg-dark:#1a2744;
+  --text-primary:#1a2744;--text-secondary:#5a6a7a;--text-muted:#8a9aaa;
+  --border:#e0ddd8;--danger:#c4705a;--success:#6a9a7a;--warning:#c9a05a;
+  --tag-bg:#eef2f7;
+  --red:#E74C3C;--blue:#3498DB;--green:#27AE60;--purple:#9B59B6;--gold:#F39C12;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text-primary);line-height:1.6}
+
+/* Header */
+.report-header{background:var(--primary);color:#fff;padding:56px 60px 48px;position:relative;overflow:hidden}
+.report-header::before{content:'';position:absolute;top:-80px;right:-80px;width:320px;height:320px;border-radius:50%;background:rgba(61,107,158,.15)}
+.report-header::after{content:'';position:absolute;bottom:-60px;left:40%;width:200px;height:200px;border-radius:50%;background:rgba(91,141,184,.1)}
+.header-badge{display:inline-block;background:rgba(91,141,184,.3);border:1px solid rgba(91,141,184,.5);color:#a8c8e8;font-size:11px;letter-spacing:2px;padding:4px 12px;margin-bottom:20px;text-transform:uppercase}
+.report-header h1{font-size:36px;font-weight:700;letter-spacing:-.5px;margin-bottom:12px;position:relative;z-index:1}
+.report-header h1 span{color:#7ab8e8}
+.report-header .subtitle{font-size:15px;color:rgba(255,255,255,.6);margin-bottom:32px;position:relative;z-index:1}
+.header-meta{display:flex;gap:32px;position:relative;z-index:1}
+.header-meta-item{display:flex;flex-direction:column;gap:4px}
+.header-meta-item .label{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:1px;text-transform:uppercase}
+.header-meta-item .value{font-size:14px;color:rgba(255,255,255,.85);font-weight:500}
+
+/* Layout */
+.container{max-width:1280px;margin:0 auto;padding:0 40px}
+.section{padding:48px 0 0}
+.section-header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.section-number{width:32px;height:32px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.section-title{font-size:22px;font-weight:700;color:var(--primary);letter-spacing:-.3px}
+.section-desc{font-size:13px;color:var(--text-muted);margin-left:auto}
+
+/* Cards */
+.card{background:var(--bg-card);border:1px solid var(--border);padding:28px;margin-bottom:20px}
+.card-title{font-size:14px;font-weight:700;color:var(--text-secondary);letter-spacing:.5px;text-transform:uppercase;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--bg-card);border:1px solid var(--border);padding:24px 20px;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
+.kpi-card.accent::before{background:var(--accent)}
+.kpi-card.red::before{background:var(--danger)}
+.kpi-card.blue::before{background:var(--morandi-blue)}
+.kpi-card.green::before{background:var(--success)}
+.kpi-card.purple::before{background:var(--morandi-lavender)}
+.kpi-card.gold::before{background:var(--warning)}
+.kpi-label{font-size:11px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.kpi-value{font-size:28px;font-weight:800;color:var(--primary);letter-spacing:-1px;line-height:1;margin-bottom:6px}
+.kpi-sub{font-size:12px;color:var(--text-muted)}
+
+/* Persona */
+.persona-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:20px}
+.persona-card{background:var(--bg-card);border:1px solid var(--border);overflow:hidden}
+.persona-header{padding:16px 20px;color:#fff}
+.persona-header.p1{background:var(--danger)}
+.persona-header.p2{background:var(--accent)}
+.persona-header.p3{background:var(--success)}
+.persona-header .emoji{font-size:28px;margin-right:8px}
+.persona-header .name{font-size:17px;font-weight:700}
+.persona-header .archetype{font-size:12px;opacity:.8}
+.persona-body{padding:20px}
+.persona-body .detail{font-size:12px;color:var(--text-secondary);line-height:1.9}
+.persona-body .detail strong{color:var(--primary);font-weight:600}
+.persona-price{display:inline-block;margin-top:12px;padding:5px 12px;background:var(--tag-bg);color:var(--accent);font-size:13px;font-weight:700}
+
+/* Timeline */
+.timeline-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px}
+.tl-card{background:var(--bg-card);border:1px solid var(--border);overflow:hidden}
+.tl-header{padding:14px 16px;color:#fff;font-size:14px;font-weight:700}
+.tl-body{padding:16px}
+.tl-time{font-size:11px;color:var(--text-muted);margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase}
+.tl-skus{font-size:12px;color:var(--text-secondary);line-height:1.8}
+.tl-pain{font-size:11px;color:var(--text-muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-style:italic}
+
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.chart-container{background:var(--bg-card);border:1px solid var(--border);padding:24px}
+.chart-container.full{grid-column:1/-1}
+.chart-title{font-size:13px;font-weight:700;color:var(--text-secondary);margin-bottom:4px;letter-spacing:.3px}
+.chart-subtitle{font-size:11px;color:var(--text-muted);margin-bottom:16px}
+
+/* SKU Table */
+.sku-table-wrap{overflow-x:auto}
+table.sku{width:100%;border-collapse:collapse;font-size:13px}
+table.sku th{background:var(--primary);color:rgba(255,255,255,.85);padding:10px 12px;text-align:left;font-size:11px;letter-spacing:.5px;font-weight:600;text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap}
+table.sku th:hover{color:#7ab8e8}
+table.sku th .arrow{margin-left:4px;font-size:10px;opacity:.5}
+table.sku td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+table.sku tr:hover td{background:#f8f7f5}
+.type-badge{display:inline-block;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#fff}
+.type-badge.a{background:var(--danger)}
+.type-badge.b{background:var(--accent)}
+.type-badge.c{background:var(--success)}
+.type-badge.d{background:var(--morandi-lavender)}
+.supply-badge{display:inline-block;padding:2px 8px;font-size:10px;font-weight:600;letter-spacing:.5px}
+.supply-badge.self{background:#e4f0e8;color:var(--success)}
+.supply-badge.ext{background:#ede8f5;color:var(--morandi-lavender)}
+.supply-badge.mix{background:var(--tag-bg);color:var(--accent)}
+.priority-bar{height:4px;background:var(--border);position:relative;border-radius:2px;overflow:hidden}
+.priority-bar .fill{height:100%;position:absolute;left:0;top:0;border-radius:2px}
+
+/* Filter */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.filter-btn{padding:6px 16px;font-size:11px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-secondary);cursor:pointer;transition:.2s;font-weight:500}
+.filter-btn:hover,.filter-btn.active{border-color:var(--accent);color:var(--accent);background:var(--tag-bg)}
+
+/* Bundle */
+.bundle-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:20px}
+.bundle-card{background:var(--bg-card);border:1px solid var(--border);overflow:hidden}
+.bundle-header{padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center}
+.bundle-header h3{font-size:16px;font-weight:700}
+.bundle-header .badge{font-size:10px;padding:3px 10px;background:rgba(255,255,255,.2);letter-spacing:1px;text-transform:uppercase;font-weight:700}
+.bundle-body{padding:20px}
+.bundle-target{font-size:12px;color:var(--text-muted);margin-bottom:14px}
+.bundle-items{font-size:13px;color:var(--text-secondary);line-height:2}
+.bundle-pricing{display:flex;gap:16px;align-items:baseline;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.bundle-pricing .orig{font-size:14px;color:var(--text-muted);text-decoration:line-through}
+.bundle-pricing .final{font-size:24px;font-weight:800;color:var(--primary)}
+.bundle-pricing .save{font-size:12px;color:var(--success);font-weight:600}
+
+/* Phase / Roadmap */
+.phase-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:20px}
+.phase-card{background:var(--bg-card);border:1px solid var(--border);overflow:hidden}
+.phase-header{padding:14px 20px;color:#fff;font-size:13px;font-weight:700;letter-spacing:.5px}
+.phase-body{padding:20px}
+.phase-body h3{font-size:14px;font-weight:700;color:var(--primary);margin-bottom:12px}
+.phase-body ul{list-style:none;font-size:12px;color:var(--text-secondary);line-height:2.2}
+.phase-body ul li::before{content:'→';margin-right:8px;color:var(--accent)}
+
+/* Risk */
+.risk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:20px}
+.risk-card{background:var(--bg-card);border:1px solid var(--border);border-top:3px solid var(--danger);padding:24px}
+.risk-card h3{font-size:14px;font-weight:700;color:var(--primary);margin-bottom:8px}
+.risk-card .desc{font-size:12px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6}
+.risk-card .mitigation{font-size:12px;padding:12px;background:#e4f0e8;border-left:3px solid var(--success);line-height:1.6;color:var(--text-secondary)}
+.risk-card .mitigation strong{color:var(--success)}
+
+/* Sources */
+.source-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:20px}
+.source-card{background:var(--bg-card);border:1px solid var(--border);padding:24px}
+.source-card h3{font-size:14px;font-weight:700;color:var(--primary);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.source-card .quotes{list-style:none;font-size:12px;color:var(--text-secondary);line-height:1.8}
+.source-card .quotes li{margin-bottom:8px;padding-left:12px;border-left:2px solid var(--border)}
+
+/* Insight */
+.insight-box{background:#eef4fb;border-left:4px solid var(--accent);padding:16px 20px;margin:16px 0 20px;font-size:13px;color:var(--primary);line-height:1.7}
+.insight-box strong{color:var(--accent)}
+
+/* Conclusion */
+.conclusion{background:var(--primary);color:#fff;padding:48px 52px;margin-top:32px}
+.conclusion-title{font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:20px}
+.conclusion-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.conclusion-item-title{font-size:13px;font-weight:700;color:#7ab8e8;margin-bottom:8px}
+.conclusion-item-text{font-size:12px;color:rgba(255,255,255,.6);line-height:1.7}
+
+/* Footer */
+.report-footer{background:#111827;color:rgba(255,255,255,.3);padding:20px 60px;font-size:11px;display:flex;justify-content:space-between;align-items:center}
+
+@media(max-width:1024px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .persona-grid,.phase-grid,.risk-grid{grid-template-columns:1fr}
+  .timeline-grid{grid-template-columns:repeat(2,1fr)}
+  .bundle-grid,.source-grid,.chart-grid{grid-template-columns:1fr}
+  .conclusion-grid{grid-template-columns:1fr}
+  .report-header{padding:32px 24px}
+  .container{padding:0 20px}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<div class="report-header">
+  <div class="container">
+    <div class="header-badge">DTC Product Expansion Strategy · 2026 Q1</div>
+    <h1>AI 毛绒玩具 · <span>全生命周期拓品战略</span>报告</h1>
+    <p class="subtitle">31 SKU 扩展矩阵 · 四维拓品模型 · Bundle 策略 · 优先级路线图</p>
+    <div class="header-meta">
+      <div class="header-meta-item">
+        <span class="label">报告日期</span>
+        <span class="value">2026年3月28日</span>
+      </div>
+      <div class="header-meta-item">
+        <span class="label">拓品总数</span>
+        <span class="value">31 SKU · 5大生命周期阶段</span>
+      </div>
+      <div class="header-meta-item">
+        <span class="label">分析维度</span>
+        <span class="value">场景 · 关联度 · 供应链 · 竞争</span>
+      </div>
+      <div class="header-meta-item">
+        <span class="label">核心策略</span>
+        <span class="value">AOV提升 + LTV复购引擎</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 1: KPI DASHBOARD ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">01</div>
+      <div class="section-title">战略仪表盘 · Strategy Dashboard</div>
+      <div class="section-desc">拓品全局概览</div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card gold">
+        <div class="kpi-label">拓品 SKU 总数</div>
+        <div class="kpi-value">31</div>
+        <div class="kpi-sub">覆盖5大生命周期阶段</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Type A · 强关联</div>
+        <div class="kpi-value">6</div>
+        <div class="kpi-sub">核心互补品 · 高转化率</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">Type B · 场景延伸</div>
+        <div class="kpi-value">12</div>
+        <div class="kpi-sub">场景拓展 · AOV 提升引擎</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Type C · 消耗品</div>
+        <div class="kpi-value">6</div>
+        <div class="kpi-sub">60-90天复购 · LTV 引擎</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">Type D · 升级维护</div>
+        <div class="kpi-value">7</div>
+        <div class="kpi-sub">延长产品生命周期</div>
+      </div>
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-card accent">
+        <div class="kpi-label">可自产 SKU</div>
+        <div class="kpi-value">19</div>
+        <div class="kpi-sub">毛绒工厂核心优势 · 61%</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">需外采 SKU</div>
+        <div class="kpi-value">12</div>
+        <div class="kpi-sub">硬件/电子 · 需供应商合作</div>
+      </div>
+      <div class="kpi-card gold">
+        <div class="kpi-label">预估 AOV 提升</div>
+        <div class="kpi-value">$30-80</div>
+        <div class="kpi-sub">Bundle 策略推动客单价增长</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">消耗品复购周期</div>
+        <div class="kpi-value">60-90d</div>
+        <div class="kpi-sub">学习卡包 + 清洁用品</div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      💡 <strong>战略核心：</strong>以 AI 毛绒玩具为核心，构建 31 SKU 的「陪伴生态」——从开箱到日常使用、清洁维护、生活方式延伸，每个触点都有对应产品。<strong>19 个可自产 SKU</strong> 充分发挥毛绒工厂优势，6 款消耗品打造 <strong>60-90 天复购引擎</strong>。
+    </div>
+  </div>
+
+  <!-- ===== SECTION 2: PERSONA ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">02</div>
+      <div class="section-title">目标用户画像 · User Personas</div>
+      <div class="section-desc">三大核心用户群 · 差异化定价策略</div>
+    </div>
+    <div class="persona-grid">
+      <div class="persona-card">
+        <div class="persona-header p1">
+          <div><span class="emoji">👩‍💼</span><span class="name">Sarah</span></div>
+          <div class="archetype">精明教育型妈妈</div>
+        </div>
+        <div class="persona-body">
+          <div class="detail">
+            <strong>年龄：</strong>32-40岁，双职工中产家庭<br>
+            <strong>核心需求：</strong>用 AI 玩具替代屏幕时间，辅助英语/数学启蒙<br>
+            <strong>痛点：</strong>隐私安全担忧、内容安全、监控对话、怕孩子过度依赖<br>
+            <strong>使用频率：</strong>孩子每天 30-60 分钟<br>
+            <strong>品牌偏好：</strong>功能驱动，看重评价和安全认证<br>
+            <strong>Bundle偏好：</strong>新手启航套装 · 续航补给包
+          </div>
+          <div class="persona-price">$50 — $120</div>
+        </div>
+      </div>
+      <div class="persona-card">
+        <div class="persona-header p2">
+          <div><span class="emoji">🎁</span><span class="name">Uncle Mike</span></div>
+          <div class="archetype">送礼达人</div>
+        </div>
+        <div class="persona-body">
+          <div class="detail">
+            <strong>年龄：</strong>28-45岁，单身/已婚无孩<br>
+            <strong>核心需求：</strong>给侄子侄女找 "哇" 级别的礼物<br>
+            <strong>痛点：</strong>不了解产品功能，需要开箱即用的完整体验<br>
+            <strong>使用频率：</strong>一次性购买（送礼）<br>
+            <strong>品牌偏好：</strong>追新型，包装和第一印象很重要<br>
+            <strong>Bundle偏好：</strong>豪华礼品套装
+          </div>
+          <div class="persona-price">$80 — $150</div>
+        </div>
+      </div>
+      <div class="persona-card">
+        <div class="persona-header p3">
+          <div><span class="emoji">👨‍💻</span><span class="name">David</span></div>
+          <div class="archetype">科技爱好者爸爸</div>
+        </div>
+        <div class="persona-body">
+          <div class="detail">
+            <strong>年龄：</strong>30-42岁，IT/科技行业<br>
+            <strong>核心需求：</strong>让孩子接触科技、培养 STEM 兴趣<br>
+            <strong>痛点：</strong>觉得大部分 AI 玩具太简单、希望有扩展性和编程接口<br>
+            <strong>使用频率：</strong>周末亲子互动 + 日常使用<br>
+            <strong>品牌偏好：</strong>技术驱动，看重可扩展性和 API 支持<br>
+            <strong>Bundle偏好：</strong>STEM 探索套装
+          </div>
+          <div class="persona-price">$100 — $200</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 3: LIFECYCLE ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">03</div>
+      <div class="section-title">全生命周期旅程 · Lifecycle Journey</div>
+      <div class="section-desc">5大阶段 · 31 SKU 场景覆盖</div>
+    </div>
+    <div class="timeline-grid">
+      <div class="tl-card">
+        <div class="tl-header" style="background:var(--danger)">📦 阶段1 · 开箱安装期</div>
+        <div class="tl-body">
+          <div class="tl-time">收到包裹后 0-30 分钟 · 5 SKU</div>
+          <div class="tl-skus">
+            ✦ 磁吸充电底座<br>✦ 快速入门绘本卡<br>✦ 开箱惊喜贴纸套装<br>✦ 角色出生证书<br>✦ 防尘收纳袋
+          </div>
+          <div class="tl-pain">痛点：充电设置不直观、不知道如何开始互动</div>
+        </div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-header" style="background:var(--warning)">🌱 阶段2 · 初次适应期</div>
+        <div class="tl-body">
+          <div class="tl-time">第 1-7 天 · 5 SKU</div>
+          <div class="tl-skus">
+            ✦ 亲子互动故事卡片组<br>✦ 换装迷你服饰套装<br>✦ 「我的AI朋友」日记本<br>✦ 配套安抚毛毯<br>✦ 英语启蒙学习卡包
+          </div>
+          <div class="tl-pain">痛点：孩子不知道怎么深度互动、家长担心使用方式</div>
+        </div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-header" style="background:var(--accent)">🚀 阶段3 · 深度使用期</div>
+        <div class="tl-body">
+          <div class="tl-time">第 7 天 - 6 个月 · 10 SKU</div>
+          <div class="tl-skus">
+            ✦ 家族扩展毛绒伙伴<br>✦ 便携背包<br>✦ STEM编程配件<br>✦ AR互动卡牌<br>✦ 专属「小窝」场景套装<br>✦ 户外探险配件<br>✦ 数/科/中学习卡包<br>✦ 可替换毛绒外壳
+          </div>
+          <div class="tl-pain">痛点：功能单一感、场景有限、想要更多玩法</div>
+        </div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-header" style="background:var(--success)">🧹 阶段4 · 清洁维护期</div>
+        <div class="tl-body">
+          <div class="tl-time">每月+ · 5 SKU</div>
+          <div class="tl-skus">
+            ✦ 免洗清洁喷雾<br>✦ 除螨清洁湿巾<br>✦ 防水保护内胆<br>✦ 修复补丁套装<br>✦ 备用充电线
+          </div>
+          <div class="tl-pain">痛点：毛绒难清洗、电子部件怕水、磨损修复</div>
+        </div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-header" style="background:var(--morandi-lavender)">🌈 阶段5 · 生活方式延伸</div>
+        <div class="tl-body">
+          <div class="tl-time">6 个月+ · 6 SKU</div>
+          <div class="tl-skus">
+            ✦ 生日派对套装<br>✦ 角色主题文具<br>✦ DIY配件创作套装<br>✦ 角色主题睡衣<br>✦ 精品展示盒<br>✦ 旅行收纳箱
+          </div>
+          <div class="tl-pain">痛点：想把 AI 伙伴融入生活、收藏展示需求</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 4: CHARTS ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">04</div>
+      <div class="section-title">四维拓品生态 · 4D Ecosystem</div>
+      <div class="section-desc">关联度 × 场景 × 消耗 × 维护</div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-container">
+        <div class="chart-title">四维拓品生态全景 · Sunburst</div>
+        <div class="chart-subtitle">Type A/B/C/D 四个维度 × 31 SKU 分布</div>
+        <div id="sunburst" style="height:500px;width:100%"></div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">SKU 优先级评分分布</div>
+        <div class="chart-subtitle">综合关联度、复购周期、供应链可控性、竞争格局</div>
+        <div id="priorityChart" style="height:500px;width:100%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 5: SKU TABLE ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">05</div>
+      <div class="section-title">31 SKU 执行总表 · Execution Table</div>
+      <div class="section-desc">可筛选 · 可排序 · 优先级评分</div>
+    </div>
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">全部 (31)</button>
+      <button class="filter-btn" data-filter="a">Type A · 强关联 (6)</button>
+      <button class="filter-btn" data-filter="b">Type B · 场景延伸 (12)</button>
+      <button class="filter-btn" data-filter="c">Type C · 消耗品 (6)</button>
+      <button class="filter-btn" data-filter="d">Type D · 升级维护 (7)</button>
+      <button class="filter-btn" data-filter="self">🏭 可自产</button>
+      <button class="filter-btn" data-filter="p1">⚡ Phase 1 立即启动</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+    <div class="sku-table-wrap">
+    <table class="sku" id="skuTable">
+      <thead><tr>
+        <th data-col="0"># <span class="arrow">↕</span></th>
+        <th data-col="1">生命周期 <span class="arrow">↕</span></th>
+        <th data-col="2">维度 <span class="arrow">↕</span></th>
+        <th data-col="3">拓品 SKU <span class="arrow">↕</span></th>
+        <th data-col="4">战略定位 <span class="arrow">↕</span></th>
+        <th data-col="5">客单价 <span class="arrow">↕</span></th>
+        <th data-col="6">供应链 <span class="arrow">↕</span></th>
+        <th data-col="7">竞争格局 <span class="arrow">↕</span></th>
+        <th data-col="8">优先级 <span class="arrow">↕</span></th>
+        <th data-col="9">阶段 <span class="arrow">↕</span></th>
+      </tr></thead>
+      <tbody id="skuBody"></tbody>
+    </table>
+    </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 6: BUNDLE ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">06</div>
+      <div class="section-title">四组 Bundle 策略 · AOV 提升引擎</div>
+      <div class="section-desc">精准匹配用户画像 · 最大化客单价</div>
+    </div>
+    <div class="bundle-grid">
+      <div class="bundle-card">
+        <div class="bundle-header" style="background:var(--danger)">
+          <h3>🎒 新手启航套装</h3>
+          <span class="badge">STARTER</span>
+        </div>
+        <div class="bundle-body">
+          <div class="bundle-target">目标用户：Sarah（教育型妈妈）· 降低上手门槛 · 高转化</div>
+          <div class="bundle-items">
+            ✦ AI 毛绒玩具主体<br>
+            ✦ 磁吸充电底座（熊掌造型）<br>
+            ✦ 快速入门绘本卡（12 张）<br>
+            ✦ 亲子互动故事卡片组（30 张）<br>
+            ✦ 防尘收纳袋
+          </div>
+          <div class="bundle-pricing">
+            <span class="orig">$105-128</span>
+            <span class="final">$89-99</span>
+            <span class="save">节省 ~20% · AOV +$30-40</span>
+          </div>
+        </div>
+      </div>
+      <div class="bundle-card">
+        <div class="bundle-header" style="background:var(--accent)">
+          <h3>🎁 豪华礼品套装</h3>
+          <span class="badge">PREMIUM</span>
+        </div>
+        <div class="bundle-body">
+          <div class="bundle-target">目标用户：Uncle Mike（送礼达人）· 开箱即 "哇" · 高溢价</div>
+          <div class="bundle-items">
+            ✦ AI 毛绒玩具主体<br>
+            ✦ 角色出生证书 + 命名卡<br>
+            ✦ 换装迷你服饰套装（3 件）<br>
+            ✦ 配套安抚毛毯（75×100cm）<br>
+            ✦ 开箱惊喜贴纸（50 张）<br>
+            ✦ 精美礼盒包装
+          </div>
+          <div class="bundle-pricing">
+            <span class="orig">$120-152</span>
+            <span class="final">$109-129</span>
+            <span class="save">节省 ~15% · AOV +$50-70</span>
+          </div>
+        </div>
+      </div>
+      <div class="bundle-card">
+        <div class="bundle-header" style="background:var(--success)">
+          <h3>🔬 STEM 探索套装</h3>
+          <span class="badge">STEM</span>
+        </div>
+        <div class="bundle-body">
+          <div class="bundle-target">目标用户：David（科技爸爸）· 教育科技全套 · 最高AOV</div>
+          <div class="bundle-items">
+            ✦ AI 毛绒玩具主体<br>
+            ✦ STEM 编程启蒙配件包<br>
+            ✦ AR 互动游戏卡牌（40 张）<br>
+            ✦ 科学探索学习卡包（50 张）<br>
+            ✦ 便携角色造型背包
+          </div>
+          <div class="bundle-pricing">
+            <span class="orig">$135-174</span>
+            <span class="final">$119-139</span>
+            <span class="save">节省 ~18% · AOV +$60-80</span>
+          </div>
+        </div>
+      </div>
+      <div class="bundle-card">
+        <div class="bundle-header" style="background:var(--warning)">
+          <h3>🔄 续航补给包</h3>
+          <span class="badge">REFILL</span>
+        </div>
+        <div class="bundle-body">
+          <div class="bundle-target">目标用户：所有 Persona · LTV 引擎 · 每 2-3 个月复购</div>
+          <div class="bundle-items">
+            ✦ 英语启蒙学习卡包（50 张）<br>
+            ✦ 数学冒险学习卡包（50 张）<br>
+            ✦ 免洗清洁喷雾（150ml）<br>
+            ✦ 除螨清洁湿巾（30 片）
+          </div>
+          <div class="bundle-pricing">
+            <span class="orig">$27-42</span>
+            <span class="final">$22-32</span>
+            <span class="save">节省 ~20% · 季度订阅模型</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AOV Chart -->
+    <div class="chart-container" style="margin-bottom:20px">
+      <div class="chart-title">📊 Bundle AOV 提升对比</div>
+      <div class="chart-subtitle">单买主体 vs Bundle 价格 vs AOV 增量</div>
+      <div id="aovChart" style="height:320px;width:100%"></div>
+    </div>
+
+    <div class="insight-box">
+      💡 <strong>Bundle 策略核心：</strong>四组套装精准匹配三大用户画像 + 一个复购引擎。新手启航套装是流量入口（$89-99），豪华礼品拉高客单价（$109-129），STEM 套装锁定高价值用户（$119-139），续航补给包打造 <strong>季度复购飞轮</strong>。预估 Bundle 渗透率达 40% 时，整体 AOV 提升 35-50%。
+    </div>
+  </div>
+
+  <!-- ===== SECTION 7: ROADMAP ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">07</div>
+      <div class="section-title">优先级路线图 · Implementation Roadmap</div>
+      <div class="section-desc">三阶段分批上线 · 30-60-90天行动计划</div>
+    </div>
+    <div class="phase-grid">
+      <div class="phase-card">
+        <div class="phase-header" style="background:var(--success)">Phase 1 · 立即启动 · 0-30天</div>
+        <div class="phase-body">
+          <h3>高价值 + 低难度 · 8 SKU</h3>
+          <ul>
+            <li>换装迷你服饰套装</li>
+            <li>亲子互动故事卡片组</li>
+            <li>防尘收纳袋</li>
+            <li>快速入门绘本卡</li>
+            <li>配套安抚毛毯</li>
+            <li>可替换毛绒外壳</li>
+            <li>角色出生证书</li>
+            <li>开箱惊喜贴纸套装</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase-card">
+        <div class="phase-header" style="background:var(--accent)">Phase 2 · 3-6 个月</div>
+        <div class="phase-body">
+          <h3>高价值 + 中高难度 · 15 SKU</h3>
+          <ul>
+            <li>AI 角色家族扩展伙伴</li>
+            <li>磁吸充电底座</li>
+            <li>STEM 编程启蒙配件包</li>
+            <li>AR 互动游戏卡牌</li>
+            <li>便携角色背包</li>
+            <li>英/数/科/中学习卡包系列</li>
+            <li>免洗清洁喷雾</li>
+            <li>防水保护内胆</li>
+            <li>AI 毛绒「小窝」场景套装</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase-card">
+        <div class="phase-header" style="background:var(--morandi-lavender)">Phase 3 · 6-12 个月</div>
+        <div class="phase-body">
+          <h3>长尾 + 品牌延伸 · 8 SKU</h3>
+          <ul>
+            <li>生日派对套装</li>
+            <li>角色主题文具</li>
+            <li>角色主题睡衣</li>
+            <li>旅行收纳箱</li>
+            <li>精品展示盒</li>
+            <li>DIY 配件创作套装</li>
+            <li>「我的AI朋友」日记本</li>
+            <li>户外探险配件套装</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 30-60-90 Action Plan -->
+    <div class="phase-grid" style="margin-top:0">
+      <div class="phase-card" style="border-top:3px solid var(--success)">
+        <div class="phase-body">
+          <h3>📋 30天行动清单</h3>
+          <ul>
+            <li>启动 8 个自产 SKU 打样</li>
+            <li>确定 Bundle 1+2 包装设计</li>
+            <li>注册角色 IP 和外观设计专利</li>
+            <li>联系 2-3 家硬件供应商询价</li>
+            <li>建立产品安全认证申请流程</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase-card" style="border-top:3px solid var(--accent)">
+        <div class="phase-body">
+          <h3>📋 60天行动清单</h3>
+          <ul>
+            <li>完成硬件供应商评估选定</li>
+            <li>启动充电底座/家族伙伴开发</li>
+            <li>Bundle 1+2 上线 Amazon 测试</li>
+            <li>启动学习卡包内容制作</li>
+            <li>收集首批用户反馈数据</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase-card" style="border-top:3px solid var(--morandi-lavender)">
+        <div class="phase-body">
+          <h3>📋 90天行动清单</h3>
+          <ul>
+            <li>根据市场反馈优化 SKU 组合</li>
+            <li>启动学习卡包订阅模式</li>
+            <li>规划 Phase 3 SKU 开发</li>
+            <li>筹备季节限定外壳首发</li>
+            <li>评估 IP 联名合作机会</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 8: RISK ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">08</div>
+      <div class="section-title">风险矩阵 · Risk & Mitigation</div>
+      <div class="section-desc">三大核心风险 · 应对策略</div>
+    </div>
+    <div class="risk-grid">
+      <div class="risk-card">
+        <h3>⚡ 供应链风险</h3>
+        <div class="desc">电子硬件（AI 模块、Speaker、蓝牙 PCB）高度依赖外采，交期不可控，可能影响 Phase 2 进度</div>
+        <div class="mitigation"><strong>应对：</strong>至少备选 2 家硬件供应商；Phase 1 优先推进纯毛绒自产 SKU，降低启动依赖</div>
+      </div>
+      <div class="risk-card">
+        <h3>🔒 隐私合规风险</h3>
+        <div class="desc">AI 玩具品类面临 COPPA 等儿童隐私法规监管，2025 年已有品牌因数据泄露被下架</div>
+        <div class="mitigation"><strong>应对：</strong>获取 COPPA/GDPR-K 认证；APP 端透明化对话记录；家长一键删除数据功能</div>
+      </div>
+      <div class="risk-card">
+        <h3>🏃 竞品跟进风险</h3>
+        <div class="desc">可替换毛绒外壳模式容易被模仿，差异化窗口期有限</div>
+        <div class="mitigation"><strong>应对：</strong>外观设计专利 + 角色 IP 版权保护；通过季节限定和联名款建立品牌壁垒</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 9: DATA SOURCES ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-number">09</div>
+      <div class="section-title">市场数据验证 · Market Intelligence</div>
+      <div class="section-desc">多源交叉验证 · 数据驱动决策</div>
+    </div>
+    <div class="source-grid">
+      <div class="source-card">
+        <h3>🛒 Amazon 产品页面分析</h3>
+        <ul class="quotes">
+          <li>ChatGPT Powered AI Talking Teddy Bear — $40-$60 价格带，英语/西语双语，3+ 岁</li>
+          <li>Voopark AI Smart Stuffed Animal — 多语言 AI 伴侣，含家长监控 APP</li>
+          <li>Curio Grok — $119-$150 高端定位，专注儿童安全和教育</li>
+          <li>FoloToy — "My First AI Friend"定位，支持离线模式</li>
+          <li>Best Sellers: Plush Toy + Blanket Sets — 毛绒+毯子组合是已验证热门品类</li>
+          <li>Book + Plush Set — 经典 Bundle 形态，The Velveteen Rabbit 礼盒 4.3⭐</li>
+        </ul>
+      </div>
+      <div class="source-card">
+        <h3>📱 TikTok / 社交媒体信号</h3>
+        <ul class="quotes">
+          <li>Sanxiaomao AI 1000% Series — 盲盒收藏系列在 TikTok 上爆火</li>
+          <li>Curio Grok 开箱视频获百万级播放 — 开箱体验是社交货币</li>
+          <li>Living_with_robots 频道 — AI 玩具开箱成为新兴内容品类</li>
+          <li>Bondu AI 恐龙 — SoMa 初创公司，计划圣诞前发货，"play的未来"</li>
+        </ul>
+      </div>
+      <div class="source-card">
+        <h3>📰 行业媒体 & 安全报告</h3>
+        <ul class="quotes">
+          <li>TechCrunch: "AI-powered stuffed animals are coming for your kids" — 品类爆发趋势确认</li>
+          <li>NBC News: AI 玩具在测试中给出不当回复 — 安全是行业痛点，也是差异化机会</li>
+          <li>The Guardian: "I love you too" — 家长对 AI 玩具"过度亲密"的担忧</li>
+          <li>CalPIRG Trouble in Toyland 报告 — 行业需要更严格的安全标准</li>
+          <li>Malwarebytes: AI 毛绒玩具泄露数千条儿童对话 — 隐私是必须解决的问题</li>
+        </ul>
+      </div>
+      <div class="source-card">
+        <h3>🔍 竞品格局分析</h3>
+        <ul class="quotes">
+          <li>高端：Curio ($119-150) — 多角色（Grok/Grem/Gabbo/Poppy/Lingo），安全优先</li>
+          <li>中端：Voopark/MOREXIMI ($40-80) — ChatGPT 驱动，多语言，家长 APP</li>
+          <li>入门：FoloToy ($30-50) — 离线功能，教育故事库</li>
+          <li>新锐：Bondu — 初创公司，AI 恐龙定位</li>
+          <li>趋势：盲盒/收藏系列 + 配件生态正在形成</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONCLUSION ===== -->
+<div class="conclusion">
+  <div class="container">
+    <div class="conclusion-title">Strategic Summary · 战略总结</div>
+    <div class="conclusion-grid">
+      <div class="conclusion-item">
+        <div class="conclusion-item-title">🎯 拓品核心逻辑</div>
+        <div class="conclusion-item-text">以 AI 毛绒玩具为圆心，沿「开箱→适应→深度使用→维护→生活延伸」五阶段展开 31 SKU 拓品矩阵。19 个可自产 SKU 发挥工厂优势，6 款消耗品构建复购飞轮，4 组 Bundle 精准匹配三大用户画像。</div>
+      </div>
+      <div class="conclusion-item">
+        <div class="conclusion-item-title">💰 财务预期</div>
+        <div class="conclusion-item-text">Bundle 渗透率 40% 时，整体 AOV 提升 35-50%。续航补给包以季度订阅模式运营，单用户年 LTV 预估增长 $88-128。Phase 1 可在 30 天内完成打样，60 天上线测试。</div>
+      </div>
+      <div class="conclusion-item">
+        <div class="conclusion-item-title">🚀 关键下一步</div>
+        <div class="conclusion-item-text">① Phase 1 八款自产 SKU 立即打样 ② 确定 Bundle 包装设计 ③ 注册角色 IP 与外观专利 ④ 硬件供应商评估 ⑤ COPPA 合规认证启动 ⑥ 首批 Bundle 上线 Amazon 测试</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<div class="report-footer">
+  <span>AI 毛绒玩具 · 全生命周期拓品战略报告 — Generated by OpenClaw DTC Product Expansion Skill — 2026.03.28</span>
+  <span>Confidential · Internal Use Only</span>
+</div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script>
+// ============ SKU DATA ============
+const SKU_DATA = [
+  {id:1,stage:"开箱安装",type:"A",name:"AI专属USB-C磁吸充电底座",pos:"利润款",price:"$15-25",priceNum:20,cycle:0,strength:5,supply:"ext",compete:"蓝海",priority:0,phase:"P2",pain:"裸线充电不安全、不美观"},
+  {id:2,stage:"开箱安装",type:"A",name:"快速入门绘本卡片（12张防水）",pos:"引流款",price:"$5-8",priceNum:6.5,cycle:0,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"不知如何跟AI玩具对话"},
+  {id:3,stage:"开箱安装",type:"B",name:"开箱惊喜贴纸套装（50张+收藏册）",pos:"引流款",price:"$4-7",priceNum:5.5,cycle:0,strength:3,supply:"self",compete:"红海",priority:0,phase:"P1",pain:"开箱仪式感不足"},
+  {id:4,stage:"开箱安装",type:"B",name:"专属角色出生证/领养证书",pos:"形象款",price:"$3-5",priceNum:4,cycle:0,strength:3,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"缺少情感连接仪式"},
+  {id:5,stage:"开箱安装",type:"D",name:"毛绒玩具专用防尘收纳袋",pos:"引流款",price:"$5-8",priceNum:6.5,cycle:0,strength:3,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"存放时容易积尘"},
+  {id:6,stage:"初次适应",type:"A",name:"亲子互动故事卡片组（30张情景卡）",pos:"利润款",price:"$12-18",priceNum:15,cycle:90,strength:5,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"互动内容有限"},
+  {id:7,stage:"初次适应",type:"A",name:"AI角色换装迷你服饰套装（3件）",pos:"利润款",price:"$15-22",priceNum:18.5,cycle:120,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"角色单调无变化"},
+  {id:8,stage:"初次适应",type:"B",name:"「我的AI朋友」手绘日记本",pos:"形象款",price:"$8-12",priceNum:10,cycle:180,strength:2,supply:"ext",compete:"红海",priority:0,phase:"P3",pain:"想记录互动回忆"},
+  {id:9,stage:"初次适应",type:"B",name:"配套安抚毛绒小毯子（75x100cm）",pos:"利润款",price:"$18-28",priceNum:23,cycle:0,strength:4,supply:"self",compete:"紫海",priority:0,phase:"P1",pain:"睡觉时想抱着AI伙伴"},
+  {id:10,stage:"初次适应",type:"C",name:"AI互动学习卡包-英语启蒙（50张）",pos:"复购款",price:"$8-12",priceNum:10,cycle:60,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"教育内容不够系统"},
+  {id:11,stage:"深度使用",type:"A",name:"AI角色家族扩展毛绒伙伴（15cm互联）",pos:"利润款",price:"$25-35",priceNum:30,cycle:120,strength:5,supply:"mix",compete:"蓝海",priority:0,phase:"P2",pain:"单一角色缺乏社交感"},
+  {id:12,stage:"深度使用",type:"A",name:"AI毛绒玩具专用便携背包",pos:"利润款",price:"$22-32",priceNum:27,cycle:0,strength:4,supply:"self",compete:"紫海",priority:0,phase:"P2",pain:"外出携带不方便"},
+  {id:13,stage:"深度使用",type:"B",name:"STEM编程启蒙配件包（LED+编程卡）",pos:"形象款",price:"$20-30",priceNum:25,cycle:0,strength:3,supply:"ext",compete:"蓝海",priority:0,phase:"P2",pain:"缺乏STEM教育延伸"},
+  {id:14,stage:"深度使用",type:"B",name:"AR互动游戏卡牌套装（40张+收纳包）",pos:"利润款",price:"$15-22",priceNum:18.5,cycle:90,strength:3,supply:"mix",compete:"蓝海",priority:0,phase:"P2",pain:"纯语音互动不够丰富"},
+  {id:15,stage:"深度使用",type:"B",name:"AI毛绒玩具专属「小窝」场景套装",pos:"利润款",price:"$25-40",priceNum:32.5,cycle:0,strength:3,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"缺少场景化玩法"},
+  {id:16,stage:"深度使用",type:"B",name:"户外探险毛绒配件套装",pos:"形象款",price:"$12-18",priceNum:15,cycle:0,strength:2,supply:"self",compete:"紫海",priority:0,phase:"P3",pain:"室内场景局限"},
+  {id:17,stage:"深度使用",type:"C",name:"AI互动学习卡包-数学冒险（50张）",pos:"复购款",price:"$8-12",priceNum:10,cycle:60,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"学科覆盖不全"},
+  {id:18,stage:"深度使用",type:"C",name:"AI互动学习卡包-科学探索（50张）",pos:"复购款",price:"$8-12",priceNum:10,cycle:60,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"学科覆盖不全"},
+  {id:19,stage:"深度使用",type:"C",name:"AI互动学习卡包-中文启蒙（50张）",pos:"复购款",price:"$8-12",priceNum:10,cycle:60,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"多语言需求"},
+  {id:20,stage:"深度使用",type:"D",name:"毛绒外壳替换套装（可拆卸限定款）",pos:"复购款",price:"$18-25",priceNum:21.5,cycle:90,strength:5,supply:"self",compete:"蓝海",priority:0,phase:"P1",pain:"角色造型审美疲劳"},
+  {id:21,stage:"清洁维护",type:"C",name:"AI毛绒玩具专用免洗清洁喷雾",pos:"复购款",price:"$6-10",priceNum:8,cycle:30,strength:4,supply:"ext",compete:"紫海",priority:0,phase:"P2",pain:"毛绒难清洗"},
+  {id:22,stage:"清洁维护",type:"C",name:"毛绒玩具除螨清洁湿巾（30片）",pos:"复购款",price:"$5-8",priceNum:6.5,cycle:30,strength:3,supply:"ext",compete:"红海",priority:0,phase:"P2",pain:"螨虫过敏担忧"},
+  {id:23,stage:"清洁维护",type:"D",name:"电子模块防水保护内胆",pos:"利润款",price:"$8-12",priceNum:10,cycle:0,strength:4,supply:"self",compete:"蓝海",priority:0,phase:"P2",pain:"洗涤时怕损坏电子"},
+  {id:24,stage:"清洁维护",type:"D",name:"毛绒修复补丁套装（6色+针线+棉）",pos:"引流款",price:"$6-10",priceNum:8,cycle:180,strength:3,supply:"self",compete:"紫海",priority:0,phase:"P1",pain:"磨损后无法修复"},
+  {id:25,stage:"清洁维护",type:"D",name:"备用充电线+数据线套装（2条）",pos:"引流款",price:"$8-12",priceNum:10,cycle:180,strength:3,supply:"ext",compete:"红海",priority:0,phase:"P2",pain:"充电线损坏/丢失"},
+  {id:26,stage:"生活延伸",type:"B",name:"AI毛绒玩具生日派对套装",pos:"形象款",price:"$15-22",priceNum:18.5,cycle:365,strength:2,supply:"ext",compete:"红海",priority:0,phase:"P3",pain:"生日缺少主题产品"},
+  {id:27,stage:"生活延伸",type:"B",name:"AI角色主题文具套装",pos:"引流款",price:"$8-12",priceNum:10,cycle:180,strength:2,supply:"ext",compete:"红海",priority:0,phase:"P3",pain:"学校场景空白"},
+  {id:28,stage:"生活延伸",type:"B",name:"亲子DIY毛绒配件创作套装",pos:"利润款",price:"$12-18",priceNum:15,cycle:120,strength:3,supply:"self",compete:"蓝海",priority:0,phase:"P3",pain:"想亲手做配件"},
+  {id:29,stage:"生活延伸",type:"B",name:"AI角色主题儿童睡衣+夜光眼罩",pos:"利润款",price:"$18-28",priceNum:23,cycle:180,strength:2,supply:"ext",compete:"紫海",priority:0,phase:"P3",pain:"睡眠场景缺失"},
+  {id:30,stage:"生活延伸",type:"D",name:"精品展示收纳盒（亚克力+毛绒垫）",pos:"形象款",price:"$12-18",priceNum:15,cycle:0,strength:2,supply:"ext",compete:"紫海",priority:0,phase:"P3",pain:"收藏展示需求"},
+  {id:31,stage:"生活延伸",type:"D",name:"AI毛绒旅行收纳箱（硬壳迷你拉杆）",pos:"形象款",price:"$25-38",priceNum:31.5,cycle:0,strength:2,supply:"ext",compete:"蓝海",priority:0,phase:"P3",pain:"旅行携带需求"}
+];
+
+// Calculate priority
+SKU_DATA.forEach(s => {
+  const cycleScore = s.cycle <= 30 ? 25 : (s.cycle <= 90 ? 15 : 5);
+  const supplyMap = {self:20, mix:13, ext:7};
+  const competeMap = {"蓝海":15, "紫海":10, "红海":5};
+  s.priority = s.strength * 6 + cycleScore + (supplyMap[s.supply]||7) + (competeMap[s.compete]||5) + 7;
+});
+
+// Colors
+const primaryColor = '#1a2744';
+const accentColor = '#3d6b9e';
+const dangerColor = '#c4705a';
+const successColor = '#6a9a7a';
+const warningColor = '#c9a05a';
+const lavenderColor = '#9a8fb5';
+
+// ============ RENDER SKU TABLE ============
+function renderTable(data) {
+  const tbody = document.getElementById('skuBody');
+  const typeClass = {A:'a',B:'b',C:'c',D:'d'};
+  const typeLabel = {A:'强关联',B:'场景延伸',C:'消耗品',D:'升级维护'};
+  const supplyLabel = {self:'自产',ext:'外采',mix:'混合'};
+  const supplyClass = {self:'self',ext:'ext',mix:'mix'};
+  const maxP = Math.max(...SKU_DATA.map(s=>s.priority));
+  tbody.innerHTML = data.map(s => {
+    const pct = (s.priority / maxP * 100).toFixed(0);
+    const barColor = s.priority >= 70 ? warningColor : s.priority >= 55 ? accentColor : '#c9c9c9';
+    return '<tr data-type="'+s.type.toLowerCase()+'" data-supply="'+s.supply+'" data-phase="'+s.phase+'">' +
+      '<td>'+s.id+'</td>' +
+      '<td>'+s.stage+'</td>' +
+      '<td><span class="type-badge '+typeClass[s.type]+'">'+s.type+' '+typeLabel[s.type]+'</span></td>' +
+      '<td><strong style="color:'+primaryColor+'">'+s.name+'</strong><br><span style="color:#8a9aaa;font-size:11px">'+s.pain+'</span></td>' +
+      '<td>'+s.pos+'</td>' +
+      '<td><strong>'+s.price+'</strong></td>' +
+      '<td><span class="supply-badge '+supplyClass[s.supply]+'">'+supplyLabel[s.supply]+'</span></td>' +
+      '<td>'+s.compete+'</td>' +
+      '<td><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;min-width:28px;color:'+primaryColor+'">'+s.priority+'</span><div class="priority-bar" style="flex:1;min-width:60px"><div class="fill" style="width:'+pct+'%;background:'+barColor+'"></div></div></div></td>' +
+      '<td>'+s.phase+'</td>' +
+    '</tr>';
+  }).join('');
+}
+renderTable(SKU_DATA);
+
+// ============ FILTER ============
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    var f = this.dataset.filter;
+    if (f === 'all') return renderTable(SKU_DATA);
+    if (f === 'self') return renderTable(SKU_DATA.filter(function(s){ return s.supply === 'self'; }));
+    if (f === 'p1') return renderTable(SKU_DATA.filter(function(s){ return s.phase === 'P1'; }));
+    renderTable(SKU_DATA.filter(function(s){ return s.type.toLowerCase() === f; }));
+  });
+});
+
+// ============ SORT TABLE ============
+var sortCol = -1, sortAsc = true;
+document.querySelectorAll('table.sku th').forEach(function(th) {
+  th.addEventListener('click', function() {
+    var col = parseInt(this.dataset.col);
+    if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; }
+    var keys = ['id','stage','type','name','pos','priceNum','supply','compete','priority','phase'];
+    var sorted = SKU_DATA.slice().sort(function(a, b) {
+      var va = a[keys[col]], vb = b[keys[col]];
+      if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
+      return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    renderTable(sorted);
+  });
+});
+
+// ============ CHARTS (on window load) ============
+window.addEventListener('load', function() {
+
+  // Sunburst
+  var sunburst = echarts.init(document.getElementById('sunburst'));
+  sunburst.setOption({
+    tooltip: { trigger:'item', formatter:'{b}: {c} SKU' },
+    series: [{
+      type: 'sunburst',
+      data: [
+        { name:'Type A\n强关联', value:6, itemStyle:{color:dangerColor},
+          children: [
+            {name:'充电底座',value:1},{name:'入门绘本卡',value:1},{name:'故事卡片组',value:1},
+            {name:'换装服饰',value:1},{name:'家族扩展伙伴',value:1},{name:'便携背包',value:1}
+          ]},
+        { name:'Type B\n场景延伸', value:12, itemStyle:{color:accentColor},
+          children: [
+            {name:'贴纸套装',value:1},{name:'出生证书',value:1},{name:'日记本',value:1},
+            {name:'安抚毛毯',value:1},{name:'STEM配件',value:1},{name:'AR卡牌',value:1},
+            {name:'小窝场景',value:1},{name:'户外配件',value:1},{name:'派对套装',value:1},
+            {name:'文具套装',value:1},{name:'DIY创作',value:1},{name:'主题睡衣',value:1}
+          ]},
+        { name:'Type C\n消耗品', value:6, itemStyle:{color:successColor},
+          children: [
+            {name:'英语卡包',value:1},{name:'数学卡包',value:1},{name:'科学卡包',value:1},
+            {name:'中文卡包',value:1},{name:'清洁喷雾',value:1},{name:'除螨湿巾',value:1}
+          ]},
+        { name:'Type D\n升级维护', value:7, itemStyle:{color:lavenderColor},
+          children: [
+            {name:'防尘袋',value:1},{name:'外壳替换',value:1},{name:'防水内胆',value:1},
+            {name:'修复补丁',value:1},{name:'备用线',value:1},{name:'展示盒',value:1},{name:'旅行箱',value:1}
+          ]}
+      ],
+      radius: ['15%', '90%'],
+      sort: null,
+      emphasis: { focus:'ancestor' },
+      levels: [
+        {},
+        { r0:'15%', r:'45%',
+          label:{rotate:'tangential',fontSize:13,fontWeight:700,color:'#fff'},
+          itemStyle:{borderWidth:3,borderColor:'#fff'}
+        },
+        { r0:'45%', r:'90%',
+          label:{fontSize:11,color:primaryColor,align:'right'},
+          itemStyle:{borderWidth:1,borderColor:'#fff'}
+        }
+      ]
+    }]
+  });
+
+  // Priority horizontal bar chart
+  var priorityChart = echarts.init(document.getElementById('priorityChart'));
+  var sortedSKU = SKU_DATA.slice().sort(function(a,b){ return a.priority - b.priority; });
+  var typeColorMap = {A:dangerColor, B:accentColor, C:successColor, D:lavenderColor};
+  priorityChart.setOption({
+    tooltip: { trigger:'axis', axisPointer:{type:'shadow'} },
+    grid: { left:'3%', right:'8%', bottom:'3%', top:'3%', containLabel:true },
+    xAxis: { type:'value', max:100, axisLabel:{fontSize:10,color:'#8a9aaa',formatter:'{value}'}, splitLine:{lineStyle:{color:'#f0ede8'}} },
+    yAxis: {
+      type:'category',
+      data: sortedSKU.map(function(s){ return s.name.length > 12 ? s.name.substring(0,12)+'...' : s.name; }),
+      axisLabel:{fontSize:10,color:'#5a6a7a'}
+    },
+    series: [{
+      type:'bar',
+      data: sortedSKU.map(function(s){ return {value:s.priority, itemStyle:{color:typeColorMap[s.type]}}; }),
+      barMaxWidth: 14,
+      label:{show:true, position:'right', fontSize:10, color:'#5a6a7a'}
+    }]
+  });
+
+  // AOV Chart
+  var aovChart = echarts.init(document.getElementById('aovChart'));
+  aovChart.setOption({
+    tooltip:{trigger:'axis'},
+    legend:{data:['单买主体','Bundle 价格','AOV 提升'],textStyle:{color:'#5a6a7a',fontSize:11},top:0},
+    grid:{left:60,right:40,top:40,bottom:40},
+    xAxis:{type:'category',data:['新手启航','豪华礼品','STEM探索','续航补给'],axisLabel:{color:'#5a6a7a',fontSize:12},axisLine:{lineStyle:{color:'#e0ddd8'}}},
+    yAxis:{type:'value',name:'USD',axisLabel:{color:'#8a9aaa'},splitLine:{lineStyle:{color:'#f0ede8'}},axisLine:{lineStyle:{color:'#e0ddd8'}}},
+    series:[
+      {name:'单买主体',type:'bar',data:[60,60,60,0],itemStyle:{color:'#d0cdc8'},barWidth:36},
+      {name:'Bundle 价格',type:'bar',data:[94,119,129,27],itemStyle:{color:accentColor},barWidth:36},
+      {name:'AOV 提升',type:'line',data:[35,60,70,27],itemStyle:{color:successColor},lineStyle:{color:successColor,width:3},symbol:'circle',symbolSize:10,
+        label:{show:true,formatter:'+{c}',color:successColor,fontSize:13,fontWeight:700,position:'top'}}
+    ]
+  });
+
+  // Resize
+  window.addEventListener('resize', function() {
+    sunburst.resize();
+    priorityChart.resize();
+    aovChart.resize();
+  });
+
+});
+</script>
+</body>
+</html>

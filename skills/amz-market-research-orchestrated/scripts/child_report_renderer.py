@@ -111,7 +111,9 @@ def render_child_report(report_dir: Path, module_dir: Path, view_file: str, outp
                 renderer_callbacks(),
             )
             html_doc = redact_customer_html(docs[report_key], data_pack)
-        except Exception:
+        except Exception as exc:
+            if report_key == "market_depth":
+                raise RuntimeError("market depth child renderer failed to reuse canonical market template") from exc
             html_doc = ""
     if not html_doc:
         view = load_json(report_dir / "analysis" / view_file)

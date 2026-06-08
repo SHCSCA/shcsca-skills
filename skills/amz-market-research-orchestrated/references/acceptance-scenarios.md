@@ -80,7 +80,7 @@ Required evidence:
 - Lifecycle report modules remain visible: 战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要
 - Demand-gap report modules remain visible: 研究对象概述、决策看板、$APPEALS 痛点图、满意度鸿沟、KANO × JTBD、用户原声、需求优先级
 - Competitor, demand, supplier, TikTok, web, SKU, and KANO/JTBD evidence are rendered as customer-readable insight tables
-- Customer HTML includes `证据强度`, `样本覆盖`, `数据缺口`, and `建议动作`
+- Customer HTML includes `证据强度`, `数据覆盖`, `数据缺口`, and `建议动作`
 - Customer HTML does not display `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables
 - `data/normalized/data_readiness_report.json` is present with `acceptance_ready=true`
 - `analysis/critic_summary.md` is present and states readiness, critic score, final decision, unresolved findings, and failed-critic delivery guardrail

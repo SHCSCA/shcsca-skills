@@ -1,9 +1,11 @@
 {
   "version": "2026-06-02.template-baseline.v1",
   "purpose": "Audit manifest for local downloaded HTML templates used as visual and interaction baselines for the three child reports.",
+  "canonical_asset_policy": "The downloaded HTML reports are canonical template assets. Child reports must preserve their layout, CSS vocabulary, interaction model, and local runtime assets; generated data may only replace template content slots after normalization and customer-safety filtering.",
   "baselines": {
     "market_depth": {
       "download_folder": "downloadpage/143101",
+      "canonical_asset": "assets/canonical_templates/market-depth-reference.html",
       "report_type": "market-depth-report",
       "source_file_name": "AI毛绒玩具赛道深度市场调研报告.html",
       "sha256": "F0E9F357A3906ABB4DE73E1762492C61F9AAB0CF019238608CD71F30ADF8DA3E",
@@ -24,12 +26,18 @@
         "opportunity-matrix"
       ],
       "borrowed_js_signals": [
-        "chart resize pattern",
-        "bar/radar/bubble visual fallback semantics"
+        "iOS-safe ECharts renderer patch",
+        "priceChart bar option",
+        "bubbleChart scatter option",
+        "growthChart line option",
+        "featureChart dual-bar option",
+        "radarChart pain/joy radar option",
+        "marginChart stacked cost option"
       ]
     },
     "lifecycle_strategy": {
       "download_folder": "downloadpage/143511",
+      "canonical_asset": "assets/canonical_templates/lifecycle-strategy-reference.html",
       "report_type": "lifecycle-strategy-report",
       "source_file_name": "AI 毛绒玩具 · 全生命周期拓品战略报告.html",
       "sha256": "F281A41AFC3715EEEE7ABCCA4227742C214DF4DB4E88BBB5AA687B3BA76397DC",
@@ -48,12 +56,16 @@
         "risk-grid"
       ],
       "borrowed_js_signals": [
+        "sunburst lifecycle ecosystem option",
+        "priorityChart horizontal SKU priority option",
+        "aovChart bundle uplift option",
         "declarative table filtering",
         "sortable SKU table"
       ]
     },
     "demand_gap": {
       "download_folder": "downloadpage/143645",
+      "canonical_asset": "assets/canonical_templates/demand-gap-reference.html",
       "report_type": "demand-gap-report",
       "source_file_name": "R3-需求分析师｜用户心智断层与需求机会报告.html",
       "sha256": "75DA521423FC6B37A3D3B7101E14F0D2AD910EF34108B8759D5174D3BE17811D",
@@ -73,7 +85,8 @@
         "quote-cn"
       ],
       "borrowed_js_signals": [
-        "radar/rose chart semantics",
+        "appealsRose Sankey pain/action flow option",
+        "gapRadar expectation-vs-competitor radar option",
         "resize-safe chart fallback"
       ]
     }
@@ -87,6 +100,7 @@
   ],
   "shared_asset_targets": [
     "output/html_reports/assets/report.css",
-    "output/html_reports/assets/report.js"
+    "output/html_reports/assets/report.js",
+    "output/html_reports/assets/echarts.min.js"
   ]
 }

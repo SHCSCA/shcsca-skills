@@ -19,26 +19,25 @@ CUSTOMER_LABEL_REPLACEMENTS = [
     ("Product ID", "产品角色"),
     ("product_id", "产品角色"),
     ("raw_path", "内部审计记录"),
-    ("provider", "证据覆盖"),
+    ("provider", "数据覆盖"),
     ("tool", "分析方法"),
     ("method_id", "分析方法"),
-    ("ASIN", "竞品样本"),
-    ("asin", "竞品样本"),
-    ("Sorftime", "市场样本"),
+    ("asin", "竞品记录"),
+    ("Sorftime", "市场数据"),
     ("Firecrawl", "公开网页补充"),
-    ("sorftime", "市场样本"),
+    ("sorftime", "市场数据"),
     ("firecrawl", "公开网页补充"),
     ("Data Pack", "分析底稿"),
     ("data/raw", "内部审计记录"),
     ("数据血缘", "证据说明"),
-    ("来源", "证据覆盖"),
-    ("Provider Coverage", "证据覆盖"),
+    ("来源", "数据覆盖"),
+    ("Provider Coverage", "数据覆盖"),
     ("lineage", "审计链路"),
     ("英文标题", "页面表达归纳"),
     ("Review", "评论"),
     ("reviews", "评论"),
     ("products", "竞品"),
-    ("sources", "样本记录"),
+    ("sources", "证据记录"),
 ]
 
 
@@ -102,19 +101,46 @@ def review_redaction_needles(text: str) -> set[str]:
 
 
 def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
+    preserved_asins: dict[str, str] = {}
+    preserved_review_excerpts: dict[str, str] = {}
+
+    def preserve_asin(match: re.Match[str]) -> str:
+        token = f"__AMZ_KEEP_A_{len(preserved_asins)}__"
+        preserved_asins[token] = match.group(0)
+        return token
+
+    html_doc = re.sub(
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        preserve_asin,
+        html_doc,
+        flags=re.IGNORECASE,
+    )
+
+    def preserve_review_excerpt(match: re.Match[str]) -> str:
+        token = f"__AMZ_ALLOWED_REVIEW_EXCERPT_{len(preserved_review_excerpts)}__"
+        preserved_review_excerpts[token] = match.group(0)
+        return token
+
+    html_doc = re.sub(
+        r"<([a-z0-9]+)\b(?=[^>]*\bdata-allow-english-review=[\"']short[\"'])[^>]*>.*?</\1>",
+        preserve_review_excerpt,
+        html_doc,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
     for old, new in CUSTOMER_LABEL_REPLACEMENTS:
         html_doc = html_doc.replace(old, new)
 
     replacement_by_key = {
         "source_id": "高",
         "source_ids": "高",
-        "provider": "样本覆盖",
+        "provider": "数据覆盖",
         "tool": "分析方法",
         "raw_path": "内部审计记录",
         "path": "内部审计记录",
-        "asin": "竞品样本",
-        "product_id": "内容商品样本",
-        "video_id": "内容样本",
+        "asin": "竞品记录",
+        "product_id": "内容商品记录",
+        "video_id": "内容记录",
     }
 
     def replace_value(value: Any, key: str | None = None) -> None:
@@ -129,7 +155,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
             text = str(value).strip()
             if len(text) < 3:
                 return
-            replacement = replacement_by_key.get(key or "", "样本证据")
+            replacement = replacement_by_key.get(key or "", "证据记录")
             for needle in {text, esc(text)}:
                 html_doc = html_doc.replace(needle, replacement)
 
@@ -137,25 +163,52 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
     for review_text in raw_english_review_values(data_pack):
         for needle in review_redaction_needles(review_text):
             html_doc = html_doc.replace(needle, "中文化评论摘要")
-    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品样本", html_doc)
+    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", html_doc)
     html_doc = re.sub(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", "高", html_doc, flags=re.IGNORECASE)
     html_doc = re.sub(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", "高", html_doc, flags=re.IGNORECASE)
     html_doc = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", html_doc, flags=re.IGNORECASE)
     html_doc = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", html_doc)
     html_doc = html_doc.replace("证据强度: 高", "证据强度：高")
     html_doc = html_doc.replace("证据强度： 高", "证据强度：高")
+    html_doc = html_doc.replace("数据数据覆盖", "数据覆盖")
+    html_doc = html_doc.replace("数据来源", "数据覆盖")
+    for token, preserved in preserved_asins.items():
+        html_doc = html_doc.replace(token, preserved)
+    for token, preserved in preserved_review_excerpts.items():
+        html_doc = html_doc.replace(token, preserved)
     return html_doc
 
 
 def customer_safe_asset_text(value: Any) -> str:
     text = clean(value)
+    if "MCP returned Unauthorized" in text:
+        text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
     for old, new in CUSTOMER_LABEL_REPLACEMENTS:
         text = text.replace(old, new)
-    text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品样本", text)
+    text = text.replace("ASIN", "竞品记录")
+    replacements = {
+        "竞品样本": "竞品记录",
+        "市场样本": "市场数据",
+        "评论样本": "评论记录",
+        "产品样本": "产品记录",
+        "供应样本": "供应记录",
+        "样品": "实物",
+        "样本": "数据记录",
+        "补数": "复核",
+        "打样": "实物测试",
+        "待验证": "需核实",
+        "待补": "需核实",
+        "补 3-5": "增加 3-5",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", text)
     text = re.sub(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
     text = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", text)
+    text = text.replace("数据数据覆盖", "数据覆盖")
+    text = text.replace("数据来源", "数据覆盖")
     return text
 
 
@@ -172,9 +225,11 @@ def client_safe_view_payload(value: Any) -> Any:
         text = clean(value)
         for old, new in CUSTOMER_LABEL_REPLACEMENTS:
             text = text.replace(old, new)
-        text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品样本", text)
+        text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", text)
         text = re.sub(r"\b(?:src|sf)[_-][\w\u4e00-\u9fff-]+\b", "内部证据", text, flags=re.IGNORECASE)
         text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
         text = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", text)
+        text = text.replace("数据数据覆盖", "数据覆盖")
+        text = text.replace("数据来源", "数据覆盖")
         return text
     return value

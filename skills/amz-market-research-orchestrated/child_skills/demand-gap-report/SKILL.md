@@ -45,7 +45,7 @@ python skills/amz-market-research-orchestrated/child_skills/demand-gap-report/sc
 
 ## 质量门禁
 
-- 用户原声只展示中文摘要、情绪、主题和动作含义；英文原评只留在审计文件。
+- 用户原声以中文摘要、情绪、主题和动作含义为主；可并列展示短英文评论摘录，但必须标记 `data-allow-english-review="short"`。完整英文原评和英文标题只留在审计文件。
 - 优先消费 `demand_gap_view.json` 的 `kpis`、`charts`、`tables`、`cards`、`evidence_strength`、`sample_coverage`、`limitations`、`client_safe_text`。
 - 子报告只读 `normalized_data_pack.json`，不得自行覆盖全局去重结果。
 - 表格必须支持静态站点包的筛选、排序和证据抽屉交互。

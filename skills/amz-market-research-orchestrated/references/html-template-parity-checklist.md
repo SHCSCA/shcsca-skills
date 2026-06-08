@@ -1,6 +1,6 @@
 # HTML Template Parity Checklist
 
-This checklist turns the user's three downloaded HTML templates into enforceable design and interaction expectations for `amz-market-research-orchestrated`. It is not a request to copy those pages. The orchestrator must extract layout, component, and interaction patterns into portable local `report.css` and `report.js`, then render real report data from the normalized data pack.
+This checklist turns the user's three downloaded HTML templates into enforceable design and interaction expectations for `amz-market-research-orchestrated`. The three downloaded HTML files are canonical report templates, not loose inspiration. The orchestrator must preserve their layout, component hierarchy, CSS vocabulary, and interaction model, then render real report data from the normalized data pack into template content slots.
 
 ## Source Mapping
 
@@ -10,9 +10,18 @@ This checklist turns the user's three downloaded HTML templates into enforceable
 | Lifecycle strategy | `C:\Users\wz\Downloads\downloadpage\143511` | `references/template-baseline-manifest.json.baselines.lifecycle_strategy` | `output/html_reports/lifecycle-strategy-report.html` |
 | Demand gap | `C:\Users\wz\Downloads\downloadpage\143645` | `references/template-baseline-manifest.json.baselines.demand_gap` | `output/html_reports/demand-gap-report.html` |
 
+Packaged canonical assets:
+
+- `assets/canonical_templates/market-depth-reference.html`
+- `assets/canonical_templates/lifecycle-strategy-reference.html`
+- `assets/canonical_templates/demand-gap-reference.html`
+- `assets/canonical_templates/echarts.min.js`
+
 ## Global Rules
 
-- Do not copy `_next/static/chunks`, iframe shells, CDN scripts, or hard-coded sample data.
+- Do not copy `_next/static/chunks`, iframe shells, remote CDN scripts, or hard-coded sample data into customer outputs.
+- Do preserve the canonical template layout, section order, CSS class vocabulary, card/table/chart structure, spacing model, color system, and interaction affordances.
+- AI may generate analysis text and map clean data into slots; it must not invent a new page layout, choose a different style system, or replace the canonical template with a generic report shell.
 - Do not expose ASIN, `source_id`, provider, raw path, or raw English review text in customer HTML.
 - Keep all shared runtime assets local under `output/html_reports/assets/`.
 - Preserve mobile behavior through CSS media rules and JS that does not depend on a build step.
@@ -104,7 +113,7 @@ Required section density:
 
 - 研究对象概述
 - 决策看板
-- $APPEALS 痛点图
+- 市场痛点全景图（$APPEALS）
 - 满意度鸿沟
 - KANO x JTBD
 - 用户原声
@@ -138,6 +147,8 @@ Required interactions:
 Before claiming template parity:
 
 - `template-baseline-manifest.json` lists all three source folders and excluded assets.
+- The three canonical reference HTML files are packaged under `assets/canonical_templates/`.
+- `echarts.min.js` is local in the skill and copied into `output/html_reports/assets/`; customer HTML must not reference `cdn.jsdelivr.net`.
 - `assets/report.css` contains shared selectors for every required component family above.
 - `assets/report.js` contains local hooks for nav, search, sort, tabs, filters, drawers, and chart fallbacks.
 - `validate_market_research_deliverables.py` rejects missing static assets, missing required child sections, broken child links, non-portable paths, and customer HTML leaks.
@@ -146,6 +157,6 @@ Before claiming template parity:
 
 ## Known Remaining Gaps
 
-- The current validator checks component presence and interaction hooks, but it does not yet perform pixel-level visual parity.
-- The current repository has template manifests and local assets, but a fresh browser screenshot comparison against the three downloaded folders is still pending.
+- `run_visual_parity_audit.py` provides browser screenshot evidence, but visual approval still needs at least one recent acceptance sample audit artifact.
+- The current audit verifies rendered report screenshots, density, and responsive overflow; it does not yet compare pixels against the downloaded template screenshots.
 - Real-data parity is not proven until `run_acceptance_proof.py` passes on an `acceptance_sample` generated from fresh Sorftime-backed data.

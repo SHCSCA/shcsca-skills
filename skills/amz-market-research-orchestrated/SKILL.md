@@ -68,6 +68,8 @@ description: "Amazon / 电商市场调研可执行 v2 主控 Skill。用户要�
 5. **再让 critic 驳回或放行**：critic 不是装饰字段；二次修正后仍不通过时，主控必须停止交付宣称。
 6. **最后才做 proof**：`run_acceptance_proof.py` 只用于证明交付已闭环；不能用跑测试替代调研、分析、采集或报告质量。
 
+HTML 模板是标准化交付资产，不是 AI 临场发挥的设计稿。三个 child report 必须以 `assets/canonical_templates/` 中的参考 HTML 为母版，保留其布局、样式、CSS class 体系、图表/表格/卡片结构和交互模型；AI 与脚本只负责把 `normalized_data_pack.json` 清洗后的事实、中文分析文案和客户安全 view 填入模板槽位。不得因为数据不足、生成方便或审美偏好而改成通用报告壳、Markdown 包装页或另一套临时 UI。
+
 从 78-82 分推进到 100 分的主线见 [100-point-improvement-plan.md](references/100-point-improvement-plan.md)。该文件记录当前分数、已完成能力、剩余缺口和下一步推荐。
 
 执行中必须按“业务进度”汇报，而不是按“测试进度”汇报。有效进度包括：确认卡是否完成、真实数据是否拿到、Data Pack 是否去重归一、三个 child modules 是否产出报告 view、critic 是否驳回或放行、客户版 HTML 是否可交付。单元测试、脚本测试和 validator 只能作为这些动作之后的证明。
@@ -152,8 +154,8 @@ Fail-closed 停止规则：
 - 关键词 / 产品想法：先跑 `keyword_detail`、`keyword_extends`、`keyword_search_results`、`product_search`。
 - ASIN：先跑 `product_detail`、`product_trend`、`product_reviews`、`product_variations`、`product_traffic_terms`。
 - 类目：先跑 `category_name_search`、`category_report`、`category_trend`、`category_keywords`。
-- TikTok 验证：跑 `tiktok_similar_product`、`tiktok_product_detail`、`tiktok_product_trend`、`tiktok_product_video`、`tiktok_product_video_author`。
-- 供应链验证：跑 `ali1688_similar_product`。
+- TikTok 验证：跑 `collect_sorftime_tiktok_signals.py`，内部按 Sorftime schema 调用 `tiktok_similar_product(searchName,page,site)`、`tiktok_product_detail(productId,site)`、`tiktok_product_trend(productId,site)`、`tiktok_product_video(productId,page,site)`、`tiktok_product_video_author(productId,site)`。
+- 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime schema 调用 `ali1688_similar_product(searchName)`。
 
 标准版和深度版必须补齐关键词样本深度：
 
@@ -165,6 +167,12 @@ python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_reviews.py --dir reports/{task_id} --review-type Both --min-reviews 80
+```
+
+TikTok 内容信号建议在关键词/产品池明确后运行；TikTok 只能作为内容场景、渠道热度和创作者链路证据，不能替代 Amazon 购买需求：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_tiktok_signals.py --dir reports/{task_id} --site US --max-seeds 4 --max-pages 1 --max-products-detail 3 --video-pages 1
 ```
 
 采集完成但进入归一化/渲染前，必须先运行数据准备度门禁：
@@ -181,7 +189,8 @@ python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py -
 - `keyword_extends` 对主关键词、核心子方向词、已有高相关词分页采集。
 - 目标采集量默认 1200 条，给去重留余量；归一化后 `data_pack.keywords` 不得少于 1000 条。
 - 评论样本是置信度门槛：标准版建议 80 条以上，深度版建议 200 条以上；不足时 VOC 可降级展示，但不能写精确比例或强结论。
-- 关键词和评论采集脚本低于门槛时返回退出码 `2`，这不是环境故障，而是数据深度未达标信号。
+- TikTok 相似商品按 `searchName/page/site` 采集，商品详情/趋势/视频/达人链路按 `productId/site` 或 `productId/page/site` 采集；MCP 返回 `isError=true` 必须写入诊断，不能当作空数据。
+- 关键词、评论、TikTok 和 1688 采集脚本低于门槛时返回退出码 `2`，这不是环境故障，而是数据深度未达标信号。
 - 原始 MCP 返回必须保存到 `data/raw/`，采集摘要保存到 `data/normalized/keyword_collection_summary.json`。
 
 所有原始返回保存到：
@@ -334,7 +343,7 @@ reports/{task_id}/
 - HTML 静态站点包必须包含 `output/html_reports/assets/report.css`、`report.js`、`report-data.json`，支持表格筛选/排序、顶部导航、移动端目录、折叠证据和轻量图表交互。
 - 三份子报告的视觉与交互基准必须吸收用户提供的本地下载模板：`downloadpage/143101` 对应市场深度、`downloadpage/143511` 对应生命周期、`downloadpage/143645` 对应需求断层。只抽取报告页 HTML/CSS/JS 的布局与交互模式到共享 `report.css` / `report.js`；不得搬运 `_next` chunks、iframe case 壳、CDN 依赖或样例硬编码数据。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
-- HTML 要有客户可读的证据强度、样本覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
+- HTML 要有客户可读的证据强度、数据覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
 - 聊天里只给摘要和路径，不粘贴完整报告。
 
 HTML 主体必须使用真实结构化组件：
@@ -342,9 +351,9 @@ HTML 主体必须使用真实结构化组件：
 - 四个 HTML 都必须是 standalone HTML document，并带对应 `data-report-style`。
 - 三份子报告必须使用 `<section>` 编号章节、KPI cards、CSS mini charts、evidence tables、cards、risk/roadmap/timeline 等结构化组件。
 - 竞品、需求、1688、TikTok、Web、SKU、KANO/JTBD 等必须用客户可读的 insight table / card / matrix 表达，不能用 Markdown 表格文本。
-- 客户版 HTML 禁止展示 `source_id`、`source_ids`、provider/tool、raw_path/path、Product ID、product_id、ASIN 值或“来源”字段；`output/html_reports/report.html` 必须用同文件夹相对链接打开三份子报告，不能写 `output/` 前缀。
+- 客户版 HTML 禁止展示 `source_id`、`source_ids`、provider/tool、raw_path/path、Product ID、product_id 或“来源”字段；ASIN 仅允许在竞品狙击和供应链毛利率测算组件中以 `data-allow-asin` 作用域展示，其他位置出现 ASIN 必须视为泄露。
 - 能展示的数据要先转成 AI 深度分析后的结论、商业含义和建议动作；原始长表、数据血缘和完整来源细节只保留在 `data_pack.json`、`lineage.md`、`report.md`、`delivery_result.json` 中。
-- 评论/VOC 必须先做中文化映射：用户原声展示中文摘要、星级、情绪、主题和需求含义；英文评论原文、英文标题、抓取字段原值只留在审计文件。
+- 评论/VOC 必须先做中文化映射：用户原声展示中文摘要、星级、情绪、主题和需求含义；可并列展示短英文评论摘录，但必须标记 `data-allow-english-review="short"`，完整英文原评、英文标题和抓取字段原值只留在审计文件。
 
 推荐生成顺序：
 
@@ -355,25 +364,31 @@ HTML 主体必须使用真实结构化组件：
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir reports/{task_id} --min-keywords 1200
 ```
 
-3. 运行数据准备度门禁，失败则停止交付生成并继续采集：
+3. 标准版/深度版先补齐 1688 去重有效报价 `>=50`。不足 50 时必须多轮切换 Sorftime 1688 搜索词，不得生成最终供应链成本或毛利率结论：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir reports/{task_id} --min-valid-quotes 50 --max-rounds 5
+```
+
+4. 运行数据准备度门禁，失败则停止交付生成并继续采集：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
 ```
 
-4. 运行交叉验证 / 去重 / 中文映射：
+5. 运行交叉验证 / 去重 / 中文映射：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir reports/{task_id}
 ```
 
-5. 再运行结构化 HTML 渲染器：
+6. 再运行结构化 HTML 渲染器：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py --dir reports/{task_id}
 ```
 
-6. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
+7. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
 
 完成后运行：
 
@@ -389,15 +404,15 @@ python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py -
 - 不把 Amazon `bought in past month`、Sorftime 估算、TikTok sold 混成一个数字。
 - 不用 TikTok 热度替代 Amazon 购买需求。
 - 不用少量评论写精确百分比；样本小则写频次、主题和代表证据。
-- 不在缺成本时写伪利润表；改写价格红线和成本门槛。
-- 不因为 TikTok、1688 或 Firecrawl 失败就删除模块；保留模块并说明缺口。
+- 不在缺成本时写伪利润表；1688 去重有效报价不足 50 条时必须阻断供应链成本和毛利率结论。
+- 不因为 TikTok 或 Firecrawl 失败就删除模块；保留模块并说明缺口。1688 报价不足 50 条时保留诊断，但最终供应链成本/毛利率模块必须阻断。
 - 所有关键结论必须能在审计文件中追溯到 `source_id`，但客户版 HTML 不展示这些技术标识。
 - 所有关键方法必须能追溯到 `method_chain`。
 - `output/html_reports/report.html` 必须包含 `data-report-style="three-report-index-v2"`，并用同文件夹相对链接打开三份子报告；`output/report.html` 必须作为兼容入口链接到 `html_reports/`。
 - 三份子报告必须分别包含 `data-report-style="market-depth-report-v2"`、`data-report-style="lifecycle-strategy-report-v2"`、`data-report-style="demand-gap-report-v2"`。
 - 四个 HTML 都不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
-- 输出默认全中文；客户版 HTML 仅保留品牌名、平台名和必要英文专有名词，ASIN / Product ID / source_id 等技术标识只留在审计文件。
-- 客户版 HTML 不直接展示英文评论原文或英文评论标题；必须转成中文摘要、中文主题、情绪标签和建议动作。
+- 输出默认全中文；客户版 HTML 仅保留品牌名、平台名、竞品狙击/毛利率测算所需 ASIN、必要英文专有名词和授权英文评论短摘，Product ID / source_id 等技术标识只留在审计文件。
+- 客户版 HTML 不直接展示完整英文评论原文或英文评论标题；必须转成中文摘要、中文主题、情绪标签和建议动作，英文只允许短摘并与中文摘要并列。
 
 ## 结束语模板
 

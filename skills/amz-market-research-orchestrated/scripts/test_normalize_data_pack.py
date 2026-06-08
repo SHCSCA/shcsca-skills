@@ -58,7 +58,7 @@ class NormalizeDataPackTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["source_ids"], ["src_search", "src_detail"])
             self.assertEqual(product["validation"]["evidence_source_count"], 2)
-            self.assertEqual(product["title_cn"], "竞品样本")
+            self.assertEqual(product["title_cn"], "竞品记录")
             self.assertNotIn("壁灯", product["title_cn"])
 
     def test_dedupes_keywords_and_adds_chinese_mapping(self):

@@ -75,7 +75,8 @@ The critic output must be JSON with these fields:
 - Fail reports that give a strong `Go`, `B+`, or high confidence when review depth, cross-validation, or data gaps do not support it.
 - Fail reports that hide missing landed cost, FBA fee, return rate, ACOS, or review coverage as if the decision is fully proven.
 - Fail report contradictions across the three child reports.
-- Fail customer-facing technical leaks such as `source_id`, ASIN, provider, raw path, internal path, or raw English review text.
+- Fail customer-facing technical leaks such as `source_id`, provider, raw path, internal path, Product ID, ASIN outside approved benchmark/profitability scopes, or full raw English review text outside approved short-excerpt spans.
+- Fail final 1688 cost/profitability conclusions when `supplier_quote_gate.passed` is false or valid deduped 1688 quotes are below 50.
 - Convert missing evidence into explicit data gaps and next validation actions.
 - Never invent replacement facts. The only allowed refinement is changing analysis strength, wording, grouping, and visibility of limitations.
 

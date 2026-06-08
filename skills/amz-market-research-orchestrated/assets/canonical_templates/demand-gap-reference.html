@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>用户心智断层与需求机会报告</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-alt: rgba(56,189,248,0.16);
+      --bg-spot: rgba(34,197,94,0.10);
+      --paper: #111d31;
+      --paper-soft: #162740;
+      --line: #2b4266;
+      --text: #e6edf8;
+      --muted: #9cb0cc;
+      --primary: #4da3ff;
+      --primary-deep: #8fc5ff;
+      --warn: #ff7f7f;
+      --ok: #34d399;
+      --hero-from: #081323;
+      --hero-mid: #0f2747;
+      --hero-to: #13407a;
+      --hero-border: #1f4978;
+      --kicker-bg: rgba(77,163,255,0.20);
+      --kicker-text: #b7d8ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+      background:
+        radial-gradient(circle at 12% 3%, rgba(142,166,197,0.20) 0%, transparent 34%),
+        radial-gradient(circle at 88% 0%, rgba(201,177,132,0.14) 0%, transparent 26%),
+        linear-gradient(180deg, #edf3fa 0%, #e6edf7 100%);
+    }
+    .wrap { max-width: 1360px; margin: 0 auto; padding: 24px; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(122deg, var(--hero-from) 0%, var(--hero-mid) 48%, var(--hero-to) 100%);
+      border: 1px solid var(--hero-border);
+      padding: 22px;
+      color: #e2e8f0;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: -90px; right: -70px;
+      width: 280px; height: 280px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: 34%; bottom: -80px;
+      width: 220px; height: 220px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.05);
+    }
+    .hero > * { position: relative; z-index: 1; }
+    .hero .eyebrow {
+      display:inline-block;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: var(--kicker-bg);
+      color: var(--kicker-text);
+      font-size: 11px;
+      letter-spacing: 1px;
+      font-weight: 700;
+      padding: 4px 10px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    .hero h1 { margin: 6px 0 0; font-family: 'Noto Serif SC', serif; font-size: 34px; color: #f8fafc; line-height: 1.25; }
+    .hero .sub { margin-top: 10px; font-size: 13px; color: #cbd5e1; }
+    .hero .lead { margin-top: 10px; font-size: 13px; color: #d9e7fb; max-width: 940px; line-height: 1.65; }
+    .sec { margin-top: 16px; border: 1px solid var(--line); background: var(--paper); padding: 16px; position:relative; }
+    .sec::before { content:""; position:absolute; left:0; top:0; width:100%; height:2px; background:linear-gradient(90deg,var(--primary) 0%, rgba(0,0,0,0) 72%); }
+    .sec h2 { margin: 0 0 10px; font-family: 'Noto Serif SC', serif; font-size: 22px; color: var(--primary-deep); line-height: 1.3; border-left: 4px solid var(--primary); padding-left: 10px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpi { border: 1px solid var(--line); background: var(--paper-soft); padding: 12px; }
+    .k { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
+    .v { margin-top: 8px; font-size: 24px; font-weight: 700; color: var(--primary-deep); }
+    table { width: 100%; border-collapse: collapse; background: var(--paper-soft); }
+    th, td { border: 1px solid var(--line); padding: 8px; font-size: 13px; text-align: left; vertical-align: top; }
+    th { background: rgba(255,255,255,0.06); color: var(--primary-deep); }
+    .thumb { width: 60px; height: 60px; object-fit: cover; border: 1px solid var(--line); }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    .chart { height: 320px; border: 1px solid var(--line); background: rgba(255,255,255,0.02); }
+    .list { margin: 0; padding-left: 18px; }
+    .list li { margin: 6px 0; }
+    .card { border: 1px solid var(--line); background: var(--paper-soft); padding: 12px; margin-bottom: 10px; }
+    .focus { border-left: 4px solid var(--primary); background: rgba(120,168,255,0.10); }
+    .warn { border-left: 4px solid var(--warn); background: rgba(255,127,127,0.08); }
+    .ok { border-left: 4px solid var(--ok); background: rgba(82,212,189,0.08); }
+    .action-priority {
+      border-left: 6px solid var(--primary);
+      background: linear-gradient(120deg, rgba(120,168,255,0.18) 0%, rgba(201,160,90,0.11) 100%);
+    }
+    .summary-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; }
+    .chart-interpretation { margin-top:10px; border:1px solid var(--line); background: rgba(255,255,255,0.05); padding:10px; font-size:13px; line-height:1.6; }
+    .insight-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; }
+    .badge { display:inline-block; border:1px solid var(--line); padding:2px 8px; font-size:12px; margin-right:6px; font-weight:700; background: rgba(255,255,255,0.04); }
+    .badge.primary { border-color:var(--primary); color:var(--primary); }
+    .badge.ok { border-color:var(--ok); color:var(--ok); background: rgba(82,212,189,0.10); }
+    .badge.warn { border-color:var(--warn); color:var(--warn); background: rgba(255,127,127,0.10); }
+    .thumb-wall { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:8px; margin-top:8px; }
+    .thumb-wall img { width:100%; aspect-ratio:1/1; object-fit:cover; border:1px solid var(--line); }
+    .muted { color: var(--muted); }
+    .quote-cn { margin-top:8px; font-size:15px; line-height:1.7; font-weight:700; color:#1f3d63; }
+    .quote-origin { margin-top:6px; font-size:12px; line-height:1.6; color:#6b7f98; }
+    .mode-r2 .sec {
+      background: linear-gradient(180deg, rgba(35,56,88,0.96) 0%, rgba(28,45,72,0.96) 100%);
+      border-color: #3a5785;
+    }
+    .mode-r2 .sec .chart {
+      background: rgba(255,255,255,0.08);
+      border-color: #4b6793;
+    }
+    .mode-r2 .sec .k,
+    .mode-r2 .sec .muted,
+    .mode-r2 .sec .list li,
+    .mode-r2 .sec .chart-interpretation {
+      color: #d9e7fb;
+    }
+    .mode-r2 .sec .v {
+      color: #f0f6ff;
+    }
+    .mode-r1 .hero {
+      background: linear-gradient(122deg, #f4f8ff 0%, #e8f1ff 52%, #dfeaf8 100%);
+      border-color: #a9bfdc;
+      color: #18345a;
+    }
+    .mode-r1 .hero h1 { color: #1f3552; }
+    .mode-r1 .hero .sub, .mode-r1 .hero .lead { color: #3a5478; }
+    .mode-r1 .hero .eyebrow {
+      border-color: #87a7cf;
+      background: rgba(61,107,158,0.14);
+      color: #2b4e7a;
+    }
+    .mode-r1 .sec {
+      background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+      border-color: #b8cbe5;
+    }
+    .mode-r1 .sec .kpi, .mode-r1 .sec .card {
+      background: #fdfefe;
+      border-color: #c6d5e8;
+    }
+    .mode-r1 .sec h2 { color: #23456d; border-left-color: #4c76aa; }
+    .mode-r1 .sec .k, .mode-r1 .sec .muted, .mode-r1 .sec .list li, .mode-r1 .sec .chart-interpretation { color: #486589; }
+    .mode-r1 .sec .v { color: #1f3f64; }
+    .mode-r3 {
+      background:#f4f2ef;
+      border:1px solid #e0ddd8;
+      padding:20px;
+      counter-reset:r3sec;
+    }
+    .mode-r3 .hero {
+      background:#1a2744;
+      color:#fff;
+      border:1px solid #e0ddd8;
+      padding:38px 28px;
+      margin-bottom:20px;
+    }
+    .mode-r3 .hero::before,
+    .mode-r3 .hero::after { display:none; }
+    .mode-r3 .hero h1 { color:#ffffff; font-size:30px; font-weight:700; }
+    .mode-r3 .hero .sub { color:#8a9aaa; font-size:15px; }
+    .mode-r3 .hero .lead { color:#9fb0c3; font-size:13px; max-width:none; }
+    .mode-r3 .hero .eyebrow {
+      border:1px solid rgba(255,255,255,0.16);
+      background:rgba(255,255,255,0.06);
+      color:#cfd8e5;
+    }
+    .mode-r3 .sec {
+      background:#ffffff;
+      border:1px solid #e0ddd8;
+      color:#1a2744;
+      padding:24px 20px;
+      margin-top:20px;
+      counter-increment:r3sec;
+    }
+    .mode-r3 .sec::before { display:none; }
+    .mode-r3 .sec h2 {
+      margin:0 0 16px;
+      color:#1a2744;
+      border:none;
+      padding:0;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:28px;
+      line-height:1.25;
+    }
+    .mode-r3 .sec h2::before {
+      content: counter(r3sec);
+      width:32px;
+      height:32px;
+      background:#1a2744;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:700;
+      flex-shrink:0;
+    }
+    .mode-r3 .sec .chart {
+      background:#ffffff;
+      border:1px solid #e0ddd8;
+      min-height:500px;
+      height:520px;
+    }
+    .mode-r3 .sec .k,
+    .mode-r3 .sec .muted,
+    .mode-r3 .sec .list li,
+    .mode-r3 .sec .chart-interpretation {
+      color:#5a6a7a;
+    }
+    .mode-r3 .sec .v { color:#1a2744; }
+    .mode-r3 .sec .kpi {
+      background:#ffffff;
+      border-color:#e0ddd8;
+      padding:16px;
+    }
+    .mode-r3 .sec .kpi .k { color:#5a6a7a; }
+    .mode-r3 .sec .kpi .v { color:#1a2744; font-size:30px; }
+    .mode-r3 .sec .card {
+      background:#ffffff;
+      border-color:#e0ddd8;
+      color:#1a2744;
+      padding:16px;
+    }
+    .mode-r3 .sec .focus {
+      border-left:4px solid #3d6b9e;
+      background:#eef4fb;
+    }
+    .mode-r3 .sec .warn {
+      border-left:4px solid #c4705a;
+      background:#fff5f3;
+    }
+    .mode-r3 .sec .ok {
+      border-left:4px solid #6a9a7a;
+      background:#f0f7f2;
+    }
+    .mode-r3 .sec strong { color:#1a2744; }
+    .mode-r3 .sec .sec-lead {
+      font-size:12px;
+      color:#8a9aaa;
+      letter-spacing:0.3px;
+      margin-bottom:6px;
+      text-transform:uppercase;
+    }
+    .mode-r3 .sec table {
+      background:#ffffff;
+      border-color:#e0ddd8;
+    }
+    .mode-r3 .sec th {
+      background:#1a2744;
+      color:#ffffff;
+      border-color:#2a3b5a;
+      font-weight:700;
+    }
+    .mode-r3 .sec td {
+      background:#ffffff;
+      color:#1a2744;
+      border-color:#e0ddd8;
+      line-height:1.7;
+    }
+    .mode-r3 .sec tbody tr:nth-child(even) td { background:#f8f7f5; }
+    .mode-r3 .sec .chart-interpretation {
+      background:#eef4fb;
+      border:1px solid #d7e3f3;
+      border-left:4px solid #3d6b9e;
+      color:#1a2744;
+      padding:14px 16px;
+    }
+    .mode-r3 .sec .kano-grid {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .mode-r3 .sec .kano-grid .card { margin: 0; }
+    .mode-r3 .sec .action-priority {
+      border-left:4px solid #3d6b9e;
+      background:#eef4fb;
+    }
+    .mode-r4 .sec {
+      background: linear-gradient(180deg, #f4efe7 0%, #ece3d6 100%);
+      border-color: #ccbca4;
+    }
+    .mode-r4 .sec .chart {
+      background: #f5efe4;
+      border-color: #ccbca4;
+    }
+    .mode-r4 .sec h2 {
+      color: #1f3552;
+      border-left-color: #3d6b9e;
+    }
+    .mode-r4 .sec .k,
+    .mode-r4 .sec .muted,
+    .mode-r4 .sec .list li,
+    .mode-r4 .sec .chart-interpretation {
+      color: #475d7a;
+    }
+    .mode-r4 .sec .v {
+      color: #213a5d;
+    }
+    .mode-r4 .sec .card {
+      background: #f8f3eb;
+      border-color: #d8cbb8;
+    }
+    .mode-r4 .sec .focus {
+      border-left-color: #3d6b9e;
+      background: #eef4fb;
+    }
+    .mode-r4 .sec .warn {
+      border-left-color: #c4705a;
+      background: #fbeeea;
+    }
+    .mode-r4 .sec .ok {
+      border-left-color: #6a9a7a;
+      background: #edf6f0;
+    }
+    .mode-r4 .sec .action-priority {
+      border-left-color: #c9a05a;
+      background: linear-gradient(120deg, #f6ecdb 0%, #eaf3fb 100%);
+    }
+    .mode-r4 .hero {
+      background: linear-gradient(122deg, #f7efe3 0%, #efe4d4 55%, #e8dcc9 100%);
+      border-color: #cdb89a;
+      color: #3b4f6c;
+    }
+    .mode-r4 .hero h1 { color: #2b4567; }
+    .mode-r4 .hero .sub, .mode-r4 .hero .lead { color: #5a6e8b; }
+    .mode-r4 .hero .eyebrow {
+      border-color: #c8b08e;
+      background: rgba(201,160,90,0.14);
+      color: #6e5a3a;
+    }
+    .mode-r4 .sec .kpi {
+      background: #f5ecdd;
+      border-color: #d2c2aa;
+    }
+    .mode-r4 .sec .kpi .k { color: #6a7d92; }
+    .mode-r4 .sec .kpi .v { color: #23496f; }
+    .mode-r5 .hero {
+      background: linear-gradient(122deg, #eef4ff 0%, #e5ecfa 50%, #dde5f5 100%);
+      border-color: #a6b4cc;
+      color: #223a59;
+    }
+    .mode-r5 .hero h1 { color: #27486e; }
+    .mode-r5 .hero .sub, .mode-r5 .hero .lead { color: #496489; }
+    .mode-r5 .hero .eyebrow {
+      border-color: #8ca5c7;
+      background: rgba(69,98,141,0.12);
+      color: #35567f;
+    }
+    .mode-r5 .sec {
+      background: linear-gradient(180deg, #f4f8ff 0%, #ecf2fc 100%);
+      border-color: #b7c8de;
+    }
+    .mode-r5 .sec .kpi, .mode-r5 .sec .card {
+      background: #f9fbff;
+      border-color: #c6d3e4;
+    }
+    .mode-r5 .sec h2 { color: #294d74; border-left-color: #4a739f; }
+    .mode-r5 .sec .k, .mode-r5 .sec .muted, .mode-r5 .sec .list li, .mode-r5 .sec .chart-interpretation { color: #4e6788; }
+    .mode-r5 .sec .v { color: #23496f; }
+    .mode-r6 .hero {
+      background: linear-gradient(122deg, #f8f1e8 0%, #f3eadf 52%, #ede2d6 100%);
+      border-color: #ccb59e;
+      color: #4a607b;
+    }
+    .mode-r6 .hero h1 { color: #2c4d71; }
+    .mode-r6 .hero .sub, .mode-r6 .hero .lead { color: #5d7592; }
+    .mode-r6 .hero .eyebrow {
+      border-color: #c7ad8a;
+      background: rgba(201,160,90,0.14);
+      color: #6f5733;
+    }
+    .mode-r6 .sec {
+      background: linear-gradient(180deg, #fcf7f0 0%, #f4ede4 100%);
+      border-color: #d8c7b2;
+    }
+    .mode-r6 .sec .kpi, .mode-r6 .sec .card {
+      background: #fffaf4;
+      border-color: #dccdb8;
+    }
+    .mode-r6 .sec h2 { color: #2b4b6f; border-left-color: #4f77a3; }
+    .mode-r6 .sec .k, .mode-r6 .sec .muted, .mode-r6 .sec .list li, .mode-r6 .sec .chart-interpretation { color: #5f7692; }
+    .mode-r6 .sec .v { color: #315576; }
+    .mode-r7 .hero {
+      background: linear-gradient(122deg, #fff5f1 0%, #fcece5 50%, #f6e5dd 100%);
+      border-color: #ddc0b3;
+      color: #5f6e87;
+    }
+    .mode-r7 .hero h1 { color: #2e4e72; }
+    .mode-r7 .hero .sub, .mode-r7 .hero .lead { color: #677e99; }
+    .mode-r7 .hero .eyebrow {
+      border-color: #d6b2a5;
+      background: rgba(196,112,90,0.13);
+      color: #8a4f3f;
+    }
+    .mode-r7 .sec {
+      background: linear-gradient(180deg, #fff8f6 0%, #f7eeea 100%);
+      border-color: #e2cfc5;
+    }
+    .mode-r7 .sec .kpi, .mode-r7 .sec .card {
+      background: #fffdfc;
+      border-color: #e6d7cf;
+    }
+    .mode-r7 .sec h2 { color: #35597e; border-left-color: #6d93bf; }
+    .mode-r7 .sec .k, .mode-r7 .sec .muted, .mode-r7 .sec .list li, .mode-r7 .sec .chart-interpretation { color: #697f98; }
+    .mode-r7 .sec .v { color: #3f6388; }
+    [style*="background:#fff"], [style*="background: #fff"], [style*="background:#ffffff"], [style*="background: #ffffff"], [style*="background:#fafafa"], [style*="background: #fafafa"], [style*="background:#f8fbff"], [style*="background: #f8fbff"] { background: var(--paper-soft) !important; }
+    [style*="color:#0052cc"], [style*="color: #0052cc"] { color: var(--primary) !important; }
+    @media (max-width: 1200px) {
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .insight-grid { grid-template-columns: 1fr; }
+      .mode-r3 .sec .kano-grid { grid-template-columns: 1fr; }
+      .thumb-wall { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .row2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap mode-r3">
+    <section class="hero">
+      <div class="eyebrow">Cross-Border Intelligence Brief</div>
+      <h1>R3-需求分析师｜用户心智断层与需求机会报告</h1>
+      <div class="sub">目标：用 $APPEALS + KANO + JTBD 把评论转成可执行需求洞察。 ｜ 定稿人：R3 需求分析师</div>
+      <div class="lead">主题基调：能源科技深空蓝。目标品类偏科技/电源属性，采用深空蓝与电光青，突出专业、可靠与性能感。</div>
+    </section>
+
+
+        <section class="sec">
+          <h2>目标ASIN锚点（B0DCVVG138）</h2>
+          <div class="card focus">
+            当前目标月销量（Sorftime）：<strong>102</strong>。本报告将以用户评论信号解释“为什么能卖、还能怎样再提转化”。
+          </div>
+          <div class="chart-interpretation">分析口径：仅目标ASIN评论样本。 目标评论样本：64 条；本次实际分析样本：64 条。</div>
+        </section>
+
+    <section class="sec">
+      <h2>决策看板（执行摘要）</h2>
+      <div class="card focus"><strong>最大机会：围绕「性能（Performance）」体验重构，把高频抱怨转化成可感知卖点。</strong></div>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="k">评论样本数</div><div class="v">64</div></div>
+        <div class="kpi"><div class="k">负评率</div><div class="v">23.4%</div></div>
+        <div class="kpi"><div class="k">行业核心痛点</div><div class="v" style="font-size:18px">其他体验问题</div></div>
+        <div class="kpi"><div class="k">最高机会维度</div><div class="v" style="font-size:18px">性能（Performance）</div></div>
+      </div>
+    </section>
+    <section class="sec">
+      <h2>市场痛点全景图（$APPEALS）</h2>
+      <div id="appealsRose" class="chart"></div>
+      <div class="chart-interpretation">算法与结论：采用 Sankey（桑基图）呈现“维度 → 痛点 → 动作”的流向。链路宽度做视觉压缩，避免极端值淹没细分信号；悬浮可查看真实评论样本数。当前痛点最集中在 <strong>性能（Performance）</strong>，应优先投入该维度修复与卖点重构。</div>
+    </section>
+    <section class="sec">
+      <h2>满意度鸿沟雷达（Gap Analysis 差距分析）</h2>
+      <div id="gapRadar" class="chart"></div>
+      <div class="chart-interpretation">算法与结论：Series A（用户心理期望），Series B（竞品实测表现）。两条曲线间差距越大，越值得优先投入研发与页面教育资源。</div>
+    </section>
+    <section class="sec">
+      <h2>场景化机会矩阵（KANO × JTBD）</h2>
+      <div class="kano-grid">
+        <div class="card warn">
+          <div class="k">Must-be（基础项）</div>
+          <div style="margin-top:6px;font-weight:700">先做对再谈增长</div>
+          <div class="muted" style="margin-top:4px">这类需求做不好会直接导致差评和退款。</div>
+        </div>
+
+        <div class="card focus">
+          <div class="k">Performance（绩效项）</div>
+          <div style="margin-top:6px;font-weight:700">做得越好，转化越高</div>
+          <div class="muted" style="margin-top:4px">直接影响“值不值得买”的感知和复购。</div>
+        </div>
+
+        <div class="card ok">
+          <div class="k">Attractive（惊喜项）</div>
+          <div style="margin-top:6px;font-weight:700">拉开差异与溢价</div>
+          <div class="muted" style="margin-top:4px">用于详情页制造“我就要这款”的理由。</div>
+        </div>
+        </div>
+      <div class="chart-interpretation">阅读方式：先看 KANO 属性判断优先级，再看“场景还原”确认用户真实语境，最后直接执行“创新机会”列里的动作。</div>
+      <table>
+        <thead><tr><th>KANO属性</th><th>核心痛点</th><th>场景还原 (JTBD)</th><th>创新机会</th></tr></thead>
+        <tbody><tr><td>Must-be</td><td>材质安全与结构可靠</td><td>担心残留、易坏、无效</td><td>优先强化材质说明、结构证明与稳定性测试</td></tr><tr><td>Performance</td><td>清洗效率与操作顺手</td><td>抱怨不好用、费力、排水效率低</td><td>优化操作路径，缩短完成一次清洗的步骤</td></tr><tr><td>Attractive</td><td>额外惊喜体验</td><td>对细节质感与省时结果产生惊喜</td><td>在详情页突出“结果可见”的爽点场景</td></tr></tbody>
+      </table>
+    </section>
+    <section class="sec">
+      <h2>真实原声剧场（用户原声）</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+        <div>
+          <div class="card warn"><strong>💔 劝退瞬间</strong></div>
+          <div style="display:grid;gap:10px">
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★2 ｜ 20260330</div>
+                  <div class="quote-cn">续航时间很短，而且充电很慢。</div>
+                  <div class="quote-origin">原文："It will not run anything for very long and takes a long time to charge."</div>
+                </div>
+
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★1 ｜ 20260315</div>
+                  <div class="quote-cn">不可靠。</div>
+                  <div class="quote-origin">原文："Unreliable"</div>
+                </div>
+
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★1 ｜ 20260207</div>
+                  <div class="quote-cn">退款</div>
+                  <div class="quote-origin">原文："Refund!!"</div>
+                </div>
+
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★2 ｜ 20260126</div>
+                  <div class="quote-cn">收到的是二手货，且有配件缺失。</div>
+                  <div class="quote-origin">原文："Received used and missing pieces"</div>
+                </div>
+
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★1 ｜ 20260125</div>
+                  <div class="quote-cn">退款标准不合理，售后体验差。</div>
+                  <div class="quote-origin">原文："Poor refund standards"</div>
+                </div>
+
+                <div class="card warn" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★1 ｜ 20260124</div>
+                  <div class="quote-cn">体验很差。</div>
+                  <div class="quote-origin">原文："Lame"</div>
+                </div>
+                </div>
+        </div>
+        <div>
+          <div class="card ok"><strong>❤️ 真香时刻</strong></div>
+          <div style="display:grid;gap:10px">
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★5 ｜ 20260405</div>
+                  <div class="quote-cn">应急场景很实用。</div>
+                  <div class="quote-origin">原文："Essential Gear"</div>
+                </div>
+
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★5 ｜ 20260328</div>
+                  <div class="quote-cn">非常满意。</div>
+                  <div class="quote-origin">原文："Wonderful"</div>
+                </div>
+
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★5 ｜ 20260322</div>
+                  <div class="quote-cn">质量不错。</div>
+                  <div class="quote-origin">原文："Buena calidad"</div>
+                </div>
+
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★4 ｜ 20260318</div>
+                  <div class="quote-cn">能正常工作。</div>
+                  <div class="quote-origin">原文："Works."</div>
+                </div>
+
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★5 ｜ 20260311</div>
+                  <div class="quote-cn">不错。</div>
+                  <div class="quote-origin">原文："nice"</div>
+                </div>
+
+                <div class="card ok" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★5 ｜ 20260305</div>
+                  <div class="quote-cn">可支撑 CPAP 使用一晚，充电速度快。</div>
+                  <div class="quote-origin">原文："Good for one night with a CPAP, fast charging"</div>
+                </div>
+                </div>
+        </div>
+        <div>
+          <div class="card focus"><strong>🤔 纠结时刻</strong></div>
+          <div style="display:grid;gap:10px">
+                <div class="card focus" style="margin:0">
+                  <div class="k">B0DCVVG138 ｜ ★3 ｜ 20250810</div>
+                  <div class="quote-cn">涉及充电表现；提到速度体验。</div>
+                  <div class="quote-origin">原文："Recharges quickly"</div>
+                </div>
+                </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+const roseData = [{"name": "价格", "name_full": "Price（价格）", "dim_en": "Price", "value": 3, "layer": {"Functional（功能层）": 3, "Experiential（体验层）": 0, "Emotional（情感层）": 0}}, {"name": "性能", "name_full": "Performance（性能）", "dim_en": "Performance", "value": 55, "layer": {"Functional（功能层）": 54, "Experiential（体验层）": 0, "Emotional（情感层）": 1}}, {"name": "包装", "name_full": "Packaging（包装）", "dim_en": "Packaging", "value": 0, "layer": {"Functional（功能层）": 0, "Experiential（体验层）": 0, "Emotional（情感层）": 0}}, {"name": "易用性", "name_full": "Ease of use（易用性）", "dim_en": "Ease of use", "value": 2, "layer": {"Functional（功能层）": 0, "Experiential（体验层）": 2, "Emotional（情感层）": 0}}, {"name": "行动结果", "name_full": "Action（行动结果）", "dim_en": "Action", "value": 0, "layer": {"Functional（功能层）": 0, "Experiential（体验层）": 0, "Emotional（情感层）": 0}}, {"name": "生活场景", "name_full": "Life（生活场景）", "dim_en": "Life", "value": 4, "layer": {"Functional（功能层）": 4, "Experiential（体验层）": 0, "Emotional（情感层）": 0}}, {"name": "社交传播", "name_full": "Socialness（社交传播）", "dim_en": "Socialness", "value": 0, "layer": {"Functional（功能层）": 0, "Experiential（体验层）": 0, "Emotional（情感层）": 0}}];
+const radarLabels = ["Price（价格）", "Performance（性能）", "Packaging（包装）", "Ease of use（易用性）", "Action（行动结果）", "Life（生活场景）", "Socialness（社交传播）"];
+const radarLabelsShort = ["价格", "性能", "包装", "易用性", "行动结果", "生活场景", "社交传播"];
+const expectation = [75.6, 95, 70.0, 73.8, 70.0, 77.5, 70.0];
+const measured = [57.8, 88.0, 63.0, 66.8, 63.0, 70.5, 63.0];
+const sankeyNodes = [{"name": "性能（44）", "raw": 44, "bucket": "dim", "itemStyle": {"color": "#c4705a"}}, {"name": "行动结果（10）", "raw": 10, "bucket": "dim", "itemStyle": {"color": "#9a8fb5"}}, {"name": "价格（9）", "raw": 9, "bucket": "dim", "itemStyle": {"color": "#3d6b9e"}}, {"name": "生活场景（1）", "raw": 1, "bucket": "dim", "itemStyle": {"color": "#c9a05a"}}, {"name": "其他体验问题（44）", "raw": 44, "bucket": "issue", "itemStyle": {"color": "#5d737e"}}, {"name": "容量/尺寸不匹配（10）", "raw": 10, "bucket": "issue", "itemStyle": {"color": "#9a8fb5"}}, {"name": "价格价值感不足（9）", "raw": 9, "bucket": "issue", "itemStyle": {"color": "#6f7f95"}}, {"name": "耐用性不足（1）", "raw": 1, "bucket": "issue", "itemStyle": {"color": "#b36f5d"}}, {"name": "补齐关键信息（FAQ+预期管理）（44）", "raw": 44, "bucket": "action", "itemStyle": {"color": "#5d737e"}}, {"name": "明确场景边界（尺寸标尺+使用清单）（10）", "raw": 10, "bucket": "action", "itemStyle": {"color": "#9a8fb5"}}, {"name": "重建价值锚点（功能对比+成本拆解）（9）", "raw": 9, "bucket": "action", "itemStyle": {"color": "#3d6b9e"}}, {"name": "强化耐久承诺（寿命测试+质保策略）（1）", "raw": 1, "bucket": "action", "itemStyle": {"color": "#b36f5d"}}];
+const sankeyLinks = [{"source": "性能（44）", "target": "其他体验问题（44）", "value": 22.27, "raw": 44}, {"source": "其他体验问题（44）", "target": "补齐关键信息（FAQ+预期管理）（44）", "value": 22.27, "raw": 44}, {"source": "行动结果（10）", "target": "容量/尺寸不匹配（10）", "value": 6.61, "raw": 10}, {"source": "容量/尺寸不匹配（10）", "target": "明确场景边界（尺寸标尺+使用清单）（10）", "value": 6.61, "raw": 10}, {"source": "价格（9）", "target": "价格价值感不足（9）", "value": 6.06, "raw": 9}, {"source": "价格价值感不足（9）", "target": "重建价值锚点（功能对比+成本拆解）（9）", "value": 6.06, "raw": 9}, {"source": "生活场景（1）", "target": "耐用性不足（1）", "value": 1.0, "raw": 1}, {"source": "耐用性不足（1）", "target": "强化耐久承诺（寿命测试+质保策略）（1）", "value": 1.0, "raw": 1}];
+const titleStyle = { fontSize: 14, fontWeight: 700, color: '#1d3a63', textBorderWidth: 0, textShadowBlur: 0, textShadowColor: 'transparent' };
+const axisLabelStyle = { color: '#32527f', textBorderWidth: 0, textShadowBlur: 0, textShadowColor: 'transparent' };
+
+const appealsRose = echarts.init(document.getElementById('appealsRose'));
+appealsRose.setOption({
+  textStyle: { color: '#1a2744' },
+  title: { text: '市场痛点全景图（$APPEALS）', left: 'center', top: 6, textStyle: { ...titleStyle, color:'#1a2744' } },
+  tooltip: {
+    trigger: 'item',
+    triggerOn: 'mousemove',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    textStyle: { color: '#1a2744', fontSize: 13 },
+    formatter: function(params) {
+      if (params.dataType === 'edge') {
+        const raw = params.data && params.data.raw ? params.data.raw : params.value;
+        return `${params.data.source} → ${params.data.target}<br/>评论样本：${raw}`;
+      }
+      const raw = params.data && params.data.raw ? params.data.raw : params.value;
+      return `${params.name}<br/>评论样本：${raw || 0}`;
+    }
+  },
+  series: [{
+    type: 'sankey',
+    layout: 'none',
+    nodeAlign: 'left',
+    nodeGap: 18,
+    nodeWidth: 18,
+    layoutIterations: 28,
+    draggable: false,
+    emphasis: { focus: 'adjacency' },
+    levels: [
+      { depth: 0, itemStyle: { borderColor: '#ffffff', borderWidth: 1 }, lineStyle: { color: 'source', opacity: 0.22 } },
+      { depth: 1, itemStyle: { borderColor: '#ffffff', borderWidth: 1 }, lineStyle: { color: 'source', opacity: 0.30 } },
+      { depth: 2, itemStyle: { borderColor: '#ffffff', borderWidth: 1 }, lineStyle: { color: 'source', opacity: 0.38 } }
+    ],
+    lineStyle: { color: 'gradient', curveness: 0.52, opacity: 0.34 },
+    label: { color: '#1a2744', fontSize: 12, width: 230, overflow: 'truncate' },
+    edgeLabel: { show: false },
+    data: sankeyNodes,
+    links: sankeyLinks
+  }]
+});
+
+const gapRadar = echarts.init(document.getElementById('gapRadar'));
+gapRadar.setOption({
+  textStyle: { color: '#1a2744' },
+  title: { text: '满意度鸿沟雷达（Gap Analysis）', left: 'center', top: 6, textStyle: { ...titleStyle, color:'#1a2744' } },
+  tooltip: {
+    trigger: 'item',
+    confine: true,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    textStyle: { color: '#1a2744', fontSize: 13 }
+  },
+  legend: { data: ['用户期望', '竞品实测'], bottom: 2, textStyle: { ...axisLabelStyle, color:'#1a2744' } },
+  radar: {
+    indicator: radarLabelsShort.map((x, i) => ({ name: x, max: 100, tooltip: { formatter: radarLabels[i] } })),
+    center: ['50%', '52%'],
+    radius: '62%',
+    nameFormatter: (value) => value.length > 4 ? `${value.slice(0,2)}\n${value.slice(2)}` : value,
+    splitArea: { areaStyle: { color: ['rgba(61,107,158,0.08)', 'rgba(61,107,158,0.03)'] } },
+    axisName: { ...axisLabelStyle, color:'#1a2744', fontSize: 12 },
+    axisLine: { lineStyle: { color: 'rgba(26,39,68,0.35)' } },
+    splitLine: { lineStyle: { color: 'rgba(26,39,68,0.24)' } }
+  },
+  series: [{
+    type: 'radar',
+    symbol: 'circle',
+    symbolSize: 5,
+    lineStyle: { width: 2 },
+    data: [
+      { value: expectation, name: '用户期望', areaStyle: { color: 'rgba(76,175,80,0.22)' }, lineStyle: { color: '#4CAF50' } },
+      { value: measured, name: '竞品实测', areaStyle: { color: 'rgba(255,82,82,0.28)' }, lineStyle: { color: '#FF5252' } }
+    ]
+  }]
+});
+
+window.addEventListener('resize', () => { appealsRose.resize(); gapRadar.resize(); });
+</script>
+
+</body>
+</html>
