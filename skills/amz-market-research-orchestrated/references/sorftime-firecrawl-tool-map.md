@@ -47,6 +47,7 @@ Use `scripts/collect_sorftime_tiktok_signals.py` for standard/deep runs. Current
 - `tiktok_category_report`: `nodeId`, optional `site`.
 
 Do not use `keyword` for TikTok search calls, and do not use `product_id` when the MCP schema requires `productId`.
+TikTok `site` follows the TikTok schema enum, not the Amazon `amzSite` enum: `Unknow`, `US`, `MY`, `PH`, `VN`, `TH`, `ID`, `GB`, `JP`.
 
 For v2 three-report output, TikTok evidence feeds both `market-depth-report.html` and `demand-gap-report.html`: treat it as content/channel and scene evidence, not Amazon purchase proof.
 

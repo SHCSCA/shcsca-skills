@@ -55,6 +55,26 @@ class CollectSorftime1688SuppliersTest(unittest.TestCase):
         self.assertEqual(entity["url"], "https://detail.1688.com/offer/707.html?spm=a")
         self.assertEqual(entity["seed_keyword"], "橱柜灯")
 
+    def test_current_mcp_1688_shape_counts_product_id_store_and_price_as_valid_quote(self):
+        row = {
+            "ProductId": "678442451719",
+            "Photo": "https://cbu01.alicdn.com/img/ibank/example.jpg",
+            "StoreName": "中山市帝曼森灯饰有限公司",
+            "Price": 500.0,
+            "ReviewCount": 271,
+            "Star": 0.0,
+        }
+
+        entity = collector.supplier_entity(row, "sf_1688_seed_p001", "智能照明")
+
+        self.assertIsNone(entity["title"])
+        self.assertEqual(entity["product_id"], "678442451719")
+        self.assertEqual(entity["photo_url"], "https://cbu01.alicdn.com/img/ibank/example.jpg")
+        self.assertEqual(entity["supplier_name"], "中山市帝曼森灯饰有限公司")
+        self.assertEqual(entity["price_rmb"], 500.0)
+        self.assertEqual(entity["review_count"], 271)
+        self.assertTrue(collector.is_valid_quote(entity))
+
     def test_collect_retries_different_terms_until_50_valid_deduped_quotes(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)

@@ -135,9 +135,10 @@ def valid_supplier_quotes(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             else supplier.get("price")
         )
         title = supplier.get("title") or supplier.get("title_cn") or supplier.get("name")
+        product_id = supplier.get("product_id") or supplier.get("offer_id")
         shop = supplier.get("supplier_name") or supplier.get("store_name") or supplier.get("shop")
         identity = supplier_identity(supplier)
-        if price is None or price <= 0 or not title or not shop or not identity or identity in seen:
+        if price is None or price <= 0 or not (title or product_id) or not shop or not identity or identity in seen:
             continue
         seen.add(identity)
         valid.append(supplier)

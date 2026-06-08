@@ -423,7 +423,7 @@ def collect(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect Sorftime TikTok Shop signals into data_pack.json.")
     parser.add_argument("--dir", required=True, type=Path, help="Report directory containing data/data_pack.json.")
-    parser.add_argument("--site", default="US", choices=["Unknow", "US", "MY", "PH", "VN", "ID", "GB"])
+    parser.add_argument("--site", default="US", choices=["Unknow", "US", "MY", "PH", "VN", "TH", "ID", "GB", "JP"])
     parser.add_argument("--seed", action="append", default=[], help="TikTok product search seed. Repeatable.")
     parser.add_argument("--max-seeds", type=int, default=4)
     parser.add_argument("--max-pages", type=int, default=1)

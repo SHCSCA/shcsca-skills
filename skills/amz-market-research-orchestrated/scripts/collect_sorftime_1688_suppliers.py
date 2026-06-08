@@ -142,8 +142,9 @@ def supplier_identity(supplier: dict[str, Any]) -> str:
 def is_valid_quote(supplier: dict[str, Any]) -> bool:
     price = to_number(supplier.get("price_rmb") if supplier.get("price_rmb") not in (None, "") else supplier.get("price"))
     title = supplier.get("title") or supplier.get("title_cn") or supplier.get("name")
+    product_id = supplier.get("product_id") or supplier.get("offer_id") or supplier.get("ProductId")
     shop = supplier.get("supplier_name") or supplier.get("store_name") or supplier.get("shop")
-    return isinstance(price, (int, float)) and price > 0 and bool(title) and bool(shop) and bool(supplier_identity(supplier))
+    return isinstance(price, (int, float)) and price > 0 and bool(title or product_id) and bool(shop) and bool(supplier_identity(supplier))
 
 
 def supplier_entity(row: dict[str, Any], source_id: str, seed_keyword: str) -> dict[str, Any]:
@@ -152,11 +153,18 @@ def supplier_entity(row: dict[str, Any], source_id: str, seed_keyword: str) -> d
         "supplier_name": first(row, "供应商", "supplier", "supplier_name", "店铺", "store_name", "StoreName", "shop"),
         "price_rmb": to_number(first(row, "价格", "price", "Price", "price_rmb", "起批价", "采购价")),
         "product_id": first(row, "ProductId", "product_id", "offer_id"),
+        "photo_url": first(row, "Photo", "photo", "image", "image_url"),
         "sales_30d": to_number(first(row, "30天销量", "近30天销量", "sales_30d", "SalesOf30d", "月销量")),
+        "cumulative_sales": to_number(first(row, "CumulativeSaleCount", "累计销量", "cumulative_sales")),
+        "monthly_sales": to_number(first(row, "MonthlySaleCount", "月销量", "monthly_sales")),
+        "monthly_sales_amount": to_number(first(row, "MonthlySaleAmount", "月销额", "monthly_sales_amount")),
+        "review_count": to_number(first(row, "ReviewCount", "评论数", "review_count")),
+        "star": to_number(first(row, "Star", "星级", "star")),
         "moq": to_number(first(row, "起批量", "moq", "MOQ")),
         "shipping_origin": first(row, "发货地", "shipping_origin", "ShippingOrigin", "产地"),
         "url": first(row, "商品链接", "url", "URL", "link", "product_url"),
         "seed_keyword": seed_keyword,
+        "schema_limitation": "Current ali1688_similar_product response may omit product title and URL; ProductId + StoreName + Price are used as quote identity when title/URL are unavailable.",
         "source_id": source_id,
         "provider": "sorftime",
     }

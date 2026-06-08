@@ -125,6 +125,22 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
             data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
             self.assertEqual(data_pack["data_gaps"][0]["type"], "tiktok_signal_depth")
 
+    def test_cli_accepts_full_tiktok_site_enum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "data" / "data_pack.json", {"sources": [], "research_object": {"value": "light"}, "tiktok_products": [], "tiktok_videos": [], "data_gaps": []})
+
+            def fake_call_tool(_url, name, args):
+                self.assertEqual(name, collector.SIMILAR_TOOL)
+                self.assertEqual(args, {"searchName": "light", "page": 1, "site": "JP"})
+                rows = [{"ProductId": "jp1", "Title": "Light", "月销量": 10}]
+                return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
+
+            with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
+                code = collector.main(["--dir", str(report_dir), "--site", "JP", "--max-seeds", "1", "--max-pages", "1", "--max-products-detail", "0", "--min-signals", "1", "--sleep", "0"])
+
+            self.assertEqual(code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
