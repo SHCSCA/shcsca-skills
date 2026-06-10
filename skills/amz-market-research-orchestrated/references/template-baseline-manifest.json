@@ -23,7 +23,12 @@
         "voc-grid",
         "deep-dive-grid",
         "comp-deep-card",
-        "opportunity-matrix"
+        "opportunity-matrix",
+        "pricing-grid",
+        "pricing-card",
+        "prompt-grid",
+        "prompt-card",
+        "comp-col-asin"
       ],
       "borrowed_js_signals": [
         "iOS-safe ECharts renderer patch",
@@ -53,7 +58,12 @@
         "filter-btn",
         "bundle-grid",
         "phase-grid",
-        "risk-grid"
+        "roadmap-phase-grid",
+        "roadmap-action-grid",
+        "risk-grid",
+        "ecosystem-chart-grid",
+        "sku-strategy-grid",
+        "sku-strategy-card"
       ],
       "borrowed_js_signals": [
         "sunburst lifecycle ecosystem option",
@@ -82,7 +92,11 @@
         "focus",
         "warn",
         "ok",
-        "quote-cn"
+        "quote-cn",
+        "demand-sentiment-columns",
+        "demand-column-head",
+        "demand-evidence-card",
+        "review-excerpt-en"
       ],
       "borrowed_js_signals": [
         "appealsRose Sankey pain/action flow option",

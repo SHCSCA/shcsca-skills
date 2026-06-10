@@ -1,0 +1,161 @@
+{
+  "version": "2026-06-09.fixed-template-slots.v1",
+  "purpose": "Fixed customer HTML slot contract derived from the three downloaded reference templates. Data may change, but these layout slots, headings, anchors, controls, and chart containers must not disappear.",
+  "reports": {
+    "market_depth": {
+      "output": "output/html_reports/market-depth-report.html",
+      "reference_folder": "downloadpage/143101",
+      "required_sections": 9,
+      "required_ids": [
+        "priceChart",
+        "bubbleChart",
+        "growthChart",
+        "featureChart",
+        "radarChart",
+        "marginChart",
+        "pricing",
+        "prompt"
+      ],
+      "required_text": [
+        "Strategic Intelligence Report",
+        "大盘仪表盘 · Market Dashboard",
+        "Top 竞品全景扫描",
+        "VOC 体验深潜 · 痛点 × 爽点雷达",
+        "标杆竞品狙击拆解",
+        "新品狙击企划 · Product Definition",
+        "Core Product Concept",
+        "建议定价策略",
+        "视觉与包装指导 · Visual Direction",
+        "AI生图 Prompt · 可直接使用",
+        "供应链成本估算 · 1688大盘数据",
+        "供应链核心结论"
+      ],
+      "exact_class_counts": {
+        "pricing-card": 3,
+        "prompt-card": 3,
+        "comp-deep-card": 3,
+        "supply-card": 4
+      },
+      "minimum_class_counts": {
+        "section-header": 9,
+        "section-number": 7,
+        "kpi-card": 4,
+        "chart-container": 6,
+        "comp-table": 1,
+        "voc-grid": 1
+      },
+      "required_customer_scopes": [
+        "data-allow-asin=\"competitor-table\"",
+        "data-allow-asin=\"benchmark-sniper\"",
+        "data-allow-asin=\"profit-model\""
+      ]
+    },
+    "lifecycle_strategy": {
+      "output": "output/html_reports/lifecycle-strategy-report.html",
+      "reference_folder": "downloadpage/143511",
+      "required_sections": 9,
+      "required_ids": [
+        "sunburst",
+        "priorityChart",
+        "aovChart",
+        "skuTable",
+        "skuBody"
+      ],
+      "required_text": [
+        "Lifecycle Strategy",
+        "全生命周期拓品战略",
+        "战略仪表盘",
+        "用户画像",
+        "生命周期旅程",
+        "四维拓品生态",
+        "拓品方案池",
+        "Bundle 策略",
+        "30/60/90 天路线图",
+        "风险矩阵",
+        "市场验证摘要",
+        "供应链",
+        "复购",
+        "AOV",
+        "LTV"
+      ],
+      "exact_class_counts": {
+        "persona-card": 3,
+        "tl-card": 5,
+        "sku-strategy-card": 5,
+        "bundle-card": 4,
+        "phase-card": 6,
+        "risk-card": 3
+      },
+      "minimum_class_counts": {
+        "section-header": 9,
+        "section-number": 9,
+        "kpi-card": 9,
+        "chart-container": 3,
+        "filter-btn": 7,
+        "evidence-drawer": 8
+      },
+      "required_component_groups": [
+        "ecosystem-chart-grid",
+        "sku-strategy-grid",
+        "roadmap-phase-grid",
+        "roadmap-action-grid",
+        "bundle-grid",
+        "risk-grid"
+      ]
+    },
+    "demand_gap": {
+      "output": "output/html_reports/demand-gap-report.html",
+      "reference_folder": "downloadpage/143645",
+      "required_sections": 7,
+      "required_ids": [
+        "appealsRose",
+        "gapRadar"
+      ],
+      "required_text": [
+        "Demand Gap Analysis",
+        "目标ASIN锚点",
+        "决策看板",
+        "市场痛点全景图（$APPEALS）",
+        "满意度鸿沟",
+        "场景化机会矩阵",
+        "KANO × JTBD",
+        "真实原声剧场",
+        "用户原声",
+        "需求优先级",
+        "正面反馈",
+        "负面反馈"
+      ],
+      "required_ordered_markers": [
+        "id=\"target-anchor\"",
+        "id=\"decision-board\"",
+        "id=\"appeals-map\"",
+        "id=\"gap-analysis\"",
+        "id=\"kano-jtbd\"",
+        "id=\"voice-theater\"",
+        "id=\"priority-table\""
+      ],
+      "exact_class_counts": {
+        "demand-chart": 2,
+        "demand-evidence-card joy": 6,
+        "demand-evidence-card pain": 6
+      },
+      "minimum_class_counts": {
+        "section-header": 7,
+        "section-number": 7,
+        "kpi": 5,
+        "chart": 2,
+        "evidence-drawer": 2
+      },
+      "required_component_groups": [
+        "demand-sentiment-columns",
+        "demand-sentiment-column positive",
+        "demand-sentiment-column negative",
+        "用户原声证据明细表"
+      ],
+      "allowed_customer_scopes": [
+        "data-allow-asin=\"demand-target-anchor\"",
+        "data-allow-english-review=\"short\""
+      ]
+    }
+  }
+}

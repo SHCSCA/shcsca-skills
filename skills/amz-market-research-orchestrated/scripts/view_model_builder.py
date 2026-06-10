@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from customer_safety import client_safe_view_payload, customer_safe_asset_text
+from html_components import relevant_products as filter_relevant_products
 from normalize_data_pack import THEME_CN
 from site_assets import HTML_REPORT_FILENAMES, INTERACTIVE_FEATURES
 
@@ -66,11 +67,28 @@ def review_theme_labels(review: dict[str, Any]) -> list[str]:
 
 
 def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
+    rating = as_float(review.get("rating"), 0)
+    text = " ".join(clean(review.get(key)) for key in ["title", "text", "content", "body"]).lower()
+    negative_summary_phrases = ["没有达到预期", "需要加强", "出现失效", "信任下降", "不够清晰", "稳定性问题"]
     for key in ["summary_cn", "translated_text", "summary"]:
         value = clean(review.get(key))
         if value and has_cjk(value):
+            if rating >= 4 and any(phrase in value for phrase in negative_summary_phrases):
+                break
             return value[:limit]
-    text = " ".join(clean(review.get(key)) for key in ["title", "text", "content", "body"]).lower()
+    if rating >= 4:
+        positive_signals: list[str] = []
+        if any(token in text for token in ["bright", "brightness", "light", "color", "rgb"]):
+            positive_signals.append("亮度和灯效获得正向反馈")
+        if any(token in text for token in ["easy", "install", "setup", "stick", "adhesive"]):
+            positive_signals.append("安装和上手体验获得正向反馈")
+        if any(token in text for token in ["motion", "sensor", "detect"]):
+            positive_signals.append("感应触发体验获得正向反馈")
+        if any(token in text for token in ["battery", "charge", "charging", "last", "long time"]):
+            positive_signals.append("续航和充电便利性获得正向反馈")
+        if any(token in text for token in ["love", "great", "works well", "perfect", "recommend"]):
+            positive_signals.append("整体使用满意度形成正向反馈")
+        return "；".join(dict.fromkeys(positive_signals or ["用户正向反馈集中在功能效果、安装便利和场景适配"]))[:limit]
     signals: list[str] = []
     if any(token in text for token in ["privacy", "data", "record", "policy"]):
         signals.append("隐私政策和数据使用说明不够清晰")
@@ -94,15 +112,44 @@ def review_sentiment_label(review: dict[str, Any]) -> str:
     return "中性反馈"
 
 
+SEGMENT_LABEL_RULES = [
+    ("橱柜感应灯", ["under cabinet", "cabinet light", "motion sensor", "puck light", "磁吸", "橱柜", "感应"]),
+    ("RGB 灯带", ["rgbic", "rgb led strip", "led strip", "strip lights", "light strip", "灯带"]),
+    ("智能灯泡", ["smart bulb", "a19", "light bulb", "灯泡"]),
+    ("氛围灯", ["ambient", "table lamp", "night light", "sunset", "床头", "夜灯", "氛围"]),
+    ("户外感应灯", ["outdoor", "solar", "flood light", "security light", "wall sconce", "户外", "太阳能", "壁灯"]),
+]
+
+
+def infer_segment_cn(product: dict[str, Any]) -> str:
+    for key in ["segment_cn", "segment", "category_cn"]:
+        value = clean(product.get(key))
+        if value and has_cjk(value) and value not in {"未分层", "未知"}:
+            return value
+    text = " ".join(clean(product.get(key)).lower() for key in ["title", "title_cn", "category", "segment"])
+    for label, needles in SEGMENT_LABEL_RULES:
+        if any(needle in text for needle in needles):
+            return label
+    return ""
+
+
 def customer_product_label(product: dict[str, Any]) -> str:
+    brand = clean(product.get("brand"))
+    if brand in {"竞品记录", "未命名竞品"}:
+        brand = ""
+    segment = infer_segment_cn(product)
+    if brand and segment:
+        return f"{brand} {segment}"[:80]
     for key in ["title_cn", "positioning_cn", "segment_cn"]:
         value = clean(product.get(key))
-        if value and has_cjk(value):
+        if value and has_cjk(value) and "竞品记录" not in value:
             return value[:80]
-    segment = clean(product.get("segment"))
     if segment:
-        return f"{segment} 竞品记录"
-    return "竞品记录"
+        return f"{segment}竞品"[:80]
+    title = clean(product.get("title"))
+    if brand and title:
+        return f"{brand} 竞品"[:80]
+    return brand or "未命名竞品"
 
 
 def product_sales(product: dict[str, Any]) -> Any:
@@ -114,7 +161,8 @@ def product_price(product: dict[str, Any]) -> Any:
 
 
 def relevant_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(products, key=lambda item: (as_float(product_sales(item)), as_float(item.get("review_count"))), reverse=True)
+    filtered = filter_relevant_products(products)
+    return sorted(filtered, key=lambda item: (as_float(product_sales(item)), as_float(item.get("review_count"))), reverse=True)
 
 
 def price_band(price: Any) -> str:
@@ -159,7 +207,7 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
     explicit = lifecycle.get("skus")
     if isinstance(explicit, list) and explicit:
         return [item for item in explicit if isinstance(item, dict)]
-    products = data_pack.get("products") or []
+    products = relevant_products(data_pack.get("products") or [])
     suppliers = data_pack.get("suppliers") or []
     defaults = [
         {"name": "备用与替换核心配件", "stage": "开箱与替换", "type": "A", "price": "$12-$29", "supply": "自有或可控供应链", "phase": "P1", "priority": 92, "source_id": fallback_source},
@@ -188,7 +236,7 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
                 "stage": "供应链验证",
                 "type": "D",
                 "price": money(first(supplier.get("price"), supplier.get("price_rmb"), default=12), "¥"),
-                "supply": "1688 相似货源",
+                "supply": "供应端机会",
                 "phase": "P2",
                 "priority": 68,
                 "source_id": source_ids_for(supplier, fallback_source),
@@ -199,14 +247,71 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
 
 def readiness_summary(readiness: dict[str, Any] | None) -> dict[str, Any]:
     readiness = readiness or {}
+    supplier_quality = dict(readiness.get("supplier_quality_gate") or {})
+    missing_fields = supplier_quality.pop("missing_documented_required_fields", [])
+    supplier_quality.pop("observed_fields", None)
+    if missing_fields:
+        supplier_quality["field_diagnostic"] = "当前1688响应缺少商品标题和商品链接字段"
     return {
         "acceptance_ready": readiness.get("acceptance_ready"),
+        "partial_report_ready": readiness.get("partial_report_ready"),
+        "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
         "sample_class": readiness.get("sample_class"),
         "depth": readiness.get("depth"),
         "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
         "warning_count": len(readiness.get("warnings") or []),
         "counts": readiness.get("counts") or {},
         "supplier_quote_gate": readiness.get("supplier_quote_gate") or {},
+        "supplier_quality_gate": supplier_quality,
+        "competitor_gate": readiness.get("competitor_gate") or {},
+        "segment_gate": readiness.get("segment_gate") or {},
+    }
+
+
+def customer_quality_label(quality: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(quality or {})
+    grade = clean(payload.get("grade"))
+    grade_map = {
+        "ready_for_normalization": "可用于方向判断，需供应链复核",
+        "low_confidence_watch": "证据不足，建议观察",
+        "medium_confidence": "中等置信，可继续验证",
+    }
+    if grade:
+        payload["grade"] = grade_map.get(grade, customer_safe_asset_text(grade))
+    return client_safe_view_payload(payload)
+
+
+def decision_cockpit(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, readiness: dict[str, Any] | None) -> dict[str, Any]:
+    readiness = readiness or {}
+    blocking = readiness.get("blocking_gaps") or []
+    warnings = readiness.get("warnings") or []
+    counts = readiness.get("counts") or {}
+    supplier_quality = readiness.get("supplier_quality_gate") or {}
+    competitor_gate = readiness.get("competitor_gate") or {}
+    segment_gate = readiness.get("segment_gate") or {}
+    if blocking:
+        next_action = "先补齐阻断项，再生成完整客户报告。"
+    elif warnings:
+        next_action = "可用于方向判断，但关键风险需在打样和二次采集中复核。"
+    else:
+        next_action = "可进入客户版完整报告和小批量验证。"
+    return {
+        "核心结论": customer_safe_asset_text(decision),
+        "当前阻断项": [customer_safe_asset_text(first(item.get("reason"), item.get("module"), default="需复核")) for item in blocking],
+        "风险提醒": [customer_safe_asset_text(first(item.get("impact"), item.get("module"), default="需复核")) for item in warnings],
+        "数据完整度": {
+            "有效竞品": counts.get("valid_competitors", counts.get("products", 0)),
+            "关键词": counts.get("keywords", len(data_pack.get("keywords") or [])),
+            "评论": counts.get("reviews", len(data_pack.get("reviews") or [])),
+            "1688有效报价": counts.get("valid_supplier_quotes", 0),
+            "细分赛道": counts.get("market_segments", 0),
+        },
+        "门禁状态": {
+            "竞品池": "通过" if competitor_gate.get("passed") else "需补采",
+            "赛道拆分": "通过" if segment_gate.get("passed", True) else "需拆分",
+            "1688质量": "通过" if supplier_quality.get("passed") else "需复核",
+        },
+        "下一步动作": next_action,
     }
 
 
@@ -218,7 +323,8 @@ def build_site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], de
         "interactive_features": INTERACTIVE_FEATURES,
         "decision": decision,
         "readiness": readiness_summary(readiness),
-        "quality": data_pack.get("quality") or {},
+        "quality": customer_quality_label(data_pack.get("quality") or {}),
+        "decision_cockpit": decision_cockpit(data_pack, analysis_plan, decision, readiness),
         "cleaning_summary": {
             "deduped": normalization.get("deduped"),
             "before_counts": normalization.get("before_counts") or {},
@@ -231,6 +337,8 @@ def build_site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], de
             "keywords": len(data_pack.get("keywords") or []),
             "reviews": len(data_pack.get("reviews") or []),
             "tiktok_products": len(data_pack.get("tiktok_products") or []),
+            "tiktok_videos": len(data_pack.get("tiktok_videos") or []),
+            "tiktok_authors": len(data_pack.get("tiktok_authors") or []),
             "suppliers": len(data_pack.get("suppliers") or []),
             "web_documents": len(data_pack.get("web_documents") or []),
             "method_chain": len(analysis_plan.get("method_chain") or []),
@@ -254,14 +362,19 @@ def safe_kpis(data_pack: dict[str, Any], decision: str) -> list[dict[str, Any]]:
     category = (data_pack.get("categories") or [{}])[0]
     keywords = [kw for kw in data_pack.get("keywords") or [] if kw.get("monthly_search_volume")]
     keywords = sorted(keywords, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
+    products = relevant_products(data_pack.get("products") or [])
     return [
         {"label": "核心判断", "value": decision, "subtext": "Go / Watch / No-Go"},
         {"label": "Top100 估算月销量", "value": category.get("top100_estimated_monthly_units"), "subtext": "第三方类目代理指标"},
         {"label": "关键词记录", "value": len(data_pack.get("keywords") or []), "subtext": "归一化后数据"},
         {"label": "评论记录", "value": len(data_pack.get("reviews") or []), "subtext": "客户版只展示中文摘要"},
-        {"label": "竞品记录", "value": len(data_pack.get("products") or []), "subtext": "Amazon 产品池"},
+        {"label": "竞品", "value": len(products), "subtext": "过滤非目标噪声后"},
         {"label": "供应端记录", "value": len(data_pack.get("suppliers") or []), "subtext": "1688 参考"},
-        {"label": "TikTok 商品", "value": len(data_pack.get("tiktok_products") or []), "subtext": "内容端信号"},
+        {
+            "label": "TikTok 信号",
+            "value": len(data_pack.get("tiktok_products") or []) + len(data_pack.get("tiktok_videos") or []) + len(data_pack.get("tiktok_authors") or []),
+            "subtext": "商品/视频/达人",
+        },
         {"label": "最大关键词月搜索", "value": keywords[0].get("monthly_search_volume") if keywords else None, "subtext": keywords[0].get("keyword_cn") if keywords else "需增加关键词采集"},
     ]
 
@@ -291,6 +404,7 @@ def build_report_views(data_pack: dict[str, Any], analysis_plan: dict[str, Any],
             "reviews": len(reviews),
             "tiktok_products": len(data_pack.get("tiktok_products") or []),
             "tiktok_videos": len(data_pack.get("tiktok_videos") or []),
+            "tiktok_authors": len(data_pack.get("tiktok_authors") or []),
             "suppliers": len(suppliers),
             "web_documents": len(data_pack.get("web_documents") or []),
         },

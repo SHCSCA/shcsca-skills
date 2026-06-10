@@ -5,6 +5,9 @@ import sys
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+
+import child_report_renderer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,7 +55,7 @@ class ChildSkillSplitTest(unittest.TestCase):
     def test_internal_child_render_scripts_write_expected_html(self):
         child_root = ROOT / "amz-market-research-orchestrated" / "child_skills"
         scripts = [
-            ("market-depth-report", "render_market_depth_report.py", "market_depth_view.json", "market-depth-report.html", "", "大盘仪表盘 · Market Dashboard"),
+            ("market-depth-report", "render_market_depth_report.py", "market_depth_view.json", "market-depth-report.html", "template-market", "大盘仪表盘 · Market Dashboard"),
             ("lifecycle-strategy-report", "render_lifecycle_strategy_report.py", "lifecycle_strategy_view.json", "lifecycle-strategy-report.html", "template-lifecycle", "生命周期旅程"),
             ("demand-gap-report", "render_demand_gap_report.py", "demand_gap_view.json", "demand-gap-report.html", "template-demand mode-r3", "KANO × JTBD"),
         ]
@@ -79,10 +82,7 @@ class ChildSkillSplitTest(unittest.TestCase):
                 html_path = report_dir / "output" / "html_reports" / output_file
                 self.assertTrue(html_path.exists(), output_file)
                 html = html_path.read_text(encoding="utf-8")
-                if template_class:
-                    self.assertIn(f'class="{template_class}"', html)
-                else:
-                    self.assertNotIn('class="template-market"', html)
+                self.assertIn(f'class="{template_class}"', html)
                 self.assertNotIn("site-nav", html)
                 self.assertIn('href="assets/report.css"', html)
                 self.assertIn('src="assets/report.js"', html)
@@ -92,6 +92,29 @@ class ChildSkillSplitTest(unittest.TestCase):
                 self.assertNotIn("source_id", html)
             self.assertTrue((report_dir / "output" / "html_reports" / "assets" / "report.css").exists())
             self.assertTrue((report_dir / "output" / "html_reports" / "assets" / "report.js").exists())
+
+    def test_child_renderer_does_not_silently_fallback_when_canonical_render_fails(self):
+        child_root = ROOT / "amz-market-research-orchestrated" / "child_skills"
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            view_path = report_dir / "analysis" / "demand_gap_view.json"
+            view_path.parent.mkdir(parents=True, exist_ok=True)
+            view_path.write_text(json.dumps({"kpis": [], "tables": {}, "limitations": []}, ensure_ascii=False), encoding="utf-8")
+
+            with patch("report_renderers.build_report_documents", side_effect=RuntimeError("canonical exploded")):
+                with self.assertRaisesRegex(RuntimeError, "demand_gap child renderer failed to reuse canonical template"):
+                    child_report_renderer.render_child_report(
+                        report_dir,
+                        child_root / "demand-gap-report",
+                        "demand_gap_view.json",
+                        "demand-gap-report.html",
+                        "用户心智断层与需求机会报告",
+                        "{{DEMAND_REPORT_TITLE}}",
+                        "{{DEMAND_GAP_REPORT_BODY}}",
+                    )
+
+            html_path = report_dir / "output" / "html_reports" / "demand-gap-report.html"
+            self.assertFalse(html_path.exists())
 
 
 if __name__ == "__main__":

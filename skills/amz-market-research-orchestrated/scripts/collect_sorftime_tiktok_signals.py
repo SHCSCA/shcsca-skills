@@ -19,6 +19,7 @@ DETAIL_TOOL = "tiktok_product_detail"
 TREND_TOOL = "tiktok_product_trend"
 VIDEO_TOOL = "tiktok_product_video"
 AUTHOR_TOOL = "tiktok_product_video_author"
+AUTHOR_SEARCH_TOOL = "tiktok_author"
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -252,12 +253,31 @@ def author_summary(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def author_entity(row: dict[str, Any], source_id: str, seed: str) -> dict[str, Any]:
+    return {
+        "author": first(row, "达人", "达人名称", "author", "name", "Author"),
+        "profile_url": first(row, "主页链接", "url", "URL", "profile_url"),
+        "followers": to_number(first(row, "粉丝数", "达人粉丝量", "followers", "author_followers")),
+        "product_count": to_number(first(row, "带货商品数", "product_count")),
+        "video_count": to_number(first(row, "视频数", "video_count")),
+        "total_views": to_number(first(row, "总播放量", "total_views")),
+        "gmv": to_number(first(row, "销售额", "gmv")),
+        "seed_keyword": seed,
+        "source_id": source_id,
+        "provider": "sorftime",
+    }
+
+
 def product_identity(product: dict[str, Any]) -> str:
     return str(product.get("product_id") or "").strip()
 
 
 def video_identity(video: dict[str, Any]) -> str:
     return str(video.get("url") or video.get("video_id") or "").strip().casefold()
+
+
+def author_identity(author: dict[str, Any]) -> str:
+    return str(author.get("profile_url") or author.get("author") or "").strip().casefold()
 
 
 def merge_product(data_pack: dict[str, Any], entity: dict[str, Any]) -> bool:
@@ -285,6 +305,20 @@ def merge_video(data_pack: dict[str, Any], entity: dict[str, Any]) -> bool:
                     existing[key] = value
             return False
     data_pack["tiktok_videos"].append(entity)
+    return True
+
+
+def merge_author(data_pack: dict[str, Any], entity: dict[str, Any]) -> bool:
+    identity = author_identity(entity)
+    if not identity:
+        return False
+    for existing in data_pack.setdefault("tiktok_authors", []):
+        if author_identity(existing) == identity:
+            for key, value in entity.items():
+                if value not in (None, "", []) and existing.get(key) in (None, "", []):
+                    existing[key] = value
+            return False
+    data_pack["tiktok_authors"].append(entity)
     return True
 
 
@@ -320,6 +354,7 @@ def collect(
     data_pack.setdefault("sources", [])
     data_pack.setdefault("tiktok_products", [])
     data_pack.setdefault("tiktok_videos", [])
+    data_pack.setdefault("tiktok_authors", [])
     data_pack.setdefault("data_gaps", [])
     raw_dir = report_dir / "data" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -329,6 +364,7 @@ def collect(
     calls = 0
     products_added = 0
     videos_added = 0
+    authors_added = 0
     errors: list[dict[str, Any]] = []
 
     for seed in seed_terms:
@@ -343,6 +379,21 @@ def collect(
                         products_added += 1
             except Exception as exc:
                 errors.append({"tool": SIMILAR_TOOL, "args": args, "error": f"{type(exc).__name__}: {exc}"})
+            calls += 1
+            if sleep_seconds:
+                time.sleep(sleep_seconds)
+
+            author_args = {"searchName": seed, "page": page, "site": site}
+            try:
+                _, rows, raw_path = run_call(url, raw_dir, AUTHOR_SEARCH_TOOL, author_args)
+                source_id = f"sf_tiktok_author_{slug(seed)}_p{page:03d}"
+                if rows:
+                    add_source(data_pack, source_id, AUTHOR_SEARCH_TOOL, author_args, raw_path, fetched_at)
+                for row in rows:
+                    if merge_author(data_pack, author_entity(row, source_id, seed)):
+                        authors_added += 1
+            except Exception as exc:
+                errors.append({"tool": AUTHOR_SEARCH_TOOL, "args": author_args, "error": f"{type(exc).__name__}: {exc}"})
             calls += 1
             if sleep_seconds:
                 time.sleep(sleep_seconds)
@@ -389,7 +440,11 @@ def collect(
             if sleep_seconds:
                 time.sleep(sleep_seconds)
 
-    signal_total = len(data_pack.get("tiktok_products") or []) + len(data_pack.get("tiktok_videos") or [])
+    signal_total = (
+        len(data_pack.get("tiktok_products") or [])
+        + len(data_pack.get("tiktok_videos") or [])
+        + len(data_pack.get("tiktok_authors") or [])
+    )
     collection_ready = signal_total >= min_signals
     if not collection_ready:
         data_pack["data_gaps"].append(
@@ -412,8 +467,10 @@ def collect(
         "calls": calls,
         "products_total": len(data_pack.get("tiktok_products") or []),
         "videos_total": len(data_pack.get("tiktok_videos") or []),
+        "authors_total": len(data_pack.get("tiktok_authors") or []),
         "products_added": products_added,
         "videos_added": videos_added,
+        "authors_added": authors_added,
         "errors": errors,
     }
     write_json(report_dir / "data" / "normalized" / "tiktok_collection_summary.json", summary)

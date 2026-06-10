@@ -36,7 +36,7 @@ class CustomerSafetyTest(unittest.TestCase):
         for leaked in ["source_id", "src_001", "provider", "sorftime", "raw_path", "data/raw", "B0TEST1234", "internal_product_1", "sf_分析方法"]:
             self.assertNotIn(leaked, redacted)
         self.assertIn("中文化评论摘要", redacted)
-        self.assertIn("竞品记录", redacted)
+        self.assertIn("参考竞品", redacted)
 
     def test_customer_safe_asset_text_redacts_internal_ids_without_destroying_normal_strength_words(self):
         text = "ASIN B0TEST1234 来源 src_评论_under 证据强度 高，data/raw/file.json"
@@ -61,7 +61,67 @@ class CustomerSafetyTest(unittest.TestCase):
         redacted = redact_customer_html(html, data_pack)
 
         self.assertIn('data-allow-asin="benchmark-sniper">B0TEST1234</span>', redacted)
-        self.assertIn("其他区域 竞品记录 仍要脱敏", redacted)
+        self.assertIn("其他区域 参考竞品 仍要脱敏", redacted)
+
+    def test_redact_customer_html_preserves_profit_scoped_asin(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <table id="profit-model">
+          <td><span class="asin-token" data-allow-asin="profit-model">B0TEST1234</span></td>
+        </table>
+        <p>附录 B0TEST1234 不允许展示。</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-asin="profit-model">B0TEST1234</span>', redacted)
+        self.assertIn("附录 参考竞品 不允许展示", redacted)
+
+    def test_redact_customer_html_preserves_competitor_table_scoped_asin(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <table class="comp-table">
+          <td><span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></td>
+        </table>
+        <p>说明文字 B0TEST1234 不允许展示。</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-asin="competitor-table">B0TEST1234</span>', redacted)
+        self.assertIn("说明文字 参考竞品 不允许展示", redacted)
+
+    def test_redact_customer_html_preserves_demand_target_anchor_scoped_asin(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <section id="target-anchor">
+          <h2>目标ASIN锚点（<span class="asin-token" data-allow-asin="demand-target-anchor">B0TEST1234</span>）</h2>
+        </section>
+        <p>正文其他位置 B0TEST1234 仍要脱敏。</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-asin="demand-target-anchor">B0TEST1234</span>', redacted)
+        self.assertIn("正文其他位置 参考竞品 仍要脱敏", redacted)
+
+    def test_redact_customer_html_does_not_rewrite_structural_asin_tokens(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <table class="comp-table">
+          <col class="comp-col-asin">
+          <td><span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></td>
+        </table>
+        <p>asin B0TEST1234</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('class="comp-col-asin"', redacted)
+        self.assertIn('class="asin-token"', redacted)
+        self.assertIn('data-allow-asin="competitor-table"', redacted)
+        self.assertNotIn("comp-col-参考竞品", redacted)
+        self.assertIn("<p>参考竞品 参考竞品</p>", redacted)
 
     def test_redact_customer_html_preserves_scoped_english_review_excerpt(self):
         data_pack = {
@@ -103,6 +163,15 @@ class CustomerSafetyTest(unittest.TestCase):
         self.assertNotIn("raw_path", safe["nested"][0])
         self.assertNotIn("sf_评论_under", safe["nested"][0]["summary"])
         self.assertIn("高相关评论", safe["nested"][0]["summary"])
+
+    def test_customer_safe_asset_text_converts_internal_status_labels(self):
+        text = "ready_for_normalization warning success amz-market-research-orchestrated three-report-index-v2 ProductId StoreName Price Photo"
+
+        safe = customer_safe_asset_text(text)
+
+        for leaked in ["ready_for_normalization", "warning", "success", "amz-market-research-orchestrated", "three-report-index-v2", "ProductId", "StoreName", "Price", "Photo"]:
+            self.assertNotIn(leaked, safe)
+        self.assertIn("可用于方向判断", safe)
 
 
 if __name__ == "__main__":

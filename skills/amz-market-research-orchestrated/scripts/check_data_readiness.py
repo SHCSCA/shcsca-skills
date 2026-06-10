@@ -10,16 +10,61 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from html_components import relevant_products
+
 
 MIN_STANDARD_KEYWORDS = 1000
 MIN_STANDARD_PRODUCTS = 1
+MIN_STANDARD_COMPETITORS = 30
+MIN_DEEP_COMPETITORS = 60
+MIN_BROAD_MARKET_SEGMENTS = 3
+MIN_COMPETITORS_PER_PRIMARY_SEGMENT = 10
 MIN_QUICK_KEYWORDS = 1
 MIN_QUICK_PRODUCTS = 1
 RECOMMENDED_STANDARD_REVIEW_SAMPLE = 80
 RECOMMENDED_DEEP_REVIEW_SAMPLE = 200
 RECOMMENDED_WEB_DOCUMENTS = 1
 MIN_VALID_1688_QUOTES = 50
+MIN_SUPPLIER_FIELD_COVERAGE_PCT = 70
+MAX_SUPPLIER_MAX_TO_P50_RATIO = 20
+MAX_SUPPLIER_P75_TO_P25_RATIO = 5
 RECOMMENDED_TIKTOK_SIGNALS = 1
+SUPPLY_BLOCKER_MODULES = {"supplier_quote_depth", "supplier_quote_quality", "supplier_quote_price_spread"}
+SUPPLIER_NON_FINISHED_TOKENS = [
+    "灯珠",
+    "发光二极管",
+    "控制器",
+    "调光器",
+    "驱动电源",
+    "电源适配器",
+    "光源模组",
+    "灯板",
+    "芯片",
+    "ic ",
+    "配件",
+    "冷光片",
+    "植物灯",
+    "洗墙灯",
+    "工程灯",
+    "投光灯",
+    "泛光灯",
+    "广告灯",
+    "招牌灯",
+    "led bead",
+    "diode",
+    "controller",
+    "driver",
+    "power supply",
+    "module",
+    "accessory",
+]
+BROAD_RESEARCH_TERMS = {
+    "smart lighting",
+    "智能照明",
+    "lighting",
+    "灯具",
+    "led lighting",
+}
 
 
 class ReadinessError(Exception):
@@ -121,6 +166,118 @@ def supplier_identity(supplier: dict[str, Any]) -> str:
     return f"title_shop|{title}|{shop}" if title and shop else ""
 
 
+def product_price(product: dict[str, Any]) -> Any:
+    for key in ("price", "current_price", "buy_box_price"):
+        if product.get(key) not in (None, ""):
+            return product.get(key)
+    return None
+
+
+def product_sales(product: dict[str, Any]) -> Any:
+    for key in ("estimated_monthly_sales", "monthly_sales", "sales", "sales_30d", "bsr_sales_estimate"):
+        if product.get(key) not in (None, ""):
+            return product.get(key)
+    for key in ("bsr", "rank", "sales_rank", "best_seller_rank"):
+        if product.get(key) not in (None, ""):
+            return product.get(key)
+    return None
+
+
+def product_reviews(product: dict[str, Any]) -> Any:
+    for key in ("review_count", "reviews", "rating_count", "ratings_count"):
+        if product.get(key) not in (None, ""):
+            return product.get(key)
+    return None
+
+
+def product_segment(product: dict[str, Any]) -> str:
+    return str(product.get("segment_cn") or product.get("segment") or product.get("category_cn") or product.get("category") or "").strip()
+
+
+def is_valid_segment(segment: str) -> bool:
+    return bool(segment and segment not in {"未分层", "unclassified", "unknown", "n/a", "na"})
+
+
+def valid_competitor_products(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    valid: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for product in relevant_products(data_pack.get("products") or []):
+        if not isinstance(product, dict):
+            continue
+        asin = str(product.get("asin") or "").strip().upper()
+        title = str(product.get("title") or product.get("title_cn") or "").strip()
+        brand = str(product.get("brand") or "").strip()
+        segment = product_segment(product)
+        price = to_float(product_price(product))
+        rating = to_float(product.get("rating") or product.get("星级"))
+        reviews = to_float(product_reviews(product))
+        sales = to_float(product_sales(product))
+        key = asin or title.casefold()
+        if (
+            not key
+            or key in seen
+            or not asin
+            or not title
+            or not brand
+            or not is_valid_segment(segment)
+            or price is None
+            or price <= 0
+            or rating is None
+            or rating <= 0
+            or reviews is None
+            or reviews <= 0
+            or sales is None
+            or sales <= 0
+        ):
+            continue
+        seen.add(key)
+        valid.append(product)
+    return valid
+
+
+def research_object_text(report_dir: Path, data_pack: dict[str, Any]) -> str:
+    brief = load_json(report_dir / "report_brief.json", {})
+    values: list[str] = []
+    for source in (brief, data_pack.get("brief") or {}, data_pack):
+        if not isinstance(source, dict):
+            continue
+        obj = source.get("research_object")
+        if isinstance(obj, dict):
+            values.append(str(obj.get("value") or ""))
+        elif obj:
+            values.append(str(obj))
+        for key in ("task_id", "category", "keyword"):
+            if source.get(key):
+                values.append(str(source.get(key)))
+    return " ".join(values).casefold()
+
+
+def is_broad_research(report_dir: Path, data_pack: dict[str, Any]) -> bool:
+    text = research_object_text(report_dir, data_pack)
+    return any(term in text for term in BROAD_RESEARCH_TERMS)
+
+
+def segment_counts(products: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for product in products:
+        segment = product_segment(product) or "未分层"
+        counts[segment] = counts.get(segment, 0) + 1
+    return counts
+
+
+def percentile(values: list[float], ratio: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    pos = (len(ordered) - 1) * ratio
+    lower = int(pos)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = pos - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
 def valid_supplier_quotes(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     valid: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -145,13 +302,134 @@ def valid_supplier_quotes(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     return valid
 
 
+def supplier_price(supplier: dict[str, Any]) -> Any:
+    if supplier.get("price_rmb") not in (None, ""):
+        return supplier.get("price_rmb")
+    if supplier.get("factory_price_rmb") not in (None, ""):
+        return supplier.get("factory_price_rmb")
+    return supplier.get("price")
+
+
+def supplier_title_text(supplier: dict[str, Any]) -> str:
+    return " ".join(
+        str(supplier.get(key) or "")
+        for key in ["title", "title_cn", "name", "product_name", "supplier_name", "seed_keyword"]
+    ).strip().casefold()
+
+
+def is_finished_supplier_quote(supplier: dict[str, Any]) -> bool:
+    price = to_float(supplier_price(supplier))
+    if price is None or price <= 0:
+        return False
+    text = supplier_title_text(supplier)
+    if any(token in text for token in SUPPLIER_NON_FINISHED_TOKENS):
+        return False
+    if price < 0.5:
+        return False
+    return True
+
+
+def supplier_quality(valid_quotes: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(valid_quotes)
+    prices = []
+    title_count = 0
+    identity_count = 0
+    segment_hint_count = 0
+    for supplier in valid_quotes:
+        title = supplier.get("title") or supplier.get("title_cn") or supplier.get("name")
+        url = supplier.get("canonical_url") or supplier.get("url") or supplier.get("product_url")
+        product_id = supplier.get("product_id") or supplier.get("offer_id")
+        segment_hint = supplier.get("segment_cn") or supplier.get("segment") or supplier.get("seed_keyword") or supplier.get("search_term")
+        if title:
+            title_count += 1
+        if url or product_id:
+            identity_count += 1
+        if segment_hint:
+            segment_hint_count += 1
+        price = to_float(
+            supplier.get("price_rmb")
+            if supplier.get("price_rmb") not in (None, "")
+            else supplier.get("factory_price_rmb")
+            if supplier.get("factory_price_rmb") not in (None, "")
+            else supplier.get("price")
+        )
+        if price is not None and price > 0:
+            prices.append(price)
+    title_pct = round((title_count / total) * 100, 1) if total else 0
+    identity_pct = round((identity_count / total) * 100, 1) if total else 0
+    segment_pct = round((segment_hint_count / total) * 100, 1) if total else 0
+    p25 = percentile(prices, 0.25)
+    p50 = percentile(prices, 0.50)
+    p75 = percentile(prices, 0.75)
+    max_price = max(prices) if prices else None
+    max_to_p50 = round(max_price / p50, 2) if max_price and p50 else None
+    p75_to_p25 = round(p75 / p25, 2) if p75 and p25 else None
+    field_passed = title_pct >= MIN_SUPPLIER_FIELD_COVERAGE_PCT and identity_pct >= MIN_SUPPLIER_FIELD_COVERAGE_PCT
+    price_spread_passed = (
+        max_to_p50 is None
+        or p75_to_p25 is None
+        or (max_to_p50 <= MAX_SUPPLIER_MAX_TO_P50_RATIO and p75_to_p25 <= MAX_SUPPLIER_P75_TO_P25_RATIO)
+    )
+    return {
+        "required_field_coverage_pct": MIN_SUPPLIER_FIELD_COVERAGE_PCT,
+        "title_coverage_pct": title_pct,
+        "identity_coverage_pct": identity_pct,
+        "segment_hint_coverage_pct": segment_pct,
+        "p25_rmb": p25,
+        "p50_rmb": p50,
+        "p75_rmb": p75,
+        "max_rmb": max_price,
+        "max_to_p50_ratio": max_to_p50,
+        "p75_to_p25_ratio": p75_to_p25,
+        "field_quality_passed": field_passed,
+        "price_spread_passed": price_spread_passed,
+        "passed": field_passed and price_spread_passed,
+    }
+
+
+def supplier_bucket_label(supplier: dict[str, Any]) -> str:
+    for key in ("seed_keyword", "search_term", "query", "segment_cn", "segment"):
+        value = supplier.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def same_search_supplier_bucket_gate(valid_quotes: list[dict[str, Any]], minimum_quotes: int = MIN_VALID_1688_QUOTES) -> dict[str, Any]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for supplier in valid_quotes:
+        label = supplier_bucket_label(supplier)
+        if not label:
+            continue
+        buckets.setdefault(label, []).append(supplier)
+
+    best: dict[str, Any] = {"passed": False, "bucket": None, "valid_quotes": 0, "quality": None}
+    for label, quotes in buckets.items():
+        if len(quotes) < minimum_quotes:
+            continue
+        quality = supplier_quality(quotes)
+        candidate = {
+            "passed": quality["passed"],
+            "bucket": label,
+            "valid_quotes": len(quotes),
+            "quality": quality,
+        }
+        if candidate["passed"]:
+            return candidate
+        if len(quotes) > int(best.get("valid_quotes") or 0):
+            best = candidate
+    return best
+
+
 def collector_commands(report_dir: Path) -> list[str]:
     report = str(report_dir)
     return [
         f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir {report} --min-keywords 1200",
+        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_products.py --dir {report} --min-products {MIN_STANDARD_COMPETITORS} --max-seeds 8 --max-pages 3 --site US --min-segments {MIN_BROAD_MARKET_SEGMENTS} --min-per-segment {MIN_COMPETITORS_PER_PRIMARY_SEGMENT}",
+        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_product_enrichment.py --dir {report} --max-products 10 --max-pages 1 --site US",
         f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_reviews.py --dir {report} --review-type Both",
         f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_tiktok_signals.py --dir {report} --site US --max-seeds 4 --max-pages 1 --max-products-detail 3 --video-pages 1",
-        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir {report} --min-valid-quotes {MIN_VALID_1688_QUOTES} --max-rounds 5",
+        f"python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir {report} --min-valid-quotes {MIN_VALID_1688_QUOTES} --max-rounds 5 --max-pages 3 --force-rounds",
         f"python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --dir {report}",
     ]
 
@@ -164,15 +442,44 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     required_keywords = MIN_STANDARD_KEYWORDS if standard_like else MIN_QUICK_KEYWORDS
     required_products = MIN_STANDARD_PRODUCTS if standard_like else MIN_QUICK_PRODUCTS
 
-    supplier_quotes = valid_supplier_quotes(data_pack)
+    raw_supplier_quotes = valid_supplier_quotes(data_pack)
+    supplier_quotes = [quote for quote in raw_supplier_quotes if is_finished_supplier_quote(quote)]
+    non_finished_filtered = len(raw_supplier_quotes) - len(supplier_quotes)
+    competitor_products = valid_competitor_products(data_pack)
+    competitor_segments = segment_counts(competitor_products)
+    supplier_quality_gate = supplier_quality(supplier_quotes)
+    same_search_bucket_gate = same_search_supplier_bucket_gate(supplier_quotes)
+    supplier_quality_gate["same_search_bucket_gate"] = same_search_bucket_gate
+    supplier_quality_gate["global_passed"] = supplier_quality_gate["passed"]
+    supplier_quality_gate["effective_passed"] = bool(supplier_quality_gate["passed"] or same_search_bucket_gate.get("passed"))
+    supplier_quality_gate["passed"] = supplier_quality_gate["effective_passed"]
+    supplier_collection_summary = load_json(report_dir / "data" / "normalized" / "supplier_1688_collection_summary.json", {})
+    missing_1688_fields = supplier_collection_summary.get("missing_documented_required_fields") or []
+    if missing_1688_fields:
+        supplier_quality_gate["missing_documented_required_fields"] = missing_1688_fields
+        supplier_quality_gate["observed_fields"] = supplier_collection_summary.get("observed_fields") or []
+    competitor_minimum = MIN_DEEP_COMPETITORS if resolved_depth == "deep" else MIN_STANDARD_COMPETITORS if standard_like else MIN_QUICK_PRODUCTS
+    broad_research = is_broad_research(report_dir, data_pack)
+    top_segment_counts = sorted(competitor_segments.values(), reverse=True)
+    segment_gate_passed = (
+        not broad_research
+        or (
+            len(competitor_segments) >= MIN_BROAD_MARKET_SEGMENTS
+            and len(top_segment_counts) >= MIN_BROAD_MARKET_SEGMENTS
+            and all(count >= MIN_COMPETITORS_PER_PRIMARY_SEGMENT for count in top_segment_counts[:MIN_BROAD_MARKET_SEGMENTS])
+        )
+    )
     counts = {
         "sources": count(data_pack, "sources"),
         "products": count(data_pack, "products"),
+        "valid_competitors": len(competitor_products),
+        "market_segments": len(competitor_segments),
         "keywords": count(data_pack, "keywords"),
         "categories": count(data_pack, "categories"),
         "reviews": count(data_pack, "reviews"),
         "tiktok_products": count(data_pack, "tiktok_products"),
         "tiktok_videos": count(data_pack, "tiktok_videos"),
+        "tiktok_authors": count(data_pack, "tiktok_authors"),
         "suppliers": count(data_pack, "suppliers"),
         "valid_supplier_quotes": len(supplier_quotes),
         "web_documents": count(data_pack, "web_documents"),
@@ -200,6 +507,26 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 required_products,
                 "缺少 Amazon 产品池/竞品样本，市场、生命周期和需求断层报告都会失真。",
                 "先运行产品池/搜索结果/竞品详情采集，再归一化。",
+            )
+        )
+    if standard_like and len(competitor_products) < competitor_minimum:
+        blocking_gaps.append(
+            gap(
+                "competitor_pool_depth",
+                len(competitor_products),
+                competitor_minimum,
+                "亚马逊竞品池不足，不能支撑标准版/深度版市场格局、价格带和标杆竞品拆解。",
+                "补采 Amazon 竞品详情，确保每个竞品具备 ASIN、标题、品牌、价格、评分、评论数、销量或排名代理字段、细分赛道。",
+            )
+        )
+    if standard_like and not segment_gate_passed:
+        blocking_gaps.append(
+            gap(
+                "market_segment_split",
+                len(competitor_segments),
+                MIN_BROAD_MARKET_SEGMENTS,
+                "研究对象属于大词，必须先拆分到可比较的细分赛道，不能把混合类目直接做成完整结论。",
+                "按橱柜感应灯、RGB 灯带、智能灯泡、氛围灯、户外感应灯等方向补齐每个主赛道至少 10 个有效竞品。",
             )
         )
     if counts["keywords"] < required_keywords:
@@ -237,6 +564,8 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     supplier_gate = {
         "required": MIN_VALID_1688_QUOTES if standard_like else 1,
         "actual": counts["valid_supplier_quotes"],
+        "raw_valid_quotes": len(raw_supplier_quotes),
+        "non_finished_filtered": non_finished_filtered,
         "passed": counts["valid_supplier_quotes"] >= (MIN_VALID_1688_QUOTES if standard_like else 1),
         "policy": "1688 去重有效报价不足时必须多轮 Sorftime 采集，不得生成最终供应链毛利率结论。",
     }
@@ -250,28 +579,83 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 "运行 collect_sorftime_1688_suppliers.py 多轮切换搜索词补采；5 轮仍不足时阻断供应链结论并输出诊断。",
             )
         )
-    if counts["tiktok_products"] + counts["tiktok_videos"] < RECOMMENDED_TIKTOK_SIGNALS:
+    if supplier_gate["passed"] and not supplier_quality_gate["field_quality_passed"] and not same_search_bucket_gate.get("passed"):
+        missing_field_note = (
+            f" 当前 Sorftime 1688 MCP 实际响应缺少官方文档关键字段：{', '.join(str(field) for field in missing_1688_fields)}。"
+            if missing_1688_fields
+            else ""
+        )
+        blocking_gaps.append(
+            gap(
+                "supplier_quote_quality",
+                int(min(supplier_quality_gate["title_coverage_pct"], supplier_quality_gate["identity_coverage_pct"])),
+                MIN_SUPPLIER_FIELD_COVERAGE_PCT,
+                "1688 报价虽然达到数量门槛，但商品标题、链接或稳定商品指纹覆盖不足，不能证明报价与目标赛道匹配。" + missing_field_note,
+                "用细分赛道中文词重新采集 1688，要求去重报价同时具备标题、供应商、价格和链接或稳定商品指纹；若 MCP 继续缺少 Title/URL，需要先修正 Sorftime 返回字段。",
+            )
+        )
+    if supplier_gate["passed"] and not supplier_quality_gate["price_spread_passed"] and same_search_bucket_gate.get("passed"):
+        warnings.append(
+            warning(
+                "supplier_quote_price_spread_global",
+                int(supplier_quality_gate["max_to_p50_ratio"] or 0),
+                MAX_SUPPLIER_MAX_TO_P50_RATIO,
+                f"全局 1688 报价价差异常，已改用搜索词“{same_search_bucket_gate.get('bucket')}”下 {same_search_bucket_gate.get('valid_quotes')} 条同口径报价进入供应链测算。",
+                "继续保留全局异常报价在审计文件；客户页只展示同搜索词报价桶的成本分位数和竞品参考毛利率。",
+            )
+        )
+    if supplier_gate["passed"] and not supplier_quality_gate["price_spread_passed"] and not same_search_bucket_gate.get("passed"):
+        blocking_gaps.append(
+            gap(
+                "supplier_quote_price_spread",
+                int(supplier_quality_gate["max_to_p50_ratio"] or 0),
+                MAX_SUPPLIER_MAX_TO_P50_RATIO,
+                "1688 报价分布存在极端价差，说明混入非同类商品、套装、大宗设备或无关供应记录，不能直接进入毛利率测算。",
+                "按赛道重新筛选报价，剔除非同类和极端报价后再计算 P25/P50/P75。",
+            )
+        )
+    tiktok_signal_count = counts["tiktok_products"] + counts["tiktok_videos"] + counts.get("tiktok_authors", 0)
+    if tiktok_signal_count < RECOMMENDED_TIKTOK_SIGNALS:
         warnings.append(
             warning(
                 "tiktok_signal_depth",
-                counts["tiktok_products"] + counts["tiktok_videos"],
+                tiktok_signal_count,
                 RECOMMENDED_TIKTOK_SIGNALS,
                 "内容场景和渠道热度只能降级为未知。",
                 "运行 collect_sorftime_tiktok_signals.py 补 TikTok 商品/视频/达人链路；不可用时保留 TikTok 缺口。",
             )
         )
 
+    acceptance_ready = not blocking_gaps
+    blocking_modules = {item.get("module") for item in blocking_gaps}
+    partial_report_ready = bool(blocking_gaps) and blocking_modules <= SUPPLY_BLOCKER_MODULES
     return {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
         "depth": resolved_depth,
         "data_pack": data_pack_path,
-        "sample_class": "acceptance_sample" if not blocking_gaps else "non_acceptance_sample",
-        "acceptance_ready": not blocking_gaps,
+        "sample_class": "acceptance_sample" if acceptance_ready else "partial_acceptance_sample" if partial_report_ready else "non_acceptance_sample",
+        "acceptance_ready": acceptance_ready,
+        "partial_report_ready": partial_report_ready,
+        "supply_conclusion_blocked": bool(blocking_modules & SUPPLY_BLOCKER_MODULES),
         "blocking_gaps": blocking_gaps,
         "warnings": warnings,
         "counts": counts,
         "supplier_quote_gate": supplier_gate,
+        "supplier_quality_gate": supplier_quality_gate,
+        "competitor_gate": {
+            "minimum_total": competitor_minimum,
+            "valid_total": len(competitor_products),
+            "minimum_per_primary_segment": MIN_COMPETITORS_PER_PRIMARY_SEGMENT if broad_research else 0,
+            "segments": competitor_segments,
+            "passed": len(competitor_products) >= competitor_minimum,
+        },
+        "segment_gate": {
+            "broad_research": broad_research,
+            "required_segments": MIN_BROAD_MARKET_SEGMENTS if broad_research else 0,
+            "segments": competitor_segments,
+            "passed": segment_gate_passed,
+        },
         "collector_commands": collector_commands(report_dir),
     }
 

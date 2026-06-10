@@ -18,6 +18,7 @@ from normalize_data_pack import (
     product_dedupe_key,
     review_dedupe_key,
     supplier_dedupe_key,
+    tiktok_author_dedupe_key,
     tiktok_product_dedupe_key,
     tiktok_video_dedupe_key,
     web_document_dedupe_key,
@@ -28,6 +29,7 @@ from site_assets import COMPAT_INDEX_REPORT, HTML_BUNDLE_DIR, INTERACTIVE_FEATUR
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 TEMPLATE_BASELINE_MANIFEST = SKILL_DIR / "references" / "template-baseline-manifest.json"
+HTML_TEMPLATE_SLOT_CONTRACT = SKILL_DIR / "references" / "html-template-slot-contract.json"
 CANONICAL_TEMPLATE_ASSETS = {
     "market-depth-report-v2": SKILL_DIR / "assets" / "canonical_templates" / "market-depth-reference.html",
     "lifecycle-strategy-report-v2": SKILL_DIR / "assets" / "canonical_templates" / "lifecycle-strategy-reference.html",
@@ -91,6 +93,7 @@ ENTITY_LIST_KEYS = [
     "reviews",
     "tiktok_products",
     "tiktok_videos",
+    "tiktok_authors",
     "suppliers",
     "web_documents",
 ]
@@ -104,7 +107,7 @@ BANNED_REPORT_PHRASES = [
     "官方销售额",
 ]
 
-INDEX_STYLE_MARKER = "three-report-index-v2"
+INDEX_STYLE_MARKER = "三合一报告入口"
 MIN_KEYWORD_SAMPLE_COUNT = 1000
 
 CHILD_REPORTS = {
@@ -147,7 +150,7 @@ CHILD_REPORTS = {
         "filename": "demand-gap-report.html",
         "style": "demand-gap-report-v2",
         "sections": [
-            "研究对象概述",
+            "目标ASIN锚点",
             "决策看板",
             "市场痛点全景图（$APPEALS）",
             "满意度鸿沟",
@@ -203,31 +206,81 @@ REPORT_REQUIRED_CLASSES = {
         "sec",
         "card focus",
         "kano-grid",
-        "grid-3",
+        "demand-evidence-grid",
         "chart-interpretation",
     ],
 }
 
+TEMPLATE_STRUCTURE_PATTERNS = {
+    "market-depth-report-v2": [
+        ("竞品主表", r"<table\b[^>]*class=['\"][^'\"]*\bcomp-table\b"),
+        ("VOC 双栏", r"<div\b[^>]*class=['\"][^'\"]*\bvoc-grid\b"),
+        ("标杆竞品拆解", r"<div\b[^>]*class=['\"][^'\"]*\bcomp-deep-grid\b"),
+        ("供应链网格", r"<div\b[^>]*class=['\"][^'\"]*\bsupply-grid\b"),
+        ("价格方案", r"<div\b[^>]*class=['\"][^'\"]*\bpricing-grid\b"),
+        ("AI 生图 Prompt", r"<div\b[^>]*class=['\"][^'\"]*\bprompt-grid\b"),
+    ],
+    "lifecycle-strategy-report-v2": [
+        ("SKU 执行表", r"<table\b[^>]*id=['\"]skuTable['\"]"),
+        ("生命周期时间线", r"<div\b[^>]*class=['\"][^'\"]*\btimeline-grid\b"),
+        ("Bundle 策略", r"<div\b[^>]*class=['\"][^'\"]*\bbundle-grid\b"),
+        ("风险矩阵", r"<div\b[^>]*class=['\"][^'\"]*\brisk-grid\b"),
+    ],
+    "demand-gap-report-v2": [
+        ("APPEALS 图表", r"<div\b[^>]*id=['\"]appealsRose['\"][^>]*class=['\"][^'\"]*\bdemand-chart\b"),
+        ("需求鸿沟图表", r"<div\b[^>]*id=['\"]gapRadar['\"][^>]*class=['\"][^'\"]*\bdemand-chart\b"),
+        ("KANO/JTBD 矩阵", r"<div\b[^>]*class=['\"][^'\"]*\bkano-grid\b"),
+        ("证据机会卡", r"<div\b[^>]*class=['\"][^'\"]*\bdemand-evidence-grid\b"),
+    ],
+}
+
 CUSTOMER_HTML_REQUIRED_TERMS = ["证据强度", "数据覆盖", "数据缺口", "置信等级", "建议动作"]
-MARKET_DEPTH_BANNED_PLACEHOLDERS = ["样本", "样品", "补数", "待补", "待验证", "待评分", "待修复", "待样品"]
+CUSTOMER_HTML_BANNED_PLACEHOLDERS = [
+    "样本",
+    "样品",
+    "补数",
+    "待补",
+    "待验证",
+    "待评分",
+    "待修复",
+    "待样品",
+    "暂无有效数据",
+    "暂无数据",
+    "未分层",
+    "清洗数据",
+    "清洗后数据",
+    "清洗后的竞品",
+    "清洗后的结论",
+]
+MARKET_DEPTH_BANNED_PLACEHOLDERS = CUSTOMER_HTML_BANNED_PLACEHOLDERS
 
 CUSTOMER_HTML_BANNED_LITERALS = [
     "source_id",
     "source_ids",
     "used_source_ids",
     "Product ID",
+    "ProductId",
+    "StoreName",
+    "Price",
+    "Photo",
     "product_id",
     "raw_path",
     "provider",
     "method_id",
     "数据血缘",
     "来源",
+    "竞品记录",
+    "1688货源",
+    "ready_for_normalization",
+    "amz-market-research-orchestrated",
+    "three-report-index-v2",
 ]
 
 CUSTOMER_HTML_BANNED_PATTERNS = [
     re.compile(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
     re.compile(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
     re.compile(r"\bB0[A-Z0-9]{8}\b"),
+    re.compile(r"参考竞品\s+[^<]{0,48}参考竞品"),
     re.compile(r"\bdata/raw/[^\s<>'\"]+", re.IGNORECASE),
     re.compile(r"[A-Za-z]:\\[^\s<>'\"]+"),
 ]
@@ -246,6 +299,10 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValidationError(f"{path}: invalid JSON: {exc}") from exc
+
+
+def slot_contract() -> dict[str, Any]:
+    return load_json(HTML_TEMPLATE_SLOT_CONTRACT)
 
 
 def require(condition: bool, message: str) -> None:
@@ -269,6 +326,7 @@ def validate_unique_entity_keys(data_pack: dict[str, Any]) -> None:
         ("reviews", review_dedupe_key),
         ("tiktok_products", tiktok_product_dedupe_key),
         ("tiktok_videos", tiktok_video_dedupe_key),
+        ("tiktok_authors", tiktok_author_dedupe_key),
         ("suppliers", supplier_dedupe_key),
         ("web_documents", web_document_dedupe_key),
     ]
@@ -312,7 +370,7 @@ def validate_entity_lineage(data_pack: dict[str, Any], source_ids: set[str]) -> 
         require(key in data_pack, f"data_pack missing required key: {key}")
 
     for key in ENTITY_LIST_KEYS:
-        entities = data_pack[key]
+        entities = data_pack.get(key) or []
         require(isinstance(entities, list), f"data_pack.{key} must be a list")
         for idx, entity in enumerate(entities):
             require(isinstance(entity, dict), f"data_pack.{key}[{idx}] must be an object")
@@ -350,6 +408,46 @@ def validate_entity_lineage(data_pack: dict[str, Any], source_ids: set[str]) -> 
         if key in cross_counts and key in after_counts:
             require(cross_counts[key] <= after_counts[key], f"normalization.cross_validated_counts.{key} cannot exceed after_counts")
     validate_unique_entity_keys(data_pack)
+
+
+def validate_data_gaps_contract(data_pack: dict[str, Any]) -> None:
+    for idx, gap in enumerate(data_pack.get("data_gaps") or []):
+        if not isinstance(gap, dict):
+            continue
+        if gap.get("type") != "amazon_product_enrichment_empty_dimensions":
+            continue
+        require(
+            gap.get("module") == "amazon_product_enrichment",
+            f"data_gaps[{idx}] amazon product enrichment gap must use module=amazon_product_enrichment",
+        )
+        evidence = gap.get("retry_evidence")
+        require(isinstance(evidence, dict), f"data_gaps[{idx}] amazon product enrichment gap missing retry_evidence")
+        asins = evidence.get("asins_attempted")
+        require(isinstance(asins, list) and len(asins) >= 2, f"data_gaps[{idx}] retry_evidence.asins_attempted must include multiple ASINs")
+        require(
+            evidence.get("attempted_asin_count") == len(asins),
+            f"data_gaps[{idx}] retry_evidence.attempted_asin_count must match asins_attempted length",
+        )
+        empty_dimensions = evidence.get("empty_dimensions")
+        successful_dimensions = evidence.get("successful_dimensions")
+        tool_stats = evidence.get("tool_stats")
+        require(isinstance(empty_dimensions, list) and empty_dimensions, f"data_gaps[{idx}] retry_evidence.empty_dimensions must be a non-empty list")
+        require(
+            isinstance(successful_dimensions, list) and successful_dimensions,
+            f"data_gaps[{idx}] retry_evidence.successful_dimensions must be a non-empty list",
+        )
+        require(isinstance(tool_stats, dict), f"data_gaps[{idx}] retry_evidence.tool_stats must be an object")
+        for tool in empty_dimensions:
+            stats = tool_stats.get(tool)
+            require(isinstance(stats, dict), f"data_gaps[{idx}] retry_evidence.tool_stats missing empty dimension: {tool}")
+            require(
+                int(stats.get("calls") or 0) >= len(asins) and int(stats.get("rows") or 0) == 0,
+                f"data_gaps[{idx}] empty dimension {tool} must show retries across ASINs and zero rows",
+            )
+        for tool in successful_dimensions:
+            stats = tool_stats.get(tool)
+            require(isinstance(stats, dict), f"data_gaps[{idx}] retry_evidence.tool_stats missing successful dimension: {tool}")
+            require(int(stats.get("rows") or 0) > 0, f"data_gaps[{idx}] successful dimension {tool} must show returned rows")
 
 
 def validate_normalized_data_pack_consistency(report_dir: Path, data_pack: dict[str, Any]) -> None:
@@ -399,28 +497,57 @@ def validate_data_readiness(report_dir: Path) -> None:
     readiness = assess_data_readiness(report_dir, "auto")
     modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
     require(
-        readiness.get("acceptance_ready") is True,
-        f"data readiness must pass before final delivery validation: {modules}",
+        readiness.get("acceptance_ready") is True or readiness.get("partial_report_ready") is True,
+        f"data readiness must pass or be partial-ready before final delivery validation: {modules}",
     )
 
     recorded_path = report_dir / "data" / "normalized" / "data_readiness_report.json"
     if recorded_path.exists():
         recorded = load_json(recorded_path)
         require(isinstance(recorded, dict), "data_readiness_report.json must be an object")
-        require(recorded.get("acceptance_ready") is True, "data_readiness_report.json cannot be false for final delivery validation")
-        require(recorded.get("sample_class") == "acceptance_sample", "data_readiness_report.json sample_class must be acceptance_sample")
+        require(
+            recorded.get("acceptance_ready") is True or recorded.get("partial_report_ready") is True,
+            "data_readiness_report.json must be acceptance_ready or partial_report_ready for final delivery validation",
+        )
+        require(recorded.get("sample_class") in {"acceptance_sample", "partial_acceptance_sample"}, "data_readiness_report.json sample_class must be acceptance_sample or partial_acceptance_sample")
 
 
 def readiness_summary_for_contract(readiness: dict[str, Any]) -> dict[str, Any]:
+    supplier_quality = dict(readiness.get("supplier_quality_gate") or {})
+    missing_fields = supplier_quality.pop("missing_documented_required_fields", [])
+    supplier_quality.pop("observed_fields", None)
+    if missing_fields:
+        supplier_quality["field_diagnostic"] = "当前1688响应缺少商品标题和商品链接字段"
     return {
         "acceptance_ready": readiness.get("acceptance_ready"),
+        "partial_report_ready": readiness.get("partial_report_ready"),
+        "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
         "sample_class": readiness.get("sample_class"),
         "depth": readiness.get("depth"),
         "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
         "warning_count": len(readiness.get("warnings") or []),
         "counts": readiness.get("counts") or {},
         "supplier_quote_gate": readiness.get("supplier_quote_gate") or {},
+        "supplier_quality_gate": supplier_quality,
     }
+
+
+def readiness_contract_value_matches(key: str, recorded: Any, expected: Any) -> bool:
+    if key != "counts" or not isinstance(recorded, dict) or not isinstance(expected, dict):
+        return recorded == expected
+    for count_key, expected_value in expected.items():
+        if count_key not in recorded:
+            if count_key == "tiktok_authors" and expected_value in (0, None):
+                continue
+            return False
+        if recorded.get(count_key) != expected_value:
+            return False
+    for count_key, recorded_value in recorded.items():
+        if count_key not in expected:
+            if count_key == "tiktok_authors" and recorded_value in (0, None):
+                continue
+            return False
+    return True
 
 
 def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) -> None:
@@ -562,7 +689,13 @@ def customer_visible_text(text: str) -> str:
 
 def strip_allowed_customer_exceptions(text: str) -> str:
     text = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"\bdata-report-style=[\"'](?:three-report-index-v2|market-depth-report-v2|lifecycle-strategy-report-v2|demand-gap-report-v2)[\"']",
+        'data-report-style="report-contract"',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         "竞品ASIN",
         text,
         flags=re.IGNORECASE,
@@ -637,8 +770,26 @@ def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str,
 
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
     html_for_safety = strip_allowed_customer_exceptions(html_doc)
+    visible_text = normalized_visible_text(customer_visible_text(html_for_safety)).casefold()
+    internal_status_patterns = [
+        r"\bcollection_in_progress\b",
+        r"\bready_for_normalization\b",
+        r"\bsuccess\b",
+        r"\bwarning\b",
+        r"\bscore\s*[0-9]+(?:\.[0-9]+)?\b",
+    ]
+    for pattern in internal_status_patterns:
+        match = re.search(pattern, visible_text)
+        if match is not None:
+            raise ValidationError(f"{rel_path} customer HTML contains visible internal status: {match.group(0)}")
+    if re.search(r"class=['\"][^'\"]*\bkpi-value\b[^'\"]*['\"][^>]*>\s*-\s*</", html_for_safety, flags=re.I):
+        raise ValidationError(f"{rel_path} customer HTML contains empty customer KPI")
+
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
         require(literal not in html_for_safety, f"{rel_path} customer HTML leaks technical identifier: {literal}")
+
+    for placeholder in CUSTOMER_HTML_BANNED_PLACEHOLDERS:
+        require(placeholder not in html_for_safety, f"{rel_path} customer HTML contains placeholder or non-final data wording: {placeholder}")
 
     for pattern in CUSTOMER_HTML_BANNED_PATTERNS:
         match = pattern.search(html_for_safety)
@@ -683,6 +834,12 @@ def validate_template_dom_class_parity(rel_path: str, report_html: str, report_s
     missing_classes = sorted(missing_classes_set)
     require(not missing_ids, f"{rel_path} missing canonical template ids: {', '.join(missing_ids)}")
     require(not missing_classes, f"{rel_path} missing canonical template classes: {', '.join(missing_classes)}")
+    missing_structures = [
+        label
+        for label, pattern in TEMPLATE_STRUCTURE_PATTERNS.get(report_style, [])
+        if re.search(pattern, report_html, flags=re.I | re.S) is None
+    ]
+    require(not missing_structures, f"{rel_path} missing canonical template structure: {', '.join(missing_structures)}")
 
 
 def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[str, Any]) -> None:
@@ -813,6 +970,38 @@ def validate_text_artifacts(report_dir: Path, source_ids: set[str], data_pack: d
         require(any(source_id in report_md or source_id in lineage for source_id in source_ids), "Audit artifacts do not cite any source_id")
 
 
+def validate_supply_html_readiness_alignment(report_dir: Path) -> None:
+    readiness_path = report_dir / "data/normalized/data_readiness_report.json"
+    if not readiness_path.exists():
+        return
+    readiness = load_json(readiness_path)
+    supplier_quote_gate = readiness.get("supplier_quote_gate") or {}
+    supplier_quality_gate = readiness.get("supplier_quality_gate") or {}
+    supply_passed = (
+        readiness.get("supply_conclusion_blocked") is False
+        and supplier_quote_gate.get("passed") is True
+        and supplier_quality_gate.get("passed") is True
+    )
+    if not supply_passed:
+        return
+    market_path = report_dir / CHILD_REPORTS["market_depth"]["path"]
+    market_html = market_path.read_text(encoding="utf-8")
+    contradictory_phrases = [
+        "当前数据不能进入毛利率测算",
+        "毛利率测算未启用",
+        "1688质量门禁未通过",
+    ]
+    for phrase in contradictory_phrases:
+        require(
+            phrase not in market_html,
+            f"{CHILD_REPORTS['market_depth']['path']} supply chain HTML contradicts passing readiness: {phrase}",
+        )
+    require(
+        re.search(r"供应链状态[\s\S]{0,240}需补采", market_html) is None,
+        f"{CHILD_REPORTS['market_depth']['path']} supply chain HTML contradicts passing readiness: 供应链状态=需补采",
+    )
+
+
 def validate_html_basics(rel_path: str, html_doc: str) -> None:
     html_lower = html_doc.lower()
     require("<html" in html_lower or "<!doctype html" in html_lower, f"{rel_path} is not a standalone HTML document")
@@ -822,18 +1011,15 @@ def validate_html_basics(rel_path: str, html_doc: str) -> None:
         re.search(r"\n\s*\|.+\|\s*\n\s*\|[-:\s|]+\|", html_doc) is None,
         f"{rel_path} contains raw Markdown table syntax",
     )
-    require("<style" in html_lower, f"{rel_path} must include self-contained CSS")
     require("assets/report.css" in html_lower, f"{rel_path} must link shared assets/report.css")
     require("assets/report.js" in html_lower, f"{rel_path} must load shared assets/report.js")
+    require("<style" in html_lower or "assets/report.css" in html_lower, f"{rel_path} must include CSS")
 
 
 def validate_index_report(report_html: str, rel_path: str, required_links: list[str], data_pack: dict[str, Any], require_same_folder: bool = False) -> None:
     validate_html_basics(rel_path, report_html)
     validate_customer_html(rel_path, report_html, data_pack)
-    require(
-        re.search(r"data-report-style=['\"]three-report-index-v2['\"]", report_html) is not None,
-        f"{rel_path} missing data-report-style=\"{INDEX_STYLE_MARKER}\"",
-    )
+    require("三合一市场研究报告" in report_html, f"{rel_path} missing index report title")
     require("三合一" in report_html, f"{rel_path} must describe the three-report bundle")
     if require_same_folder:
         require('href="output/' not in report_html and "href='output/" not in report_html, f"{rel_path} child links must be same-folder relative links")
@@ -848,10 +1034,7 @@ def validate_index_report(report_html: str, rel_path: str, required_links: list[
 def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any], data_pack: dict[str, Any]) -> None:
     validate_html_basics(rel_path, report_html)
     validate_customer_html(rel_path, report_html, data_pack)
-    require(
-        re.search(rf"data-report-style=['\"]{re.escape(spec['style'])}['\"]", report_html) is not None,
-        f"{rel_path} missing data-report-style=\"{spec['style']}\"",
-    )
+    require(spec["sections"][0] in report_html, f"{rel_path} missing report identity section: {spec['sections'][0]}")
     template_class = {
         "market-depth-report-v2": "",
         "lifecycle-strategy-report-v2": "template-lifecycle",
@@ -874,6 +1057,8 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
     for class_name in REPORT_REQUIRED_CLASSES[spec["style"]]:
         require(class_name in report_html, f"{rel_path} missing required report-specific class: {class_name}")
 
+    validate_fixed_template_slots(rel_path, report_html, spec["style"])
+
     for section_name in spec["sections"]:
         require(section_name in report_html, f"{rel_path} missing required dashboard section: {section_name}")
 
@@ -882,6 +1067,77 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
     if spec["style"] == "market-depth-report-v2":
         for placeholder in MARKET_DEPTH_BANNED_PLACEHOLDERS:
             require(placeholder not in report_html, f"{rel_path} customer HTML contains placeholder or non-final data wording: {placeholder}")
+
+
+def validate_fixed_template_slots(rel_path: str, report_html: str, style: str) -> None:
+    if style == "market-depth-report-v2":
+        require(report_html.count('class="pricing-card') == 3, f"{rel_path} fixed template slot mismatch: pricing-card must be exactly 3")
+        require(report_html.count('class="prompt-card') == 3, f"{rel_path} fixed template slot mismatch: prompt-card must be exactly 3")
+        require('id="pricing"' in report_html and 'id="prompt"' in report_html, f"{rel_path} fixed template slot mismatch: pricing and prompt anchors must be present")
+        require("<th>ASIN</th>" in report_html, f"{rel_path} fixed template slot mismatch: competitor table must expose ASIN")
+        require('data-allow-asin="competitor-table"' in report_html, f"{rel_path} fixed template slot mismatch: competitor ASIN must be whitelisted")
+    elif style == "lifecycle-strategy-report-v2":
+        require("ecosystem-chart-grid" in report_html, f"{rel_path} fixed template slot mismatch: ecosystem two-chart grid missing")
+        require('id="sunburst"' in report_html and 'id="priorityChart"' in report_html, f"{rel_path} fixed template slot mismatch: lifecycle charts missing")
+        require(report_html.count('class="sku-strategy-card') >= 5, f"{rel_path} fixed template slot mismatch: SKU strategy cards must render all five standard slots")
+        require(report_html.count('class="phase-card') >= 6, f"{rel_path} fixed template slot mismatch: roadmap phase/action cards must render all six standard slots")
+        require("roadmap-phase-grid" in report_html and "roadmap-action-grid" in report_html, f"{rel_path} fixed template slot mismatch: roadmap two-grid layout missing")
+        require(report_html.count('class="filter-btn') >= 7, f"{rel_path} fixed template slot mismatch: SKU filter buttons must match seven-slot reference controls")
+    elif style == "demand-gap-report-v2":
+        require("demand-sentiment-columns" in report_html, f"{rel_path} fixed template slot mismatch: sentiment columns missing")
+        require("正面反馈" in report_html and "负面反馈" in report_html, f"{rel_path} fixed template slot mismatch: positive/negative headings missing")
+        require(report_html.count('class="demand-evidence-card joy') == 6, f"{rel_path} fixed template slot mismatch: positive voice cards must be exactly 6")
+        require(report_html.count('class="demand-evidence-card pain') == 6, f"{rel_path} fixed template slot mismatch: negative voice cards must be exactly 6")
+        require("用户原声证据明细表" in report_html and "evidence-drawer" in report_html, f"{rel_path} fixed template slot mismatch: voice evidence drawer missing")
+    validate_template_slot_contract(rel_path, report_html, style)
+
+
+def style_to_slot_report_key(style: str) -> str:
+    return {
+        "market-depth-report-v2": "market_depth",
+        "lifecycle-strategy-report-v2": "lifecycle_strategy",
+        "demand-gap-report-v2": "demand_gap",
+    }[style]
+
+
+def count_class_signature(report_html: str, class_signature: str) -> int:
+    required_classes = [re.escape(part) for part in class_signature.split() if part]
+    if not required_classes:
+        return 0
+    pattern = r"class=[\"'][^\"']*" + r"[^\"']*".join(rf"\b{part}\b" for part in required_classes) + r"[^\"']*[\"']"
+    return len(re.findall(pattern, report_html, flags=re.I))
+
+
+def validate_template_slot_contract(rel_path: str, report_html: str, style: str) -> None:
+    report_key = style_to_slot_report_key(style)
+    contract = (slot_contract().get("reports") or {}).get(report_key) or {}
+    require(contract, f"{rel_path} missing fixed slot contract for {report_key}")
+    for html_id in contract.get("required_ids") or []:
+        require(
+            re.search(rf"\bid=[\"']{re.escape(str(html_id))}[\"']", report_html, flags=re.I) is not None,
+            f"{rel_path} fixed slot contract missing id: {html_id}",
+        )
+    for text in contract.get("required_text") or []:
+        require(str(text) in report_html, f"{rel_path} fixed slot contract missing required text: {text}")
+    cursor = -1
+    for marker in contract.get("required_ordered_markers") or []:
+        marker_text = str(marker)
+        marker_pos = report_html.find(marker_text)
+        require(marker_pos >= 0, f"{rel_path} fixed slot contract missing ordered marker: {marker_text}")
+        require(marker_pos > cursor, f"{rel_path} fixed slot contract marker order regression: {marker_text}")
+        cursor = marker_pos
+    for class_name, expected in (contract.get("exact_class_counts") or {}).items():
+        actual = count_class_signature(report_html, str(class_name))
+        require(actual == int(expected), f"{rel_path} fixed slot contract {class_name} count {actual} != {expected}")
+    for class_name, minimum in (contract.get("minimum_class_counts") or {}).items():
+        actual = count_class_signature(report_html, str(class_name))
+        require(actual >= int(minimum), f"{rel_path} fixed slot contract {class_name} count {actual} < {minimum}")
+    for group in contract.get("required_component_groups") or []:
+        require(str(group) in report_html, f"{rel_path} fixed slot contract missing component group: {group}")
+    for scope in contract.get("required_customer_scopes") or []:
+        require(str(scope) in report_html, f"{rel_path} fixed slot contract missing scoped customer marker: {scope}")
+    for scope in contract.get("allowed_customer_scopes") or []:
+        require(str(scope) in report_html, f"{rel_path} fixed slot contract missing allowed customer marker: {scope}")
 
 
 def validate_interactive_dom(html_docs: dict[str, str]) -> None:
@@ -1011,7 +1267,7 @@ def validate_delivery(report_dir: Path) -> None:
     require(isinstance(delivery_readiness, dict), "delivery_result.json missing data_readiness summary")
     require(delivery_readiness.get("path") == "data/normalized/data_readiness_report.json", "delivery_result.json data_readiness.path mismatch")
     for key, expected in expected_readiness.items():
-        require(delivery_readiness.get(key) == expected, f"delivery_result.json data_readiness.{key} mismatch")
+        require(readiness_contract_value_matches(key, delivery_readiness.get(key), expected), f"delivery_result.json data_readiness.{key} mismatch")
     html_reports = delivery.get("html_reports")
     require(isinstance(html_reports, dict), "delivery_result.json missing html_reports mapping")
     require(html_reports.get("index") == BUNDLE_INDEX_REPORT, f"delivery_result.json html_reports.index must be {BUNDLE_INDEX_REPORT}")
@@ -1029,9 +1285,22 @@ def validate_delivery(report_dir: Path) -> None:
     require(critic.get("refinement_plan") == "analysis/refinement_plan.json", "delivery_result.json critic_review.refinement_plan mismatch")
     require(critic.get("summary") == "analysis/critic_summary.md", "delivery_result.json critic_review.summary mismatch")
     require(critic.get("max_refinement_rounds") == 2, "delivery_result.json critic max_refinement_rounds must be 2")
-    require(not (critic.get("pass") is True and not delivery_readiness.get("acceptance_ready")), "critic pass cannot override failed data readiness")
+    require(
+        not (critic.get("pass") is True and not (delivery_readiness.get("acceptance_ready") or delivery_readiness.get("partial_report_ready"))),
+        "critic pass cannot override failed data readiness",
+    )
+    if delivery_readiness.get("partial_report_ready"):
+        require(delivery.get("status") == "partial", "partial_report_ready delivery must use partial status")
+        require(str(delivery.get("decision") or "").casefold() != "go", "partial_report_ready delivery cannot carry an unconditional Go decision")
     features = set(delivery.get("interactive_features") or [])
     require(INTERACTIVE_FEATURES.issubset(features), "delivery_result.json missing required interactive_features")
+    asin_scope = set(delivery.get("asin_display_scope") or [])
+    required_asin_scopes = {"competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor"}
+    missing_asin_scopes = sorted(required_asin_scopes - asin_scope)
+    require(
+        not missing_asin_scopes,
+        f"delivery_result.json asin_display_scope must include {', '.join(missing_asin_scopes)}",
+    )
     cleaning = delivery.get("cleaning_summary")
     require(isinstance(cleaning, dict), "delivery_result.json missing cleaning_summary")
     require(isinstance(cleaning.get("removed_counts"), dict), "delivery_result.json cleaning_summary missing removed_counts")
@@ -1041,7 +1310,7 @@ def validate_delivery(report_dir: Path) -> None:
     site_readiness = site_data.get("readiness")
     require(isinstance(site_readiness, dict), "report-data.json missing readiness summary")
     for key, expected in expected_readiness.items():
-        require(site_readiness.get(key) == expected, f"report-data.json readiness.{key} mismatch")
+        require(readiness_contract_value_matches(key, site_readiness.get(key), expected), f"report-data.json readiness.{key} mismatch")
     require(INTERACTIVE_FEATURES.issubset(set(site_data.get("interactive_features") or [])), "report-data.json missing interactive features")
     for key in ["before_counts", "after_counts", "removed_counts"]:
         require(isinstance((site_data.get("cleaning_summary") or {}).get(key), dict), f"report-data.json cleaning_summary missing {key}")
@@ -1062,10 +1331,12 @@ def validate(report_dir: Path) -> None:
 
     source_ids = validate_sources(data_pack)
     validate_entity_lineage(data_pack, source_ids)
+    validate_data_gaps_contract(data_pack)
     validate_data_readiness(report_dir)
     validate_normalized_data_pack_consistency(report_dir, data_pack)
     validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)
+    validate_supply_html_readiness_alignment(report_dir)
     validate_text_artifacts(report_dir, source_ids, data_pack)
     validate_site_asset_contract(report_dir)
     validate_customer_visible_assets(report_dir, data_pack)

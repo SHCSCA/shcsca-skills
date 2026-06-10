@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from view_model_builder import build_report_views, build_site_data, write_report_views
+from view_model_builder import build_report_views, build_site_data, customer_product_label, write_report_views
 
 
 CHILD_SKILLS = {
@@ -94,6 +94,73 @@ class ViewModelBuilderTest(unittest.TestCase):
             for leaked in ["source_id", "src_001", "B0TEST1234", "provider", "sorftime", "Interactive AI Plush Toy"]:
                 self.assertNotIn(leaked, combined)
             self.assertTrue(payload["client_safe_text"])
+
+    def test_customer_product_label_uses_brand_and_chinese_segment_not_generic_record(self):
+        product = {
+            "asin": "B0ABC12345",
+            "brand": "Govee",
+            "title": "Govee RGBIC LED Strip Lights, Smart LED Lights for Bedroom",
+            "segment_cn": "RGB 灯带",
+        }
+
+        label = customer_product_label(product)
+
+        self.assertEqual(label, "Govee RGB 灯带")
+        self.assertNotIn("竞品记录", label)
+
+    def test_site_data_exposes_pc_decision_cockpit_without_internal_status(self):
+        data_pack = sample_data_pack()
+        data_pack["quality"]["grade"] = "ready_for_normalization"
+        analysis_plan = {"method_chain": [{"method_id": "market.scan"}], "limitations": []}
+        readiness = {
+            "acceptance_ready": False,
+            "blocking_gaps": [{"module": "competitor_pool_depth"}],
+            "warnings": [{"module": "review_sample_depth"}],
+            "counts": {"products": 5},
+            "supplier_quote_gate": {"passed": False},
+            "competitor_gate": {"passed": False},
+            "segment_gate": {"passed": False},
+            "supplier_quality_gate": {"passed": False},
+        }
+
+        site_data = build_site_data(data_pack, analysis_plan, "Watch", CHILD_SKILLS, readiness)
+        payload = json.dumps(site_data, ensure_ascii=False)
+
+        self.assertIn("decision_cockpit", site_data)
+        self.assertIn("当前阻断项", payload)
+        self.assertNotIn("ready_for_normalization", payload)
+
+    def test_views_filter_off_target_competitor_noise(self):
+        data_pack = sample_data_pack()
+        data_pack["products"] = [
+            {
+                "asin": "B0LIGHT001",
+                "title": "Under Cabinet Motion Sensor Light Rechargeable LED",
+                "brand": "MCGOR",
+                "segment_cn": "橱柜感应灯",
+                "price": 17.97,
+                "rating": 4.5,
+                "review_count": 1200,
+                "estimated_monthly_sales": 64553,
+            },
+            {
+                "asin": "B0PROTEIN1",
+                "title": "Premier Protein Shake Chocolate 12 Pack",
+                "brand": "Premier Protein",
+                "segment_cn": "未分层",
+                "price": 31.98,
+                "rating": 4.6,
+                "review_count": 58142,
+                "estimated_monthly_sales": 705547,
+            },
+        ]
+
+        views = build_report_views(data_pack, {"method_chain": []}, "Watch")
+        payload = json.dumps(views, ensure_ascii=False)
+
+        self.assertIn("MCGOR 橱柜感应灯", payload)
+        self.assertNotIn("Premier Protein", payload)
+        self.assertNotIn("未分层", payload)
 
 
 if __name__ == "__main__":

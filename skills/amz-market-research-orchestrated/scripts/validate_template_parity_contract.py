@@ -13,7 +13,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 MANIFEST = SKILL_DIR / "references" / "template-baseline-manifest.json"
 CHECKLIST = SKILL_DIR / "references" / "html-template-parity-checklist.md"
+SLOT_CONTRACT = SKILL_DIR / "references" / "html-template-slot-contract.json"
 SITE_ASSETS = SCRIPT_DIR / "site_assets.py"
+REFERENCE_VISUAL_COMPARE = SCRIPT_DIR / "run_template_reference_visual_compare.py"
+ACCEPTANCE_PROOF = SCRIPT_DIR / "run_acceptance_proof.py"
 LOCAL_DOWNLOAD_ROOT = Path(r"C:\Users\wz\Downloads\downloadpage")
 CANONICAL_DIR = SKILL_DIR / "assets" / "canonical_templates"
 
@@ -35,6 +38,11 @@ BASELINES = {
             "deep-dive-grid",
             "comp-deep-card",
             "opportunity-matrix",
+            "pricing-grid",
+            "pricing-card",
+            "prompt-grid",
+            "prompt-card",
+            "comp-col-asin",
         ],
         "required_sections": [
             "大盘结论",
@@ -63,6 +71,11 @@ BASELINES = {
             "bundle-grid",
             "phase-grid",
             "risk-grid",
+            "ecosystem-chart-grid",
+            "sku-strategy-grid",
+            "sku-strategy-card",
+            "roadmap-phase-grid",
+            "roadmap-action-grid",
         ],
         "required_sections": [
             "战略仪表盘",
@@ -90,9 +103,13 @@ BASELINES = {
             "warn",
             "ok",
             "quote-cn",
+            "demand-sentiment-columns",
+            "demand-column-head",
+            "demand-evidence-card",
+            "review-excerpt-en",
         ],
         "required_sections": [
-            "研究对象概述",
+            "目标ASIN锚点",
             "决策看板",
             "市场痛点全景图（$APPEALS）",
             "满意度鸿沟",
@@ -137,6 +154,15 @@ EXCLUDED_ASSETS = [
     "raw English review examples",
 ]
 
+FIXED_SLOT_CONTRACT_SIGNALS = [
+    "exactly 3 pricing strategy cards",
+    "exactly 3 AI image prompt cards",
+    "five fixed SKU slots",
+    "exactly 6 cards",
+    "data-allow-asin=\"competitor-table\"",
+    "data-allow-asin=\"demand-target-anchor\"",
+]
+
 
 class ContractError(Exception):
     pass
@@ -155,10 +181,15 @@ def read(path: Path) -> str:
 def validate_contract(require_downloads: bool = False) -> dict[str, object]:
     manifest = json.loads(read(MANIFEST))
     checklist = read(CHECKLIST)
+    slot_contract = json.loads(read(SLOT_CONTRACT))
     site_assets = read(SITE_ASSETS)
+    reference_visual_compare = read(REFERENCE_VISUAL_COMPARE)
+    acceptance_proof = read(ACCEPTANCE_PROOF)
     baselines = manifest.get("baselines") or {}
+    slot_reports = slot_contract.get("reports") or {}
 
     require(set(BASELINES) <= set(baselines), "template manifest missing one or more report baselines")
+    require(set(BASELINES) <= set(slot_reports), "slot contract missing one or more report baselines")
     for excluded in EXCLUDED_ASSETS:
         require(excluded in json.dumps(manifest, ensure_ascii=False), f"template manifest missing excluded asset: {excluded}")
 
@@ -176,6 +207,15 @@ def validate_contract(require_downloads: bool = False) -> dict[str, object]:
         manifest_css = baseline.get("borrowed_css_signals") or []
         for signal in spec["css_signals"]:
             require(signal in manifest_css or signal in site_assets or signal in read(spec["template"]), f"{report_key} missing css signal: {signal}")
+        report_slots = slot_reports.get(report_key) or {}
+        require(str(spec["folder"]) in str(report_slots.get("reference_folder") or ""), f"{report_key} slot contract reference folder mismatch")
+        for bucket_name in ["exact_class_counts", "minimum_class_counts"]:
+            bucket = report_slots.get(bucket_name)
+            require(isinstance(bucket, dict) and bucket, f"{report_key} slot contract missing {bucket_name}")
+        for group in report_slots.get("required_component_groups") or []:
+            require(group in checklist or group in site_assets, f"{report_key} slot contract group not represented in checklist or assets: {group}")
+        for required_id in report_slots.get("required_ids") or []:
+            require(required_id in site_assets or required_id in read(spec["template"]) or required_id in checklist, f"{report_key} slot contract id not represented: {required_id}")
         if require_downloads:
             folder_path = LOCAL_DOWNLOAD_ROOT / folder
             require(folder_path.exists(), f"local downloaded template folder missing: {folder_path}")
@@ -186,6 +226,28 @@ def validate_contract(require_downloads: bool = False) -> dict[str, object]:
     require("echarts.min.js" in site_assets, "site asset writer must copy local echarts runtime")
     require("<script src=\"https://cdn.jsdelivr.net" not in site_assets, "site asset writer must not inject CDN echarts")
     require("canonical_asset_policy" in manifest, "template manifest missing canonical asset policy")
+    for signal in [
+        "REFERENCE_COMPARE_CASES",
+        "referenceScreenshot",
+        "generatedScreenshot",
+        "signalScore",
+        "layoutScore",
+        "screenshotByteRatio",
+        "pixelDistance",
+        "screenshotDistance",
+        "max_pixel_distance",
+        "width ratio",
+        "left delta",
+        "center delta",
+        "pc-1366",
+        "pc-1440",
+    ]:
+        require(signal in reference_visual_compare, f"reference visual compare script missing signal: {signal}")
+    for signal in ["--reference-visual", "reference_visual_compare", "REFERENCE_VISUAL_COMPARE"]:
+        require(signal in acceptance_proof, f"acceptance proof missing reference visual signal: {signal}")
+    checklist_lower = checklist.lower()
+    for signal in FIXED_SLOT_CONTRACT_SIGNALS:
+        require(signal.lower() in checklist_lower, f"checklist missing fixed slot contract signal: {signal}")
 
     return {
         "template_parity_contract": True,
@@ -193,6 +255,7 @@ def validate_contract(require_downloads: bool = False) -> dict[str, object]:
         "require_downloads": require_downloads,
         "checklist": "references/html-template-parity-checklist.md",
         "manifest": "references/template-baseline-manifest.json",
+        "slot_contract": "references/html-template-slot-contract.json",
     }
 
 

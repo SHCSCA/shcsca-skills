@@ -61,6 +61,7 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
                     "keywords": [],
                     "tiktok_products": [],
                     "tiktok_videos": [],
+                    "tiktok_authors": [],
                     "data_gaps": [],
                 },
             )
@@ -95,6 +96,10 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
                     self.assertEqual(args, {"productId": "p1", "page": 1, "site": "US"})
                     rows = [{"url": "https://www.tiktok.com/@a/video/123", "标题": "Demo", "播放量": 1000, "获赞量": 50, "达人": "A"}]
                     return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
+                if name == collector.AUTHOR_SEARCH_TOOL:
+                    self.assertEqual(args, {"searchName": "under cabinet lights", "page": 1, "site": "US"})
+                    rows = [{"达人": "A", "粉丝数": 100000, "带货商品数": 18, "总播放量": 3000000}]
+                    return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
                 raise AssertionError(name)
 
             with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
@@ -103,11 +108,13 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
             self.assertTrue(summary["collection_ready"])
             self.assertEqual(summary["products_added"], 1)
             self.assertEqual(summary["videos_added"], 1)
-            self.assertEqual(len(seen_calls), 5)
+            self.assertEqual(summary["authors_added"], 1)
+            self.assertEqual(len(seen_calls), 6)
             data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
             self.assertEqual(data_pack["tiktok_products"][0]["lifetime_sales"], 9000)
             self.assertEqual(data_pack["tiktok_products"][0]["author_count"], 12)
             self.assertEqual(data_pack["tiktok_videos"][0]["video_id"], "123")
+            self.assertEqual(data_pack["tiktok_authors"][0]["author"], "A")
 
     def test_collect_records_tiktok_mcp_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -131,6 +138,10 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
             write_json(report_dir / "data" / "data_pack.json", {"sources": [], "research_object": {"value": "light"}, "tiktok_products": [], "tiktok_videos": [], "data_gaps": []})
 
             def fake_call_tool(_url, name, args):
+                if name == collector.AUTHOR_SEARCH_TOOL:
+                    self.assertEqual(args, {"searchName": "light", "page": 1, "site": "JP"})
+                    rows = []
+                    return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
                 self.assertEqual(name, collector.SIMILAR_TOOL)
                 self.assertEqual(args, {"searchName": "light", "page": 1, "site": "JP"})
                 rows = [{"ProductId": "jp1", "Title": "Light", "月销量": 10}]

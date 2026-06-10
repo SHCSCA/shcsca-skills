@@ -18,6 +18,19 @@ class CustomerCopyTest(unittest.TestCase):
         self.assertIn("短期使用后出现失效", summary)
         self.assertNotIn("privacy issue", summary)
 
+    def test_positive_review_does_not_reuse_negative_summary(self):
+        review = {
+            "rating": 5,
+            "summary_cn": "续航或充电体验没有达到预期",
+            "title": "Great lights",
+            "text": "Bright, easy to install, the motion sensor works well and charging lasts a long time.",
+        }
+
+        summary = customer_review_summary(review)
+
+        self.assertNotIn("没有达到预期", summary)
+        self.assertIn("正向反馈", summary)
+
     def test_uses_customer_visible_product_positioning(self):
         product = {"segment": "premium", "price": 89, "rating": 4.5, "review_count": 500}
 

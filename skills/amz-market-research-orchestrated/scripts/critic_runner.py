@@ -27,7 +27,7 @@ def as_float(value: Any, default: float = 0.0) -> float:
 
 def strip_allowed_customer_exceptions(html_doc: str) -> str:
     html_doc = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         "竞品ASIN",
         html_doc,
         flags=re.IGNORECASE,

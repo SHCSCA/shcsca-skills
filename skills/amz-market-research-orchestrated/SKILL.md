@@ -76,12 +76,14 @@ HTML 模板是标准化交付资产，不是 AI 临场发挥的设计稿。三�
 
 Subagent 只能承担可隔离的侧翼任务，例如采集证据审计、HTML 客户安全审计、critic contract 审计或模板 parity 审计。主控 Agent 必须保留架构决策、Data Pack 口径、是否交付、是否降级为样本的最终责任。
 
-Fail-closed 停止规则：
+Fail-closed 恢复与停止规则：
 
-- `acceptance_ready=false` 时，不得继续生成客户版三报告；只能继续真实采集、说明缺口，或把目录登记为 `non_acceptance_sample`。
+- `acceptance_ready=false` 时，必须先运行 `recover_data_readiness.py` 做定向补采恢复；恢复轮次耗尽后若只剩供应链报价深度/字段质量/价差问题，则进入 `partial_acceptance_sample`，继续输出市场、生命周期和需求报告，但禁用供应链毛利率结论；若仍有产品池、关键词、来源血缘或赛道拆分阻断，才停止客户版三报告并登记为 `non_acceptance_sample`。
 - critic 二次修正后仍 `pass=false` 时，不得声明交付完成；必须输出未解决问题和下一轮差量修正计划。
 - 产品池、关键词、评论或网页证据不足时，不得用 AI 推断、模板样例或重复数据补齐。
-- 客户版 HTML 出现 `source_id`、ASIN、provider、raw path、英文原始评论等泄露字段时，必须停止交付并修正渲染层。
+- 客户版 HTML 出现 `source_id`、provider、raw path、内部版本标记、`竞品记录` 等技术或占位字段时，必须停止交付并修正渲染层。
+- ASIN 只允许在“标杆竞品狙击拆解”“竞品表”“竞品参考毛利率测算”中通过白名单组件展示；其他区域仍需脱敏。
+- 英文原始评论只允许作为 VOC 短摘出现，并必须同时展示中文归纳、主题、情绪和行动建议。
 
 ## Step 0: 解析并补齐用户输入
 
@@ -155,12 +157,27 @@ Fail-closed 停止规则：
 - ASIN：先跑 `product_detail`、`product_trend`、`product_reviews`、`product_variations`、`product_traffic_terms`。
 - 类目：先跑 `category_name_search`、`category_report`、`category_trend`、`category_keywords`。
 - TikTok 验证：跑 `collect_sorftime_tiktok_signals.py`，内部按 Sorftime schema 调用 `tiktok_similar_product(searchName,page,site)`、`tiktok_product_detail(productId,site)`、`tiktok_product_trend(productId,site)`、`tiktok_product_video(productId,page,site)`、`tiktok_product_video_author(productId,site)`。
-- 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime schema 调用 `ali1688_similar_product(searchName)`。
+- 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime 官方文档调用 `ali1688_similar_product(searchName,page)`，并记录每页实际返回字段；1688 官方 16 字段覆盖率写入 `documented_field_coverage`，`Url/url` 只作为 `URL` 别名处理。若 MCP 实际响应缺少 `Title` / `URL`，必须阻断供应链毛利率结论并写入诊断。
+- 竞品池补采：跑 `collect_sorftime_products.py`，内部优先按 Amazon schema 调用 `product_search`，必要时回退到 `keyword_search_results`，不得复用 TikTok 或 1688 参数结构。
+- Amazon 竞品增强：跑 `collect_sorftime_product_enrichment.py`，对已入池 ASIN 调用 `product_detail`、`product_trend`、`product_variations`、`product_traffic_terms`、`competitor_product_keywords`。可用维度必须写回 Data Pack；返回空的维度必须进入 `data_gaps`，不能写成已验证事实。若某个维度对首个 ASIN 返回 0 行，必须换其他已入池 ASIN 继续复测；多 ASIN 仍为空时才写成当前 Sorftime 维度缺口。
+- MCP 字段审计：当用户质疑官方字段与实际结果不一致，或采集字段缺失时，跑 `audit_sorftime_mcp_contracts.py`，保存 Amazon / TikTok / 1688 的 schema、实际参数、返回行数和实际字段集合。`tools/list` 只能证明入参 schema；出参字段覆盖率必须来自真实 `tools/call` 抽样。Amazon / TikTok 没有官方固定 16 字段清单时，以本 skill 的标准化维度覆盖率审计；1688 按官方 16 字段审计。
 
 标准版和深度版必须补齐关键词样本深度：
 
 ```bash
 python skills/amz-market-research-orchestrated/scripts/collect_sorftime_keywords.py --dir reports/{task_id} --min-keywords 1200
+```
+
+标准版和深度版必须补齐 Amazon 竞品池深度：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_products.py --dir reports/{task_id} --min-products 30 --max-seeds 8 --max-pages 3 --site US --min-segments 3 --min-per-segment 10
+```
+
+产品池补齐后必须对核心 ASIN 做增强采集：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_product_enrichment.py --dir reports/{task_id} --max-products 10 --max-pages 1 --site US
 ```
 
 评论样本采集建议在产品池/ASIN 明确后运行：
@@ -181,7 +198,23 @@ python skills/amz-market-research-orchestrated/scripts/collect_sorftime_tiktok_s
 python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/{task_id} --depth standard --write
 ```
 
-若输出 `acceptance_ready=false`，不得继续生成客户版三报告；只能继续真实采集或把当前目录标为历史/演示样本。尤其当产品池为 0 或关键词样本不足 1000 时，禁止用 AI 推断、模板样例或重复数据补足。
+若输出 `acceptance_ready=false`，先运行恢复器，而不是立刻下结论：
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/recover_data_readiness.py --dir reports/{task_id} --depth standard --max-rounds 2
+```
+
+恢复器会按失败模块定向调用关键词、Amazon 产品池、1688、评论和 TikTok 采集脚本，并在每轮后重新归一化和复检。恢复后若只剩 1688 供应链报价问题，报告进入 partial 模式：客户仍可阅读市场深度、生命周期和需求断层分析，供应链模块只展示补采诊断和报价池质量，不输出毛利率结论。恢复后若产品池不足、关键词样本不足 1000、来源血缘缺失或赛道拆分失败，不得继续生成客户版三报告；只能输出补采诊断并把当前目录标为历史/演示样本。所有场景都禁止用 AI 推断、模板样例或重复数据补足。
+
+标准版 / 深度版还必须满足以下硬门槛：
+
+- 标准版至少 30 个去重有效 Amazon 竞品；深度版至少 60 个。
+- 每个有效竞品必须具备 ASIN、标题、品牌、价格、评分、评论数、销量或排名代理字段、细分赛道。
+- `smart lighting`、`lighting`、`智能照明` 等大词必须先拆分赛道；宽泛研究至少 3 个主赛道，每个主赛道至少 10 个有效竞品。
+- 1688 去重有效报价至少 50 条只是数量门槛；商品标题覆盖率和链接/稳定商品指纹覆盖率必须各不低于 70%。
+- 1688 价格分布若 `max/P50 > 20` 或 `P75/P25 > 5`，先检查同搜索词报价桶；若某一 `seed_keyword` 桶拥有至少 50 条有效报价且字段质量、价差门禁均通过，则客户页只能使用该同口径报价桶进入毛利率测算，并把全局价差异常写为 warning。若全局和同桶都不通过，必须阻断毛利率测算，输出补采诊断。
+- 供应链毛利率必须绑定真实 Amazon 竞品 ASIN 的价格、月销量、评分和评论数，并使用 1688 P25/P50/P75 成本分位数；不得用品牌均值或混合类目均值冒充。
+- 门槛不通过时，渲染脚本默认先运行恢复器；恢复后仍不通过，才写补采诊断 HTML，命令仍需返回失败，避免被误当成完整客户报告。
 
 采集策略：
 
@@ -189,9 +222,9 @@ python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py -
 - `keyword_extends` 对主关键词、核心子方向词、已有高相关词分页采集。
 - 目标采集量默认 1200 条，给去重留余量；归一化后 `data_pack.keywords` 不得少于 1000 条。
 - 评论样本是置信度门槛：标准版建议 80 条以上，深度版建议 200 条以上；不足时 VOC 可降级展示，但不能写精确比例或强结论。
-- TikTok 相似商品按 `searchName/page/site` 采集，商品详情/趋势/视频/达人链路按 `productId/site` 或 `productId/page/site` 采集；MCP 返回 `isError=true` 必须写入诊断，不能当作空数据。
+- TikTok 相似商品按 `searchName/page/site` 采集，商品详情/趋势/视频/达人链路按 `productId/site` 或 `productId/page/site` 采集；1688 相似货源按 `searchName/page` 采集。MCP 返回 `isError=true` 必须写入诊断；成功但 0 行必须换搜索词、ASIN、productId 或 category node 复测后再判定为数据缺口；实际响应缺少官方文档关键字段时必须写入诊断，不能当作空数据。
 - 关键词、评论、TikTok 和 1688 采集脚本低于门槛时返回退出码 `2`，这不是环境故障，而是数据深度未达标信号。
-- 原始 MCP 返回必须保存到 `data/raw/`，采集摘要保存到 `data/normalized/keyword_collection_summary.json`。
+- 原始 MCP 返回必须保存到 `data/raw/`，采集摘要保存到 `data/normalized/*_collection_summary.json`；恢复过程必须保存到 `data/normalized/readiness_recovery_report.json`。
 
 所有原始返回保存到：
 
@@ -348,7 +381,7 @@ reports/{task_id}/
 
 HTML 主体必须使用真实结构化组件：
 
-- 四个 HTML 都必须是 standalone HTML document，并带对应 `data-report-style`。
+- 四个 HTML 都必须是 standalone HTML document；`data-report-style` 只允许作为内部模板标记，最终客户 HTML 必须剥离该属性，避免泄露模板/技术标识。
 - 三份子报告必须使用 `<section>` 编号章节、KPI cards、CSS mini charts、evidence tables、cards、risk/roadmap/timeline 等结构化组件。
 - 竞品、需求、1688、TikTok、Web、SKU、KANO/JTBD 等必须用客户可读的 insight table / card / matrix 表达，不能用 Markdown 表格文本。
 - 客户版 HTML 禁止展示 `source_id`、`source_ids`、provider/tool、raw_path/path、Product ID、product_id 或“来源”字段；ASIN 仅允许在竞品狙击和供应链毛利率测算组件中以 `data-allow-asin` 作用域展示，其他位置出现 ASIN 必须视为泄露。
@@ -388,7 +421,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py --dir reports/{task_id}
 ```
 
-7. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留四个 `data-report-style` 标记和所有必备章节。
+7. 如需增强视觉，再基于生成的 HTML 做局部编辑，但必须保留所有必备章节、模板结构、关键 class/id 和客户安全约束；不得把 `data-report-style` 等内部模板标识重新带回客户 HTML。
 
 完成后运行：
 
@@ -408,8 +441,8 @@ python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py -
 - 不因为 TikTok 或 Firecrawl 失败就删除模块；保留模块并说明缺口。1688 报价不足 50 条时保留诊断，但最终供应链成本/毛利率模块必须阻断。
 - 所有关键结论必须能在审计文件中追溯到 `source_id`，但客户版 HTML 不展示这些技术标识。
 - 所有关键方法必须能追溯到 `method_chain`。
-- `output/html_reports/report.html` 必须包含 `data-report-style="three-report-index-v2"`，并用同文件夹相对链接打开三份子报告；`output/report.html` 必须作为兼容入口链接到 `html_reports/`。
-- 三份子报告必须分别包含 `data-report-style="market-depth-report-v2"`、`data-report-style="lifecycle-strategy-report-v2"`、`data-report-style="demand-gap-report-v2"`。
+- `output/html_reports/report.html` 必须用同文件夹相对链接打开三份子报告；`output/report.html` 必须作为兼容入口链接到 `html_reports/`。
+- 三份子报告必须分别通过模板结构、必备章节、关键 class/id 和结构级 parity validator；客户 HTML 不得展示 `three-report-index-v2`、`market-depth-report-v2`、`lifecycle-strategy-report-v2`、`demand-gap-report-v2`。
 - 四个 HTML 都不得出现 `<pre>` 包裹的 Markdown、原始 Markdown 表格、或只靠标题段落撑起来的文章页。
 - 输出默认全中文；客户版 HTML 仅保留品牌名、平台名、竞品狙击/毛利率测算所需 ASIN、必要英文专有名词和授权英文评论短摘，Product ID / source_id 等技术标识只留在审计文件。
 - 客户版 HTML 不直接展示完整英文评论原文或英文评论标题；必须转成中文摘要、中文主题、情绪标签和建议动作，英文只允许短摘并与中文摘要并列。

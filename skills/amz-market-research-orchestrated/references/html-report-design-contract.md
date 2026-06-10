@@ -35,21 +35,15 @@ The four files inside `output/html_reports/` must:
 - Use semantic sections in child reports, not a single Markdown blob.
 - Never wrap Markdown in `<pre>`, `.markdown-body`, or raw Markdown tables.
 - Render analysis as real HTML tables, cards, score grids, timelines, or CSS/SVG charts.
-- Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, or `product_id`. ASIN values are allowed only inside scoped customer components marked `data-allow-asin="benchmark-sniper"` or `data-allow-asin="profit-model"`; all other ASIN values are leaks.
+- Hide technical identifiers from client HTML: no `source_id`, `source_ids`, `provider`, `tool`, `raw_path`, file path, `Product ID`, or `product_id`. ASIN values are allowed only inside scoped customer components marked `data-allow-asin="benchmark-sniper"`, `data-allow-asin="profit-model"`, `data-allow-asin="competitor-table"`, or `data-allow-asin="demand-target-anchor"`; all other ASIN values are leaks.
 - Use client-readable credibility language: `证据强度`, `数据覆盖`, `数据缺口`, `置信等级`, and `建议动作`.
 - Support static-site interactions without CDN: top navigation, mobile directory, table search, table sorting, collapsible evidence drawers, and lightweight chart hover/link states.
 - Support template-derived report interactions without CDN: lifecycle-style `.filter-bar` / `.filter-btn[data-filter]` controls, sortable/searchable SKU and evidence tables, tabs, and chart fallback hover states.
 - Use Chinese-facing content by default. VOC cards may show a short English review excerpt only when paired with Chinese summary and marked `data-allow-english-review="short"`. Full raw English reviews, English review titles, raw scraped comments, and raw field values remain audit-only.
 
-Required `data-report-style` markers:
+Internal template markers:
 
-| File | Marker |
-|---|---|
-| `output/report.html` | `three-report-index-v2` |
-| `output/html_reports/report.html` | `three-report-index-v2` |
-| `output/html_reports/market-depth-report.html` | `market-depth-report-v2` |
-| `output/html_reports/lifecycle-strategy-report.html` | `lifecycle-strategy-report-v2` |
-| `output/html_reports/demand-gap-report.html` | `demand-gap-report-v2` |
+`data-report-style` may exist inside source templates while rendering, but final customer HTML must not contain `three-report-index-v2`, `market-depth-report-v2`, `lifecycle-strategy-report-v2`, or `demand-gap-report-v2`. Template compliance is validated by required structure, body classes, canonical class/id parity, and structure-level component checks instead of customer-visible internal markers.
 
 Required body template classes:
 
@@ -107,12 +101,12 @@ Required client-analysis terms: `SKU`, `Bundle`, `供应链`, `复购`, `AOV`, `
 
 Required visible sections:
 
-1. 研究对象概述
+1. 目标ASIN锚点
 2. 决策看板
 3. `$APPEALS` 痛点图
 4. 满意度鸿沟
 5. `KANO × JTBD`
-6. 用户原声（中文摘要，不展示英文原评）
+6. 用户原声（正面反馈 6 槽 + 负面反馈 6 槽，可展示短英文评论摘录）
 7. 需求优先级
 
 Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点`, `转化机会`.
@@ -120,7 +114,7 @@ Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点
 ## Visual System
 
 - Market and lifecycle reports use the restrained executive palette: deep navy header, warm off-white background, white cards, thin borders, muted blue accent, sage/rose/warm accents for opportunity and risk.
-- Demand-gap report uses the `143645` active `mode-r3` analytical style: strong navy hero, high-contrast evidence cards, clear gap/risk emphasis, and readable tables.
+- Demand-gap report uses the `143645` active `mode-r3` analytical style: strong navy hero, white evidence cards, red/green sentiment accents, clear gap/risk emphasis, and readable tables.
 - No decorative CDN charts are required. Use CSS mini bars, tables, and cards as offline-first chart fallbacks.
 - Required reusable hooks in child reports: `report-header`, `kpi-grid`, `section-number`, `evidence-table`, `insight-table`, `mini-chart`, `chart-container`, `insight-box`, `conclusion`, `deep-dive-grid`, `comp-deep-card`, `persona-grid`, `timeline-grid`, `bundle-grid`, `sku-table-wrap`, `filter-btn`, `quote-cn`, and `chart-interpretation`.
 
@@ -131,7 +125,8 @@ Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点
 - Keyword content must summarize demand structure and intent clusters; raw reverse-traffic details stay in audit artifacts.
 - Lifecycle report must turn market evidence into SKU, bundle, supply-chain, and roadmap decisions rather than repeating the market scan.
 - Demand-gap report must turn reviews/VOC into Chinese `$APPEALS`, Gap Analysis, KANO, JTBD, representative voice summaries, and priority actions.
-- User voice cards may show star rating, sentiment, Chinese summary, short translated phrase, theme, and action implication. Do not display raw English comments or raw English review titles.
+- User voice cards must keep the fixed template structure: left column `正面反馈` with exactly 6 cards, right column `负面反馈` with exactly 6 cards, plus a collapsed evidence-detail drawer. Cards may show star rating, sentiment, short English review excerpt, Chinese insight, theme, evidence strength, unmet point, and action implication. Full raw English reviews, English review titles, and scraped comment text remain audit-only.
+- Market pricing strategy must render exactly 3 pricing cards and exactly 3 AI image prompt cards, with stable `#pricing` and `#prompt` anchors. Lifecycle SKU strategy must render the five fixed SKU slots: 基础款、升级款、套装款、配件款、复购耗材. Template slots must not disappear when data is thin; data insufficiency is handled by readiness diagnostics, blocked delivery, or explicit audit files, not by deleting layout.
 - Missing lifecycle or demand-gap analysis JSON may be filled from Data Pack defaults, but the limitation must remain visible in `data_gaps` or `analysis_plan.limitations`.
 
 ## Anti-Patterns

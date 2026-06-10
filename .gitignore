@@ -11,5 +11,6 @@ test-results/
 !skills/**/templates/*.xlsx
 skills/**/templates/~$*.xlsx
 output/
+outputs/
 reports/
 skills/**/reports/

@@ -96,6 +96,32 @@ class CriticRunnerTest(unittest.TestCase):
         self.assertIn("F-view-client-safe-lifecycle_strategy_view.json", review["remaining_findings"])
         self.assertIn("F-finance-depth", [item["id"] for item in review["findings"]])
 
+    def test_critic_allows_competitor_table_scoped_asin(self):
+        data_pack = {
+            "task_id": "html_case",
+            "reviews": [{"rating": 5}],
+            "data_gaps": [],
+            "quality": {"overall_score": 0.72, "grade": "B"},
+            "normalization": {"cross_validated_counts": {"keywords": 1000, "products": 3}},
+        }
+        required_terms = "证据强度 数据覆盖 数据缺口 置信等级 建议动作 成本 毛利 FBA"
+        rendered_docs = {
+            "market_depth": f'<html><body>{required_terms}<span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></body></html>',
+            "lifecycle_strategy": f"<html><body>{required_terms}</body></html>",
+            "demand_gap": f"<html><body>{required_terms}</body></html>",
+        }
+
+        review = critic_runner.build_critic_review(
+            data_pack,
+            {"limitations": []},
+            {"status": "complete", "decision": "Watch"},
+            "Watch",
+            rendered_docs=rendered_docs,
+        )
+
+        self.assertTrue(review["pass"])
+        self.assertNotIn("F-customer-html-leak", review["remaining_findings"])
+
 
 if __name__ == "__main__":
     unittest.main()

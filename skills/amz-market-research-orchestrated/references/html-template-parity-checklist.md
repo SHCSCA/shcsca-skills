@@ -16,16 +16,18 @@ Packaged canonical assets:
 - `assets/canonical_templates/lifecycle-strategy-reference.html`
 - `assets/canonical_templates/demand-gap-reference.html`
 - `assets/canonical_templates/echarts.min.js`
+- `references/html-template-slot-contract.json`
 
 ## Global Rules
 
 - Do not copy `_next/static/chunks`, iframe shells, remote CDN scripts, or hard-coded sample data into customer outputs.
 - Do preserve the canonical template layout, section order, CSS class vocabulary, card/table/chart structure, spacing model, color system, and interaction affordances.
 - AI may generate analysis text and map clean data into slots; it must not invent a new page layout, choose a different style system, or replace the canonical template with a generic report shell.
-- Do not expose ASIN, `source_id`, provider, raw path, or raw English review text in customer HTML.
+- Do not expose `source_id`, provider, raw path, Product ID, or unscoped technical fields in customer HTML. ASIN may appear only in the benchmark sniper, profit model, competitor table, and demand target anchor components with explicit `data-allow-asin` scope.
 - Keep all shared runtime assets local under `output/html_reports/assets/`.
 - Preserve mobile behavior through CSS media rules and JS that does not depend on a build step.
-- Use generated view models from `normalized_data_pack.json`; never fill visual components with placeholder template data.
+- Use generated view models from `normalized_data_pack.json`; never fill visual components with sample template data.
+- Template skeletons are fixed contracts. Data quality may block a conclusion or trigger a diagnostic artifact, but it must not remove required headings, cards, tables, anchors, or chart containers from the standard HTML template.
 
 ## Market Depth Parity
 
@@ -57,6 +59,9 @@ Required components:
 - `comp-table` or equivalent competitor evidence table.
 - `voc-grid`, `deep-dive-grid`, `comp-deep-card`.
 - `opportunity-matrix`.
+- Exactly 3 pricing strategy cards and exactly 3 AI image prompt cards with stable `#pricing` and `#prompt` anchors.
+- Competitor table must expose scoped ASIN values using `data-allow-asin="competitor-table"`.
+- Demand target anchor must expose the target reference ASIN using `data-allow-asin="demand-target-anchor"`.
 - Evidence drawer for methodology and limitations.
 
 Required interactions:
@@ -95,8 +100,13 @@ Required components:
 
 - `persona-grid`, `timeline-grid`, `bundle-grid`, `phase-grid`, `risk-grid`.
 - `sku-table-wrap`, sortable SKU table, priority bars.
+- `#skuTable` and `#skuBody` as stable SKU table anchors.
 - `type-badge`, `supply-badge`, filter bar and filter buttons.
 - Bundle cards with price, savings, and dependency assumptions.
+- Four-dimensional ecosystem must keep a two-chart layout: `#sunburst` plus `#priorityChart`.
+- 拓品方案池 must keep the five fixed SKU slots: 基础款、升级款、套装款、配件款、复购耗材.
+- 30/60/90 路线图 must keep six roadmap cards: three `Phase` strategy cards plus three action checklist cards, split across `roadmap-phase-grid` and `roadmap-action-grid`.
+- SKU table controls must keep seven reference filters: 全部、Type A、Type B、Type C、Type D、供应链验证、P1 立即启动.
 
 Required interactions:
 
@@ -111,7 +121,7 @@ Baseline folder: `143645`.
 
 Required section density:
 
-- 研究对象概述
+- 目标ASIN锚点
 - 决策看板
 - 市场痛点全景图（$APPEALS）
 - 满意度鸿沟
@@ -133,6 +143,10 @@ Required components:
 - Dark or high-contrast report header when used by the template family.
 - `kpi-grid`, `chart`, `chart-interpretation`.
 - `quote-cn`, localized VOC cards, warning and opportunity callouts.
+- `demand-sentiment-columns` with left `正面反馈` and right `负面反馈`; the two column class signatures must be `demand-sentiment-column positive` and `demand-sentiment-column negative`; each side must render exactly 6 cards.
+- Demand evidence cards must follow the 143645 R3 evidence-card language: white cards, thin borders, red/green sentiment accents, Chinese insight, short English excerpt when available, evidence strength, unmet point, and action opportunity.
+- User voice details must be kept in a collapsed `evidence-drawer` so the main evidence theater remains dense and readable.
+- The collapsed drawer summary must keep the fixed label `用户原声证据明细表`.
 - Prioritization table with evidence strength and confidence.
 
 Required interactions:
@@ -147,6 +161,7 @@ Required interactions:
 Before claiming template parity:
 
 - `template-baseline-manifest.json` lists all three source folders and excluded assets.
+- `html-template-slot-contract.json` lists fixed slot counts, required IDs, component groups, and scoped customer exceptions for all three reports.
 - The three canonical reference HTML files are packaged under `assets/canonical_templates/`.
 - `echarts.min.js` is local in the skill and copied into `output/html_reports/assets/`; customer HTML must not reference `cdn.jsdelivr.net`.
 - `assets/report.css` contains shared selectors for every required component family above.
@@ -158,5 +173,6 @@ Before claiming template parity:
 ## Known Remaining Gaps
 
 - `run_visual_parity_audit.py` provides browser screenshot evidence, but visual approval still needs at least one recent acceptance sample audit artifact.
-- The current audit verifies rendered report screenshots, density, and responsive overflow; it does not yet compare pixels against the downloaded template screenshots.
+- `run_template_reference_visual_compare.py` opens the downloaded reference HTML and generated customer HTML side by side at PC `1366x900` and `1440x900`, captures paired screenshots, and verifies selector signal parity, screenshot byte ratio, downsampled pixel distance, body background, section density, key component width ratio, left offset, and center offset.
+- Pixel-perfect approval still needs human review of the paired screenshots, but the automated gate must prove the generated report retains the reference template component vocabulary and PC layout skeleton.
 - Real-data parity is not proven until `run_acceptance_proof.py` passes on an `acceptance_sample` generated from fresh Sorftime-backed data.

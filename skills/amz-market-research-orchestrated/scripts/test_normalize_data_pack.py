@@ -58,7 +58,7 @@ class NormalizeDataPackTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["source_ids"], ["src_search", "src_detail"])
             self.assertEqual(product["validation"]["evidence_source_count"], 2)
-            self.assertEqual(product["title_cn"], "竞品记录")
+            self.assertEqual(product["title_cn"], "未命名竞品")
             self.assertNotIn("壁灯", product["title_cn"])
 
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
@@ -94,7 +94,8 @@ class NormalizeDataPackTest(unittest.TestCase):
             data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
             self.assertEqual(len(data_pack["keywords"]), 1)
             keyword = data_pack["keywords"][0]
-            self.assertEqual(keyword["keyword_cn"], "ai plush toy")
+            self.assertEqual(keyword["keyword_cn"], "未映射关键词：ai plush toy")
+            self.assertNotEqual(keyword["keyword_cn"], keyword["keyword"])
             self.assertEqual(keyword["relevance_cn"], "高相关")
             self.assertTrue(keyword["is_core_relevant"])
             self.assertNotIn("壁灯", keyword["keyword_cn"])
@@ -247,6 +248,91 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertEqual(data_pack["quality"]["grade"], "low_confidence_watch")
             self.assertEqual(data_pack["quality"]["original_overall_score"], 0.92)
             self.assertTrue(any(gap.get("module") == "review_sample_depth" for gap in data_pack["data_gaps"] if isinstance(gap, dict)))
+
+    def test_dedupes_repeated_data_gaps_by_module_and_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            repeated_gap = {
+                "type": "amazon_product_enrichment_empty_dimensions",
+                "module": "amazon_product_enrichment",
+                "gap": "Sorftime Amazon ASIN enrichment tools returned no rows for: product_detail.",
+                "fetched_at": "old",
+            }
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "products": [],
+                    "keywords": [{"keyword": f"smart light {idx}"} for idx in range(1000)],
+                    "categories": [],
+                    "reviews": [{"asin": "B0ABC", "rating": 5, "text": f"review {idx}"} for idx in range(80)],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [
+                        repeated_gap,
+                        repeated_gap | {"fetched_at": "new"},
+                        "同一文本缺口",
+                        "同一文本缺口",
+                    ],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            enrichment_gaps = [
+                gap
+                for gap in data_pack["data_gaps"]
+                if isinstance(gap, dict) and gap.get("module") == "amazon_product_enrichment"
+            ]
+            self.assertEqual(len(enrichment_gaps), 1)
+            self.assertEqual(sum(1 for gap in data_pack["data_gaps"] if gap == "同一文本缺口"), 1)
+
+    def test_removes_stale_keyword_and_review_gaps_when_counts_recover(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "products": [],
+                    "keywords": [{"keyword": f"smart light {idx}"} for idx in range(1000)],
+                    "categories": [],
+                    "reviews": [{"asin": "B0ABC", "rating": 5, "text": f"review {idx}"} for idx in range(80)],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [
+                        {"module": "keyword_sample_depth", "reason": "标准/深度版关键词样本不足 1000，当前 12。"},
+                        {"type": "keyword_collection_no_seed", "gap": "No keyword seed was available."},
+                        {"type": "review_collection_no_asin", "gap": "No ASIN was available for Sorftime review collection."},
+                        {"module": "review_sample_depth", "reason": "评论样本不足建议门槛 80，当前 0。"},
+                        {"module": "amazon_product_enrichment", "gap": "产品增强维度仍需复测。"},
+                    ],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            markers = [
+                (gap.get("type") or gap.get("module"))
+                for gap in data_pack["data_gaps"]
+                if isinstance(gap, dict)
+            ]
+            self.assertNotIn("keyword_sample_depth", markers)
+            self.assertNotIn("keyword_collection_no_seed", markers)
+            self.assertNotIn("review_collection_no_asin", markers)
+            self.assertNotIn("review_sample_depth", markers)
+            self.assertIn("amazon_product_enrichment", markers)
+            self.assertEqual(data_pack["normalization"]["data_gaps_recovered_removed"], 4)
 
     def test_backfills_legacy_source_metadata_and_entity_provider(self):
         with tempfile.TemporaryDirectory() as tmp:

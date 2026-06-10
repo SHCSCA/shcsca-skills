@@ -31,15 +31,15 @@ if (!outDir) throw new Error('VISUAL_AUDIT_OUT is required');
 fs.mkdirSync(outDir, { recursive: true });
 
 const pages = [
-  { name: 'report.html', key: 'index', minText: 300, selector: 'html[data-report-style="three-report-index-v2"]' },
-  { name: 'market-depth-report.html', key: 'market_depth', minText: 1000, selector: 'html[data-report-style="market-depth-report-v2"]' },
+  { name: 'report.html', key: 'index', minText: 300, selector: 'body.template-index' },
+  { name: 'market-depth-report.html', key: 'market_depth', minText: 1000, selector: 'body.template-market' },
   { name: 'lifecycle-strategy-report.html', key: 'lifecycle_strategy', minText: 1000, selector: 'body.template-lifecycle' },
   { name: 'demand-gap-report.html', key: 'demand_gap', minText: 1000, selector: 'body.template-demand' },
 ];
 
 const viewports = [
-  { key: 'desktop', width: 1366, height: 900 },
-  { key: 'mobile', width: 390, height: 844 },
+  { key: 'pc-1366', width: 1366, height: 900 },
+  { key: 'pc-1440', width: 1440, height: 900 },
 ];
 
 function reportUrl(name) {

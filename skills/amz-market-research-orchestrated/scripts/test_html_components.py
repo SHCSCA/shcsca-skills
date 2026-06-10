@@ -40,7 +40,8 @@ class HtmlComponentsTest(unittest.TestCase):
         self.assertIn("filter-bar", filtered_table_html)
         self.assertIn('data-filter="高相关"', filtered_table_html)
         self.assertIn("bar-row", chart_html)
-        self.assertIn("--w:100.0%", chart_html)
+        self.assertIn('data-width="100.0"', chart_html)
+        self.assertNotIn("style=", chart_html)
         self.assertIn("<b>raw</b>", kpi_card_html("HTML", "<b>raw</b>"))
 
 

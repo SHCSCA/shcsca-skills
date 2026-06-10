@@ -26,6 +26,10 @@ Runtime rule: use the Sorftime and Firecrawl MCP tools already configured in the
 
 For standard/deep keyword depth, page `category_keywords` and `keyword_extends` with `scripts/collect_sorftime_keywords.py`. Sorftime returns 20 rows per page; the normalized Data Pack must keep at least 1000 keyword rows.
 
+For standard/deep competitor depth, run `scripts/collect_sorftime_products.py`. Amazon product collection is separate from TikTok and 1688 collection: it may call `product_search` or `keyword_search_results` with Amazon site arguments, but it must not send TikTok `productId/site` or 1688 `searchName`-only assumptions to Amazon tools.
+
+Amazon `tools/list` schemas only verify accepted input parameters. They do not prove which output fields will be returned for a given ASIN/category/keyword. When a Sorftime Amazon dimension succeeds but returns zero rows, retry against other valid ASINs or category/product-name samples before treating the dimension as unavailable. Record row counts, actual fields, and empty dimensions in `product_enrichment_collection_summary.json` and `sorftime_mcp_contract_audit.json`.
+
 ## TikTok Shop Tools
 
 | Need | Preferred Sorftime tool | Required when |
@@ -49,6 +53,8 @@ Use `scripts/collect_sorftime_tiktok_signals.py` for standard/deep runs. Current
 Do not use `keyword` for TikTok search calls, and do not use `product_id` when the MCP schema requires `productId`.
 TikTok `site` follows the TikTok schema enum, not the Amazon `amzSite` enum: `Unknow`, `US`, `MY`, `PH`, `VN`, `TH`, `ID`, `GB`, `JP`.
 
+TikTok output fields are also audited by actual `tools/call` rows, not by `tools/list` alone. If `tiktok_author`, `tiktok_product_video`, or creator/video dimensions return zero rows for one product or keyword, retry with another productId/searchName from the collected TikTok product pool. Only after those retries can the report mark a TikTok creator/content dimension as a data gap.
+
 For v2 three-report output, TikTok evidence feeds both `market-depth-report.html` and `demand-gap-report.html`: treat it as content/channel and scene evidence, not Amazon purchase proof.
 
 ## 1688 Tool
@@ -57,7 +63,11 @@ For v2 three-report output, TikTok evidence feeds both `market-depth-report.html
 |---|---|---|
 | Supplier and cost proxy | `ali1688_similar_product` | Standard/deep reports and supply/profit validation. |
 
-Current Sorftime MCP schema for `ali1688_similar_product` is `searchName` only. Do not send `keyword` or `page`.
+Official Sorftime MCP docs for `ali1688_similar_product` require `searchName` and `page`. Do not send Amazon-style `keyword`, `amzSite`, or TikTok `site` arguments to 1688. Some runtime `tools/list` schemas may omit `page`; the collector must still call the documented `searchName,page` contract and record actual response fields.
+
+The documented 1688 response has 16 fields: `Title`, `Photo`, `URL`, `Price`, `ProductId`, `StoreName`, `ServiceScore`, `ServiceScoreDetail`, `OnlineDate`, `SalesOf30d`, `WholesalePriceRange`, `RepurchaseRate`, `ShippingOrigin`, `ReviewCount`, `Score`, `SkuCount`. Treat `Url`/`url` as aliases of the documented `URL` field. The collector must write `documented_field_coverage` into `supplier_1688_collection_summary.json`; if coverage is incomplete, the supply-chain module must explain the missing fields and block gross-margin conclusions.
+
+1688 quality has two layers. Global mixed-category prices may fail the spread gate (`max/P50 > 20` or `P75/P25 > 5`). This does not automatically block the report if a same-search-term bucket has at least 50 valid quotes, field coverage passes, and price spread passes. In that case the report may use only the passing bucket for supply-chain and gross-margin calculations, while writing the global spread issue as a warning and keeping the mixed data in audit files.
 
 Use 1688 data as a cost and supply maturity proxy. Do not treat listed supplier prices as landed cost. In v2, `ali1688_similar_product` also feeds the lifecycle report's SKU supply-chain and risk sections.
 

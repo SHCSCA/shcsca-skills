@@ -117,7 +117,7 @@ def build_report_documents(
         "{{DECISION_ROADMAP}}": call(fns, "render_decision", delivery),
         "{{FULL_DATA_APPENDIX}}": call(fns, "render_full_appendix", data_pack, analysis_plan),
         "{{LINEAGE_TABLE}}": call(fns, "render_lineage", data_pack),
-        "{{REPORT_FOOTER}}": f"<span>{call(fns, 'esc', object_value)} 市场深度调研报告 · 数据覆盖：Amazon US · 1688 · 清洗后数据</span><span>Confidential · Client Use Only</span>",
+        "{{REPORT_FOOTER}}": f"<span>{call(fns, 'esc', object_value)} 市场深度调研报告 · 数据覆盖：Amazon US · 1688 · 已验证市场证据</span><span>Confidential · Client Use Only</span>",
     }
     skus = call(fns, "lifecycle_skus", data_pack, lifecycle, fallback_source)
     lifecycle_replacements = {
@@ -135,9 +135,27 @@ def build_report_documents(
         "{{LIFECYCLE_LINEAGE}}": call(fns, "render_lineage", data_pack),
         "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · amz-market-research-orchestrated 生成 · lifecycle-strategy-report-v2",
     }
+    demand_anchor_product = products[0] if products else {}
+    demand_anchor_value = call(
+        fns,
+        "first",
+        demand_anchor_product.get("asin") if isinstance(demand_anchor_product, dict) else None,
+        call(fns, "first", demand_anchor_product.get("title_cn") if isinstance(demand_anchor_product, dict) else None, default=None),
+        object_value,
+    )
+    demand_anchor_asin = demand_anchor_product.get("asin") if isinstance(demand_anchor_product, dict) else None
+    if demand_anchor_asin:
+        target_anchor_title = (
+            "目标ASIN锚点（"
+            f"<span class=\"asin-token\" data-allow-asin=\"demand-target-anchor\">{call(fns, 'esc', demand_anchor_asin)}</span>"
+            "）"
+        )
+    else:
+        target_anchor_title = f"目标ASIN锚点（{call(fns, 'esc', demand_anchor_value)}）"
     demand_replacements = {
         **common,
         "{{DEMAND_REPORT_TITLE}}": f"{object_value} · 用户心智断层与需求机会报告",
+        "{{TARGET_ANCHOR_TITLE}}": target_anchor_title,
         "{{TARGET_ANCHOR}}": call(fns, "render_target_anchor", data_pack, object_value, fallback_source),
         "{{DECISION_BOARD}}": call(fns, "render_decision_board", data_pack, demand_gap, decision, fallback_source),
         "{{APPEALS_MAP}}": call(fns, "render_appeals_map", data_pack, fallback_source),

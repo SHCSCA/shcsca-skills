@@ -20,6 +20,7 @@ ENTITY_KEYS = [
     "reviews",
     "tiktok_products",
     "tiktok_videos",
+    "tiktok_authors",
     "suppliers",
     "web_documents",
 ]
@@ -39,6 +40,39 @@ THEME_CN = {
     "quality_durability": "质量与耐用",
     "size_finish_design": "尺寸与外观",
 }
+
+KEYWORD_CN_RULES = [
+    ("under cabinet", "橱柜灯"),
+    ("cabinet light", "橱柜灯"),
+    ("motion sensor", "人体感应"),
+    ("wireless", "无线"),
+    ("rechargeable", "可充电"),
+    ("magnetic", "磁吸"),
+    ("rgbic", "RGBIC"),
+    ("rgb", "RGB"),
+    ("led strip", "灯带"),
+    ("strip lights", "灯带"),
+    ("smart bulb", "智能灯泡"),
+    ("light bulb", "灯泡"),
+    ("outdoor", "户外"),
+    ("solar", "太阳能"),
+    ("wall sconce", "壁灯"),
+    ("vanity light", "镜前灯"),
+    ("night light", "夜灯"),
+    ("table lamp", "台灯"),
+    ("floor lamp", "落地灯"),
+    ("smart lighting", "智能照明"),
+    ("led lights", "LED灯"),
+    ("lighting", "照明"),
+]
+
+TITLE_SEGMENT_RULES = [
+    ("橱柜感应灯", ["under cabinet", "cabinet light", "motion sensor", "puck light"]),
+    ("RGB 灯带", ["rgbic", "rgb led strip", "led strip", "strip lights", "light strip"]),
+    ("智能灯泡", ["smart bulb", "a19", "light bulb"]),
+    ("户外感应灯", ["outdoor", "solar", "security light", "flood light", "wall sconce"]),
+    ("氛围灯", ["ambient", "night light", "table lamp", "sunset"]),
+]
 
 
 def load_json(path: Path) -> Any:
@@ -305,6 +339,10 @@ def tiktok_video_dedupe_key(item: dict[str, Any]) -> str:
     return canonical_url(item.get("url")) or "|".join([normalized_key(item.get("product_id")), fingerprint(item.get("title")) or normalized_key(item.get("video_id"))])
 
 
+def tiktok_author_dedupe_key(item: dict[str, Any]) -> str:
+    return canonical_url(item.get("profile_url")) or normalized_key(item.get("author") or item.get("name"))
+
+
 def category_dedupe_key(item: dict[str, Any]) -> str:
     node_id = normalized_key(item.get("node_id") or item.get("category_id"))
     if node_id:
@@ -377,7 +415,18 @@ def infer_seed_terms(data_pack: dict[str, Any]) -> list[str]:
 
 def keyword_cn(keyword: Any) -> str:
     text = normalize_text(keyword)
-    return text or "待补充关键词"
+    if not text:
+        return "未映射关键词"
+    if has_cjk(text):
+        return text
+    lowered = text.casefold()
+    labels: list[str] = []
+    for needle, label in KEYWORD_CN_RULES:
+        if needle in lowered and label not in labels:
+            labels.append(label)
+    if labels:
+        return " ".join(labels)
+    return f"未映射关键词：{text}"
 
 
 def keyword_intent_cn(keyword: Any) -> str:
@@ -420,8 +469,12 @@ def title_cn(title: Any, segment: Any = None) -> str:
         return text
     segment_text = normalize_text(segment)
     if has_cjk(segment_text):
-        return f"{segment_text}记录"
-    return "竞品记录"
+        return segment_text
+    lowered = text.casefold()
+    for label, needles in TITLE_SEGMENT_RULES:
+        if any(needle in lowered for needle in needles):
+            return label
+    return "未命名竞品"
 
 
 def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
@@ -569,6 +622,64 @@ def upsert_gap(data_pack: dict[str, Any], module: str, reason: str, impact: str,
     gaps.append({"module": module, "reason": reason, "impact": impact, "next_step": next_step})
 
 
+def data_gap_identity(gap: Any) -> tuple[str, str, str]:
+    if isinstance(gap, dict):
+        marker = normalize_text(gap.get("module") or gap.get("type") or "")
+        message = normalize_text(gap.get("gap") or gap.get("reason") or "")
+        if not message:
+            stable = {key: value for key, value in gap.items() if key != "fetched_at"}
+            message = normalize_text(json.dumps(stable, ensure_ascii=False, sort_keys=True))
+        return ("dict", marker, message)
+    return ("text", "", normalize_text(gap))
+
+
+def dedupe_data_gaps(data_pack: dict[str, Any]) -> int:
+    gaps = data_pack.setdefault("data_gaps", [])
+    deduped: list[Any] = []
+    index_by_key: dict[tuple[str, str, str], int] = {}
+    removed = 0
+    for gap in gaps:
+        key = data_gap_identity(gap)
+        if key in index_by_key:
+            removed += 1
+            existing = deduped[index_by_key[key]]
+            if isinstance(existing, dict) and isinstance(gap, dict):
+                for field, value in gap.items():
+                    if value not in (None, "", []) and existing.get(field) in (None, "", []):
+                        existing[field] = value
+            continue
+        index_by_key[key] = len(deduped)
+        deduped.append(gap)
+    data_pack["data_gaps"] = deduped
+    return removed
+
+
+def data_gap_marker(gap: Any) -> str:
+    if not isinstance(gap, dict):
+        return ""
+    return normalize_text(gap.get("module") or gap.get("type") or "")
+
+
+def remove_recovered_data_gaps(data_pack: dict[str, Any], after_counts: dict[str, int]) -> int:
+    recovered_markers: set[str] = set()
+    if after_counts.get("keywords", 0) >= 1000:
+        recovered_markers.update({"keyword_sample_depth", "keyword_collection_no_seed", "keyword_collection_failure"})
+    if after_counts.get("reviews", 0) >= 80:
+        recovered_markers.update({"review_sample_depth", "review_collection_no_asin", "review_collection_failure"})
+    if not recovered_markers:
+        return 0
+    gaps = data_pack.setdefault("data_gaps", [])
+    kept: list[Any] = []
+    removed = 0
+    for gap in gaps:
+        if data_gap_marker(gap) in recovered_markers:
+            removed += 1
+        else:
+            kept.append(gap)
+    data_pack["data_gaps"] = kept
+    return removed
+
+
 def apply_quality_caps(data_pack: dict[str, Any], after_counts: dict[str, int], cross_validated: dict[str, int]) -> None:
     quality = data_pack.setdefault("quality", {})
     raw_score = quality.get("overall_score")
@@ -621,10 +732,12 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     data_pack["categories"] = dedupe(data_pack.get("categories") or [], category_dedupe_key, source_index)
     data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], tiktok_product_dedupe_key, source_index)
     data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], tiktok_video_dedupe_key, source_index)
+    data_pack["tiktok_authors"] = dedupe(data_pack.get("tiktok_authors") or [], tiktok_author_dedupe_key, source_index)
     data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)
     data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], web_document_dedupe_key, source_index)
 
     after_counts = {key: len(data_pack.get(key) or []) for key in ENTITY_KEYS}
+    data_gaps_recovered_removed = remove_recovered_data_gaps(data_pack, after_counts)
     cross_validated = {
         key: sum(1 for item in data_pack.get(key, []) if (item.get("validation") or {}).get("cross_validated"))
         for key in ENTITY_KEYS
@@ -644,6 +757,7 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "reviews deduped by ASIN/date/title/text fingerprint",
             "tiktok_products deduped by product_id",
             "tiktok_videos deduped by canonical URL or product_id+title",
+            "tiktok_authors deduped by canonical profile URL or author name",
             "web_documents deduped by canonical URL with query and fragment removed",
             "suppliers deduped by canonical URL, product_id, or title+store",
             "English keyword/title fields copied into audit-friendly display fields; relevance is inferred from research_object/seed keyword overlap",
@@ -665,6 +779,9 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "VOC、APPEALS、KANO/JTBD 和用户原声只能作为初步线索，不能写成精确市场占比。",
             "对核心 ASIN 补采 Positive/Neutral/Negative 评论，优先达到 80 条，深度版建议 200 条以上。",
         )
+    data_gap_duplicates_removed = dedupe_data_gaps(data_pack)
+    data_pack["normalization"]["data_gaps_recovered_removed"] = data_gaps_recovered_removed
+    data_pack["normalization"]["data_gaps_duplicates_removed"] = data_gap_duplicates_removed
     apply_quality_caps(data_pack, after_counts, cross_validated)
     data_pack["cleaning_summary"] = data_pack["normalization"]
 

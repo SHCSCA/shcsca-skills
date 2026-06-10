@@ -21,7 +21,7 @@ class RunAcceptanceProofTest(unittest.TestCase):
             write_json(report_dir / "analysis" / "critic_review.json", {"pass": True, "score": 86})
 
             def fake_step(name, _command, _cwd):
-                if name == "readiness":
+                if name in {"readiness", "readiness_after_recovery"}:
                     write_json(
                         report_dir / "data" / "normalized" / "data_readiness_report.json",
                         {
@@ -51,7 +51,7 @@ class RunAcceptanceProofTest(unittest.TestCase):
             write_json(report_dir / "analysis" / "critic_review.json", {"pass": True, "score": 92})
 
             def fake_step(name, _command, _cwd):
-                if name == "readiness":
+                if name in {"readiness", "readiness_after_recovery"}:
                     write_json(
                         report_dir / "data" / "normalized" / "data_readiness_report.json",
                         {
@@ -61,6 +61,8 @@ class RunAcceptanceProofTest(unittest.TestCase):
                             "warnings": [],
                         },
                     )
+                    return {"name": name, "command": [], "returncode": 2, "stdout": "", "stderr": "", "pass": False}
+                if name == "readiness_recovery":
                     return {"name": name, "command": [], "returncode": 2, "stdout": "", "stderr": "", "pass": False}
                 return {"name": name, "command": [], "returncode": 0, "stdout": "", "stderr": "", "pass": True}
 
@@ -72,7 +74,47 @@ class RunAcceptanceProofTest(unittest.TestCase):
             self.assertIsNone(proof["delivery_status"])
             self.assertIsNone(proof["critic_pass"])
             self.assertTrue(proof["stale_delivery_ignored"])
-            self.assertEqual([step["name"] for step in proof["steps"]], ["template_parity", "readiness"])
+            self.assertEqual([step["name"] for step in proof["steps"]], ["template_parity", "readiness", "readiness_recovery", "readiness_after_recovery"])
+
+    def test_reference_visual_compare_can_be_added_to_acceptance_proof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            download_root = Path(tmp) / "downloadpage"
+            write_json(report_dir / "output" / "delivery_result.json", {"status": "complete", "decision": "Watch"})
+            write_json(report_dir / "analysis" / "critic_review.json", {"pass": True, "score": 86})
+
+            def fake_step(name, command, _cwd):
+                if name in {"readiness", "readiness_after_recovery"}:
+                    write_json(
+                        report_dir / "data" / "normalized" / "data_readiness_report.json",
+                        {
+                            "acceptance_ready": True,
+                            "sample_class": "acceptance_sample",
+                            "blocking_gaps": [],
+                            "warnings": [],
+                        },
+                    )
+                if name == "reference_visual_compare":
+                    self.assertIn("--download-root", command)
+                    self.assertIn(str(download_root), command)
+                    write_json(
+                        report_dir / "output" / "template_reference_visual_compare" / "template_reference_visual_compare.json",
+                        {"overall_pass": True},
+                    )
+                return {"name": name, "command": command, "returncode": 0, "stdout": "", "stderr": "", "pass": True}
+
+            with patch.object(proof_runner, "run_step", side_effect=fake_step):
+                proof = proof_runner.run_proof(report_dir, "standard", reference_visual=True, download_root=download_root)
+
+            self.assertTrue(proof["overall_pass"])
+            self.assertEqual(
+                [step["name"] for step in proof["steps"]],
+                ["template_parity", "readiness", "render", "validate", "reference_visual_compare"],
+            )
+            self.assertEqual(proof["reference_visual_compare"], "output/template_reference_visual_compare/template_reference_visual_compare.json")
+            markdown = (report_dir / "output" / "acceptance_proof.md").read_text(encoding="utf-8")
+            self.assertIn("Template Reference Visual Compare", markdown)
+            self.assertIn("template_reference_visual_compare.json", markdown)
 
 
 if __name__ == "__main__":

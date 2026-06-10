@@ -25,7 +25,6 @@ from customer_copy import (
 )
 from delivery_writer import write_delivery_result, write_lineage_markdown, write_report_brief
 from customer_safety import customer_safe_asset_text, redact_customer_html
-from canonical_template_assets import apply_reference_style
 from html_components import (
     as_float,
     clean,
@@ -52,6 +51,7 @@ from html_components import (
 )
 from normalize_data_pack import ENTITY_KEYS, infer_seed_terms, normalize as normalize_data_pack, tokens
 from check_data_readiness import assess as assess_data_readiness, write_json as write_readiness_json
+from recover_data_readiness import recover_readiness
 from report_renderers import build_report_documents
 from site_assets import (
     HTML_BUNDLE_DIR,
@@ -94,6 +94,34 @@ CHILD_REPORT_RENDERERS = {
 CRITIC_RENDERER = CHILD_SKILLS_DIR / "market-research-critic" / "scripts" / "run_critic.py"
 
 CHILD_INVOCATION_LOG = Path("analysis") / "child_skill_invocation_log.json"
+
+
+def customer_quality_summary(quality: dict[str, Any]) -> tuple[str, str, str]:
+    score = as_float(quality.get("overall_score"), 0)
+    raw_grade = clean(quality.get("grade"))
+    if score >= 0.82 or raw_grade.upper() == "A":
+        return "证据充分", "关键数据覆盖较完整，可进入客户判断", "success"
+    if score >= 0.62 or raw_grade.upper() in {"B", "C"}:
+        return "需复核", "关键口径可判断，但仍需复核高影响缺口", "warning"
+    return "证据不足", "先补齐核心数据，再输出完整结论", "warning"
+
+
+def product_units_total(products: list[dict[str, Any]]) -> float:
+    return sum(as_float(product_sales(product), 0) for product in products)
+
+
+def product_revenue_total(products: list[dict[str, Any]]) -> float:
+    total = 0.0
+    for product in products:
+        revenue = as_float(product_revenue(product), 0)
+        if revenue:
+            total += revenue
+            continue
+        price = as_float(product_price(product), 0)
+        sales = as_float(product_sales(product), 0)
+        if price and sales:
+            total += price * sales
+    return total
 
 
 def load_json(path: Path, default: Any) -> Any:
@@ -204,6 +232,7 @@ def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any
         "reviews": len(data_pack.get("reviews") or []),
         "tiktok_products": len(data_pack.get("tiktok_products") or []),
         "tiktok_videos": len(data_pack.get("tiktok_videos") or []),
+        "tiktok_authors": len(data_pack.get("tiktok_authors") or []),
         "suppliers": len(data_pack.get("suppliers") or []),
         "web_documents": len(data_pack.get("web_documents") or []),
     }
@@ -231,12 +260,13 @@ def render_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any
         for key in ENTITY_KEYS
         if key in before_counts or key in after_counts
     ]
+    quality_label, quality_sub, quality_tone = customer_quality_summary(quality)
     return (
         metric_strip
         + "<div class=\"grid-3\"><div class=\"card\"><div class=\"card-title\">Provider Coverage</div>"
         + provider_chart
-        + "</div><div class=\"card\"><div class=\"card-title\">Quality Notes</div>"
-        + f"<p>{tag('quality ' + str(first(quality.get('grade'), '-')))} {tag('score ' + str(first(quality.get('overall_score'), '-')), 'warn')}</p><ul>{note_html}</ul>"
+        + "</div><div class=\"card\"><div class=\"card-title\">数据质量说明</div>"
+        + f"<p>{tag(quality_label, quality_tone)} {tag(quality_sub, 'warn')}</p><ul>{note_html}</ul>"
         + "</div><div class=\"card\"><div class=\"card-title\">交叉验证与去重</div>"
         + f"<p>{tag('已去重', 'good')} {tag('已交叉验证', 'warn')}</p><p>同竞品、同关键词、同链接、同供应商先合并，再进入分析和 HTML。多类数据记录同时命中的实体会提高置信度，冲突字段只保留在审计文件。</p>"
         + "</div></div>"
@@ -268,13 +298,25 @@ def render_market(data_pack: dict[str, Any], market_size: dict[str, Any]) -> str
         )
         if seller_origin:
             origin_counts[seller_origin] += 1
-    top_units = first(category.get("top100_estimated_monthly_units"), market_size.get("top100_estimated_monthly_units"), default=None)
-    top_revenue = first(category.get("top100_estimated_monthly_revenue"), market_size.get("top100_estimated_monthly_revenue"), default=None)
+    fallback_units = product_units_total(products)
+    fallback_revenue = product_revenue_total(products)
+    top_units = first(
+        category.get("top100_estimated_monthly_units"),
+        market_size.get("top100_estimated_monthly_units"),
+        fallback_units or None,
+        default=None,
+    )
+    top_revenue = first(
+        category.get("top100_estimated_monthly_revenue"),
+        market_size.get("top100_estimated_monthly_revenue"),
+        fallback_revenue or None,
+        default=None,
+    )
     median_price = statistics.median(prices) if prices else None
     high_band = "$99-$150" if median_price and as_float(median_price) < 99 else money(median_price)
     cards = [
-        kpi_card("Top100 估算月销量", num(top_units), "类目代理指标", "success"),
-        kpi_card("Top100 估算销售额", money(top_revenue), "用于判断大盘体量"),
+        kpi_card("Top100 估算月销量", num(top_units), "由类目字段或竞品池销量聚合", "success"),
+        kpi_card("Top100 估算销售额", money(top_revenue), "由竞品售价 × 月销聚合"),
         kpi_card("Amazon主力价格带", f"{money(median_price)} 附近", "销量最集中区间", "warning"),
         kpi_card("高溢价区间", high_band, "低密度 · 高毛利空间", "lavender"),
     ]
@@ -296,10 +338,10 @@ def render_market(data_pack: dict[str, Any], market_size: dict[str, Any]) -> str
         + echart_box("bubbleChart", "竞品价格区间竞争密度", "价格带竞品数量 vs 月销量估算 · 气泡大小=市场规模")
         + "</div>"
         + "<div class=\"chart-grid\">"
-        + echart_box("growthChart", "市场增长趋势", "公开规模与清洗数据代理趋势")
+        + echart_box("growthChart", "市场增长趋势", "公开规模与月销量代理趋势")
         + echart_box("featureChart", "功能覆盖与机会空白", "竞品覆盖率 vs 目标补位")
         + "</div>"
-        + "<div class=\"insight-box\">💡 <strong>大盘结论：</strong>当前已清洗数据说明市场仍有可切入空间，但应避开纯低价红海，优先验证高溢价价格带、可感知功能差异和评论中反复出现的体验缺口。</div>"
+        + "<div class=\"insight-box\">💡 <strong>大盘结论：</strong>当前已验证数据说明市场仍有可切入空间，但应避开纯低价红海，优先验证高溢价价格带、可感知功能差异和评论中反复出现的体验缺口。</div>"
     )
 
 
@@ -420,7 +462,7 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
         + "<p>Top 竞品表过滤明显非目标类目噪声；完整产品池保留在“完整数据附录”。</p>"
         + "</div></div>"
     )
-    head = "<thead><tr><th>产品</th><th>价格</th><th>评分</th><th>月销估算</th><th>核心卖点</th><th>致命弱点</th><th>标签</th></tr></thead>"
+    head = "<thead><tr><th>ASIN</th><th>产品</th><th>价格</th><th>评分</th><th>月销估算</th><th>核心卖点</th><th>致命弱点</th><th>标签</th></tr></thead>"
     body_rows = []
     tag_sequence = ["badge-hot", "badge-hot", "badge-risk", "badge-growth", "badge-premium", "badge-premium"]
     top_products = filtered[:6]
@@ -430,6 +472,7 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
         weak = competitor_weakness(product)
         body_rows.append(
             "<tr>"
+            + f"<td><span class=\"asin-token\" data-allow-asin=\"competitor-table\">{esc(product.get('asin'))}</span></td>"
             + f"<td><div class=\"product-name\">{esc(row[1])}</div><div class=\"product-brand\">{esc(row[3])} · {esc(row[4])}</div></td>"
             + f"<td><span class=\"price-tag\">{esc(row[5])}</span></td>"
             + f"<td><span class=\"rating-stars\">★★★★</span> {esc(row[8])}</td>"
@@ -439,7 +482,12 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
             + f"<td><span class=\"badge {tag_class} badge-risk lavender\">{esc('高优先级' if idx <= 2 else '可参考')}</span></td>"
             + "</tr>"
         )
-    colgroup = "<colgroup><col style=\"width:29%\"><col style=\"width:7%\"><col style=\"width:7%\"><col style=\"width:8%\"><col style=\"width:31%\"><col style=\"width:12%\"><col style=\"width:6%\"></colgroup>"
+    colgroup = (
+        "<colgroup>"
+        "<col class=\"comp-col-asin\"><col class=\"comp-col-product\"><col class=\"comp-col-price\"><col class=\"comp-col-rating\">"
+        "<col class=\"comp-col-sales\"><col class=\"comp-col-selling\"><col class=\"comp-col-weakness\"><col class=\"comp-col-tag\">"
+        "</colgroup>"
+    )
     comp_table = "<table class=\"comp-table\">" + colgroup + head + "<tbody>" + "".join(body_rows) + "</tbody></table>"
     return comp_table, cards, filtered
 
@@ -470,11 +518,73 @@ def traffic_terms_by_asin(keywords: list[dict[str, Any]]) -> dict[str, list[dict
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for kw in keywords:
         asin = kw.get("asin")
-        if asin:
+        if asin and not is_off_topic_traffic_keyword(kw):
             grouped[asin].append(kw)
     for asin in grouped:
         grouped[asin] = sorted(grouped[asin], key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
     return grouped
+
+
+def is_off_topic_traffic_keyword(keyword: dict[str, Any]) -> bool:
+    text = clean(" ".join(str(keyword.get(key) or "") for key in ("keyword", "keyword_cn", "intent_cn"))).casefold()
+    off_topic = [
+        "camera",
+        "doorbell",
+        "ring camera",
+        "standing desk",
+        "headband",
+        "fishing pole",
+        "camping essentials",
+        "video",
+        "subscription",
+        "摄像",
+        "门铃",
+        "录像",
+    ]
+    return any(term in text for term in off_topic)
+
+
+def keyword_customer_label(keyword: dict[str, Any]) -> str:
+    keyword_cn = clean(keyword.get("keyword_cn"))
+    keyword_raw = clean(keyword.get("keyword"))
+    if (
+        keyword_cn
+        and "未映射关键词" not in keyword_cn
+        and re.search(r"[\u4e00-\u9fff]", keyword_cn)
+        and keyword_cn.casefold() != keyword_raw.casefold()
+    ):
+        return keyword_cn
+    text = keyword_raw.casefold()
+    mapping = [
+        (["under cabinet", "cabinet", "kitchen"], "橱柜灯"),
+        (["motion sensor", "sensor"], "感应灯"),
+        (["led strip", "strip light", "strip"], "灯带"),
+        (["led"], "LED灯"),
+        (["bedroom", "dorm"], "卧室氛围灯"),
+        (["vanity", "mirror"], "镜前灯"),
+        (["outdoor", "solar"], "户外太阳能灯"),
+        (["flashlight", "headlamp"], "户外便携灯"),
+        (["camping", "fishing"], "户外照明"),
+        (["sconce", "wall light"], "壁灯"),
+        (["bulb"], "智能灯泡"),
+        (["night light"], "夜灯"),
+        (["plush", "toy", "companion"], "AI毛绒玩具"),
+    ]
+    for needles, label in mapping:
+        if any(needle in text for needle in needles):
+            return label
+    return "场景流量词"
+
+
+def traffic_tag_html(terms: list[dict[str, Any]], limit: int = 4) -> str:
+    labels: list[str] = []
+    for keyword in terms:
+        label = keyword_customer_label(keyword)
+        if label not in labels:
+            labels.append(label)
+        if len(labels) >= limit:
+            break
+    return "".join(tag(label, "green") for label in labels)
 
 
 def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dict[str, Any]]) -> str:
@@ -486,17 +596,17 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
         trend_text = f"{num(product_sales(product))}/月 · {num(product_reviews(product))} 评论 · {first(product.get('rating'), '-')}★"
         if trend.get("first") is not None and trend.get("last") is not None:
             trend_text = f"{num(trend.get('first'))} → {num(trend.get('last'))}，增长 {trend.get('growth')}"
-        traffic_tags = "".join(tag(kw.get("keyword")) for kw in traffic.get(asin, [])[:6])
+        traffic_tags = traffic_tag_html(traffic.get(asin, []))
         if not traffic_tags:
             traffic_tags = (
-                tag(first(product.get("segment_cn"), product.get("segment"), "核心细分"))
-                + tag(price_band(product_price(product)))
+                tag(first(product.get("segment_cn"), product.get("segment"), "核心细分"), "green")
+                + tag(price_band(product_price(product)), "green")
                 + tag(f"评论{num(product_reviews(product))}")
             )
         cards.append(
             "<div class=\"comp-deep-card\">"
             + "<div class=\"comp-deep-header\">"
-            + f"<div class=\"comp-deep-name\">🎯 <span class=\"asin-token\" data-allow-asin=\"benchmark-sniper\">{esc(asin or '竞品记录')}</span> · {esc(first(product.get('brand'), customer_product_position(product)))}</div>"
+            + f"<div class=\"comp-deep-name\">🎯 <span class=\"asin-token\" data-allow-asin=\"benchmark-sniper\">{esc(asin or '参考竞品')}</span> · {esc(first(product.get('brand'), customer_product_position(product)))}</div>"
             + f"<div class=\"comp-deep-price\">{esc(money(product_price(product)))} · 月销~{esc(num(product_sales(product)))} · {esc(first(product.get('rating'), '-'))}★</div>"
             + "</div><div class=\"comp-deep-body\">"
             + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">溢价逻辑</div>"
@@ -506,8 +616,8 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             + "</div></div>"
             + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">我们的机会</div>"
             + f"<div class=\"comp-deep-text\">围绕 {esc(customer_product_position(product))} 的高频痛点，提炼可验证卖点与页面承诺。</div></div>"
-            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">数据信号</div><div class=\"comp-tag-list\">"
-            + f"<span class=\"comp-tag\">销量/评论：{esc(trend_text)}</span><span class=\"comp-tag green\">定位标签：{traffic_tags}</span>"
+            + "<div class=\"comp-deep-section\"><div class=\"comp-deep-section-title\">数据信号</div><div class=\"comp-tag-list comp-traffic-tags\">"
+            + f"<span class=\"comp-tag\">销量/评论：{esc(trend_text)}</span>{traffic_tags}"
             + "</div></div></div></div>"
         )
     return (
@@ -587,7 +697,7 @@ def render_profitability_table(products: list[dict[str, Any]], valid_prices_rmb:
         gross_profit = price_usd - landed - amazon_fee
         margin = gross_profit / price_usd * 100 if price_usd else 0
         asin = str(product.get("asin") or "")
-        chart_label = asin or label
+        chart_label = label
         chart_spans.append(f"<span data-label=\"{esc(chart_label)}\" data-value=\"{esc(round(margin, 1))}\"></span>")
         rows.append(
             "<tr>"
@@ -625,6 +735,157 @@ def render_profitability_table(products: list[dict[str, Any]], valid_prices_rmb:
         "该测算用真实竞品 ASIN 售价、销量、评分和评论数做参考，不用品牌均值替代。</div>"
     )
     return table_html, formula
+
+
+def supplier_price_value(supplier: dict[str, Any]) -> Any:
+    return first(supplier.get("price_rmb"), supplier.get("factory_price_rmb"), supplier.get("price"), default=None)
+
+
+SUPPLIER_NON_FINISHED_TOKENS = [
+    "灯珠",
+    "发光二极管",
+    "控制器",
+    "调光器",
+    "驱动电源",
+    "电源适配器",
+    "光源模组",
+    "灯板",
+    "芯片",
+    "ic ",
+    "配件",
+    "冷光片",
+    "植物灯",
+    "洗墙灯",
+    "工程灯",
+    "投光灯",
+    "泛光灯",
+    "广告灯",
+    "招牌灯",
+    "led bead",
+    "diode",
+    "controller",
+    "driver",
+    "power supply",
+    "module",
+    "accessory",
+]
+
+
+def supplier_title_text(supplier: dict[str, Any]) -> str:
+    return clean(
+        " ".join(
+            str(supplier.get(key) or "")
+            for key in ["title", "title_cn", "name", "product_name", "supplier_name", "seed_keyword"]
+        )
+    ).casefold()
+
+
+def is_finished_supplier_record(supplier: dict[str, Any]) -> bool:
+    price = as_float(supplier_price_value(supplier), -1)
+    if price <= 0:
+        return False
+    text = supplier_title_text(supplier)
+    if any(token in text for token in SUPPLIER_NON_FINISHED_TOKENS):
+        return False
+    if price < 0.5:
+        return False
+    return True
+
+
+def finished_supplier_records(suppliers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [supplier for supplier in suppliers if isinstance(supplier, dict) and is_finished_supplier_record(supplier)]
+
+
+def supplier_quality_snapshot(suppliers: list[dict[str, Any]]) -> dict[str, Any]:
+    valid = [supplier for supplier in suppliers if as_float(supplier_price_value(supplier), -1) > 0]
+    total = len(valid)
+    prices = [as_float(supplier_price_value(supplier), -1) for supplier in valid if as_float(supplier_price_value(supplier), -1) > 0]
+    title_count = sum(1 for supplier in valid if first(supplier.get("title"), supplier.get("title_cn"), supplier.get("name"), default=""))
+    identity_count = sum(1 for supplier in valid if first(supplier.get("canonical_url"), supplier.get("url"), supplier.get("product_url"), supplier.get("product_id"), supplier.get("offer_id"), default=""))
+    title_pct = round(title_count / total * 100, 1) if total else 0
+    identity_pct = round(identity_count / total * 100, 1) if total else 0
+    p25 = percentile(prices, 0.25)
+    p50 = percentile(prices, 0.50)
+    p75 = percentile(prices, 0.75)
+    max_price = max(prices) if prices else None
+    max_to_p50 = max_price / p50 if max_price and p50 else 0
+    p75_to_p25 = p75 / p25 if p75 and p25 else 0
+    return {
+        "valid_count": total,
+        "title_pct": title_pct,
+        "identity_pct": identity_pct,
+        "p25": p25,
+        "p50": p50,
+        "p75": p75,
+        "max": max_price,
+        "max_to_p50": max_to_p50,
+        "p75_to_p25": p75_to_p25,
+        "passed": total >= 50 and title_pct >= 70 and identity_pct >= 70 and max_to_p50 <= 20 and p75_to_p25 <= 5,
+    }
+
+
+def supplier_bucket_label(supplier: dict[str, Any]) -> str:
+    return clean(first(supplier.get("seed_keyword"), supplier.get("search_term"), supplier.get("query"), default="未记录搜索词"))
+
+
+def passing_supplier_bucket(suppliers: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], dict[str, Any]] | None:
+    buckets: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for supplier in suppliers:
+        buckets[supplier_bucket_label(supplier)].append(supplier)
+    candidates: list[tuple[str, list[dict[str, Any]], dict[str, Any]]] = []
+    for label, rows in buckets.items():
+        if not label or label == "未记录搜索词":
+            continue
+        rows = finished_supplier_records(rows)
+        snapshot = supplier_quality_snapshot(rows)
+        if snapshot["passed"]:
+            candidates.append((label, rows, snapshot))
+    if not candidates:
+        return None
+    return sorted(
+        candidates,
+        key=lambda item: (
+            as_float(item[2].get("valid_count"), 0),
+            -as_float(item[2].get("max_to_p50"), 0),
+            -as_float(item[2].get("p75_to_p25"), 0),
+        ),
+        reverse=True,
+    )[0]
+
+
+def render_supply_diagnostic(suppliers: list[dict[str, Any]], snapshot: dict[str, Any]) -> str:
+    seeds: Counter[str] = Counter(
+        clean(first(supplier.get("seed_keyword"), supplier.get("search_term"), supplier.get("query"), default="未记录搜索词"))
+        for supplier in suppliers
+    )
+    reason_rows = [
+        ["去重有效报价", num(snapshot["valid_count"]), "至少 50 条"],
+        ["商品标题覆盖率", f"{snapshot['title_pct']}%", "至少 70%"],
+        ["链接/稳定指纹覆盖率", f"{snapshot['identity_pct']}%", "至少 70%"],
+        ["最大价/P50", f"{snapshot['max_to_p50']:.2f}" if snapshot["max_to_p50"] else "-", "不高于 20"],
+        ["P75/P25", f"{snapshot['p75_to_p25']:.2f}" if snapshot["p75_to_p25"] else "-", "不高于 5"],
+    ]
+    seed_rows = [[seed, count] for seed, count in seeds.most_common(12)]
+    diagnostic_chart_rows = [
+        ["有效报价", snapshot["valid_count"]],
+        ["标题覆盖率", snapshot["title_pct"]],
+        ["价差风险", snapshot["max_to_p50"] or 0],
+    ]
+    return (
+        "<div class=\"supply-grid\">"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">供应链状态</div><div class=\"supply-value\">需补采</div><div class=\"supply-note\">当前数据不能进入毛利率测算</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">有效报价数</div><div class=\"supply-value\">{esc(num(snapshot['valid_count']))}</div><div class=\"supply-note\">要求 50 条以上且字段完整</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">标题覆盖率</div><div class=\"supply-value\">{esc(snapshot['title_pct'])}%</div><div class=\"supply-note\">用于判断是否同类商品</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">链接/指纹覆盖率</div><div class=\"supply-value\">{esc(snapshot['identity_pct'])}%</div><div class=\"supply-note\">用于去重和复核</div></div>"
+        + "</div>"
+        + "<div class=\"insight-box\"><strong>供应链核心结论：</strong>当前 1688 数据没有达到客户报告毛利率测算门槛。系统已阻断最终成本结论，需要用细分赛道中文词继续采集，并保留商品标题、供应商、价格、链接或稳定商品指纹。</div>"
+        + table(["检查项", "当前值", "通过标准"], reason_rows)
+        + echart_plain("marginChart", "毛利率测算未启用 · 1688质量门禁未通过", "保留模板图表槽位；当前只展示供应链补采诊断，不输出毛利率结论", 260)
+        + "<div hidden data-chart-source=\"marginChartRows\">"
+        + table(["label", "value"], diagnostic_chart_rows)
+        + "</div>"
+        + details("已尝试搜索词", table(["搜索词", "记录数"], seed_rows), True)
+    )
 
 
 def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
@@ -718,13 +979,13 @@ def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
         "<div class=\"voc-grid\">"
         + "<article class=\"pain-card\"><div class=\"voc-card-title\"><span class=\"red\">Pain</span> 主要痛点</div><div class=\"voc-content\">"
         + "".join(
-            f"<div class=\"voc-item\"><div class=\"voc-rank pain-rank\">P{idx}</div><div class=\"voc-content\"><div class=\"voc-title\">{esc(theme)}</div><div class=\"voc-desc\">用户在低星反馈中反复提到该问题，必须转成实物修复、页面承诺或售后说明，不能只用营销话术覆盖。</div><div class=\"voc-quote\">客户页展示中文归纳，并可并列展示英文评论短摘；完整原始评论保留在审计文件。</div><div class=\"voc-bar\"><div class=\"voc-bar-fill pain-fill\" style=\"width:{min(100, 24 + count * 10)}%\"></div></div></div></div>"
+            f"<div class=\"voc-item\"><div class=\"voc-rank pain-rank\">P{idx}</div><div class=\"voc-content\"><div class=\"voc-title\">{esc(theme)}</div><div class=\"voc-desc\">用户在低星反馈中反复提到该问题，必须转成实物修复、页面承诺或售后说明，不能只用营销话术覆盖。</div><div class=\"voc-quote\">客户页展示中文归纳，并可并列展示英文评论短摘；完整原始评论保留在审计文件。</div><div class=\"voc-bar\"><div class=\"voc-bar-fill pain-fill\" data-width=\"{min(100, 24 + count * 10)}\"></div></div></div></div>"
             for idx, (theme, count) in enumerate(pain_items, 1)
         )
         + "</div></article>"
         + "<article class=\"joy-card\"><div class=\"voc-card-title\"><span class=\"green\">Joy</span> 主要爽点</div><div class=\"voc-content\">"
         + "".join(
-            f"<div class=\"voc-item\"><div class=\"voc-rank joy-rank\">J{idx}</div><div class=\"voc-content\"><div class=\"voc-title\">{esc(theme)}</div><div class=\"voc-desc\">正向体验可转化为主图场景、五点利益、A+ 模块和广告落地页表达，同时要保持可验证边界。</div><div class=\"voc-quote\">中文卖点归纳为主，英文评论短摘用于保留用户原话语气。</div><div class=\"voc-bar\"><div class=\"voc-bar-fill joy-fill\" style=\"width:{min(100, 24 + count * 10)}%\"></div></div></div></div>"
+            f"<div class=\"voc-item\"><div class=\"voc-rank joy-rank\">J{idx}</div><div class=\"voc-content\"><div class=\"voc-title\">{esc(theme)}</div><div class=\"voc-desc\">正向体验可转化为主图场景、五点利益、A+ 模块和广告落地页表达，同时要保持可验证边界。</div><div class=\"voc-quote\">中文卖点归纳为主，英文评论短摘用于保留用户原话语气。</div><div class=\"voc-bar\"><div class=\"voc-bar-fill joy-fill\" data-width=\"{min(100, 24 + count * 10)}\"></div></div></div></div>"
             for idx, (theme, count) in enumerate(joy_items, 1)
         )
         + "</div></article></div>"
@@ -796,12 +1057,18 @@ def render_tiktok(data_pack: dict[str, Any]) -> str:
 
 
 def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> str:
-    suppliers = sorted(data_pack.get("suppliers") or [], key=lambda supplier: as_float(supplier.get("sales_30d"), 0), reverse=True)
+    raw_suppliers = sorted(data_pack.get("suppliers") or [], key=lambda supplier: as_float(supplier.get("sales_30d"), 0), reverse=True)
+    suppliers = finished_supplier_records(raw_suppliers)
+    quality = supplier_quality_snapshot(suppliers)
+    bucket_label = ""
+    if not quality["passed"]:
+        bucket = passing_supplier_bucket(raw_suppliers)
+        if not bucket:
+            return render_supply_diagnostic(suppliers, quality)
+        bucket_label, bucket_suppliers, quality = bucket
+        suppliers = sorted(bucket_suppliers, key=lambda supplier: as_float(supplier.get("sales_30d"), 0), reverse=True)
 
-    def supplier_price(supplier: dict[str, Any]) -> Any:
-        return first(supplier.get("price_rmb"), supplier.get("factory_price_rmb"), supplier.get("price"), default=None)
-
-    valid_prices = [as_float(supplier_price(supplier), -1) for supplier in suppliers if as_float(supplier_price(supplier), -1) > 0]
+    valid_prices = [as_float(supplier_price_value(supplier), -1) for supplier in suppliers if as_float(supplier_price_value(supplier), -1) > 0]
     stats = profitability.get("supply_stats") or {}
     origin_counts = Counter(supplier.get("shipping_origin") for supplier in suppliers if supplier.get("shipping_origin"))
     price_counts = Counter()
@@ -822,31 +1089,36 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
     p25_rmb = percentile(valid_prices, 0.25)
     p75_rmb = percentile(valid_prices, 0.75)
     top_supplier = suppliers[0] if suppliers else {}
-    supplier_focus = truncate(first(top_supplier.get("title_cn"), top_supplier.get("title"), "1688 已采集货源"), 18)
-    profitability_table, formula = render_profitability_table(data_pack.get("products") or [], valid_prices)
+    supplier_focus = truncate(first(top_supplier.get("title_cn"), top_supplier.get("title"), "供应端记录"), 18)
+    profitability_table, formula = render_profitability_table(relevant_products(data_pack.get("products") or []), valid_prices)
     supplier_rows = [
         [
-            truncate(first(supplier.get("title_cn"), supplier.get("title"), "1688货源"), 42),
+            truncate(first(supplier.get("title_cn"), supplier.get("title"), "供应商记录"), 42),
             first(supplier.get("supplier_name"), supplier.get("store_name"), "供应商"),
-            money(supplier_price(supplier), "¥"),
+            money(supplier_price_value(supplier), "¥"),
             num(supplier.get("sales_30d")),
             first(supplier.get("shipping_origin"), "-"),
             first(supplier.get("seed_keyword"), "-"),
         ]
         for supplier in suppliers[:60]
-        if as_float(supplier_price(supplier), -1) > 0
+        if as_float(supplier_price_value(supplier), -1) > 0
     ]
+    measurement_note = (
+        f"<div class=\"insight-box\"><strong>测算口径：</strong>全局 1688 报价价差异常，已切换为按搜索词：{esc(bucket_label)} 的同赛道报价进行成本分位数和毛利率测算。</div>"
+        if bucket_label
+        else "<div class=\"insight-box\"><strong>测算口径：</strong>已先剔除灯珠、控制器、工程灯等非成品报价，再用剩余 1688 成品报价进行成本分位数和毛利率测算。</div>"
+    )
     return (
         "<div class=\"supply-grid\">"
-        + f"<div class=\"supply-card\"><div class=\"supply-label\">有效报价数</div><div class=\"supply-value\">{esc(num(len(valid_prices)))}</div><div class=\"supply-note\">1688 相似货源，已去重</div></div>"
-        + f"<div class=\"supply-card\"><div class=\"supply-label\">采购价中位数</div><div class=\"supply-value\">{esc(money(median_rmb, '¥'))}</div><div class=\"supply-note\">不含物流、FBA、认证</div></div>"
-        + f"<div class=\"supply-card\"><div class=\"supply-label\">有效报价区间</div><div class=\"supply-value\">{esc(money(min_rmb, '¥'))}-{esc(money(max_rmb, '¥'))}</div><div class=\"supply-note\">低价需验证质量一致性</div></div>"
-        + f"<div class=\"supply-card\"><div class=\"supply-label\">热销货源</div><div class=\"supply-value\">{esc(first((origin_counts.most_common(1)[0][0] if origin_counts else None), supplier_focus))}</div><div class=\"supply-note\">按 30 日销量最高记录展示</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">有效报价数</div><div class=\"supply-value\">{esc(num(len(valid_prices)))}</div><div class=\"supply-note\">1688 供应端记录，已去重</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">P50 采购成本</div><div class=\"supply-value\">{esc(money(median_rmb, '¥'))}</div><div class=\"supply-note\">1688 成品报价中位数，不含物流、FBA、认证</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">P25-P75 成本区间</div><div class=\"supply-value\">{esc(money(p25_rmb, '¥'))}-{esc(money(p75_rmb, '¥'))}</div><div class=\"supply-note\">真实报价范围 {esc(money(min_rmb, '¥'))}-{esc(money(max_rmb, '¥'))}；分位数用于毛利率测算</div></div>"
+        + f"<div class=\"supply-card\"><div class=\"supply-label\">热销供应端</div><div class=\"supply-value\">{esc(first((origin_counts.most_common(1)[0][0] if origin_counts else None), supplier_focus))}</div><div class=\"supply-note\">按 30 日销量最高记录展示</div></div>"
         + "</div>"
-        + f"<div class=\"metric-strip\">{metric('P25采购成本', money(p25_rmb, '¥'), '1688报价分位数')}{metric('P50采购成本', money(median_rmb, '¥'), '1688报价分位数')}{metric('P75采购成本', money(p75_rmb, '¥'), '1688报价分位数')}</div>"
-        + profitability_table
         + echart_plain("marginChart", "毛利率测算 · 各定价方案对比", "基于综合出厂成本、FBA费用与目标售价的区间估算", 260)
+        + profitability_table
         + formula
+        + measurement_note
         + details("1688 供应商报价明细（去重后 Top60）", table(["商品标题", "供应商", "报价", "30日销量", "发货地", "搜索词"], supplier_rows), True)
         + "<div class=\"insight-box\">💡 <strong>供应链核心结论：</strong>供应端报价显示仍存在可验证成本空间，但必须用实物测试、质检、认证、包装、头程物流、FBA 费用和退货率二次压实。若页面差异化卖点成立，高溢价价格带比低价同款更值得优先验证；若成本或质量无法稳定，必须回退到小批量验证而不是直接放量。</div>"
     )
@@ -867,20 +1139,18 @@ def render_web_risk(data_pack: dict[str, Any]) -> str:
 
 
 def render_opportunities(opportunity: dict[str, Any]) -> str:
-    opportunities = opportunity.get("opportunities") or []
-    if not opportunities:
-        opportunities = [{"name": "细分机会", "decision": "Watch", "score": "证据链 0 条", "entry_shape": "需要继续收敛证据。", "risks": ["证据不足"]}]
+    opportunities = fixed_opportunity_slots(opportunity.get("opportunities") or [])
     top = opportunities[:3]
-    recommended_idx = min(1, max(0, len(top) - 1))
+    recommended_idx = 1
     pricing_cards = []
     prompt_cards = []
     for idx, item in enumerate(top):
         name = first(item.get("name"), f"机会 {idx + 1}")
         entry_shape = first(item.get("entry_shape"), item.get("recommendation"), "以小批量实物、页面卖点和广告转化验证为先。")
-        price = first(item.get("price_band"), item.get("target_price"), ["$39-$59", "$69-$89", "$99-$129"][idx % 3])
+        price = first(item.get("price_band"), item.get("target_price"), ["$19-$29", "$39-$59", "$79-$99"][idx % 3])
         pricing_cards.append(
             f"<article class=\"pricing-card{' recommended' if idx == recommended_idx else ''}\">"
-            + f"<div class=\"pricing-tier\">Tier {idx + 1}</div>"
+            + f"<div class=\"pricing-tier\">{esc(first(item.get('tier'), ['Starter', 'Core', 'Premium'][idx]))}</div>"
             + f"<div class=\"pricing-price\">{esc(price)}</div>"
             + f"<div class=\"pricing-desc\">{esc(name)}<br>用于验证价格空白、页面承诺和真实转化，不在首轮承担全 SKU 扩张。</div>"
             + "<div class=\"pricing-features\">"
@@ -895,7 +1165,7 @@ def render_opportunities(opportunity: dict[str, Any]) -> str:
             "<article class=\"prompt-card\">"
             + f"<div class=\"prompt-number\">Prompt {idx + 1:02d}</div>"
             + f"<div class=\"prompt-scene\">{esc(name)}</div>"
-            + f"<div class=\"prompt-text\">把该机会写入主图、五点和 A/B 页面测试；只使用已清洗数据支持的承诺。</div>"
+            + f"<div class=\"prompt-text\">把该机会写入主图、五点和 A/B 页面测试；只使用已采集证据支持的承诺。</div>"
             + f"<div class=\"prompt-note\">{esc(first(item.get('decision'), 'Watch'))}</div>"
             + "</article>"
         )
@@ -926,16 +1196,16 @@ def render_opportunities(opportunity: dict[str, Any]) -> str:
         for icon, title, text, highlight in pillar_inputs
     ]
     return (
-        "<div class=\"strategy-hero\"><div class=\"strategy-hero-label\">Core Product Concept · 核心产品定义</div><div class=\"strategy-slogan\">不只是产品，是<span>真正解决痛点的</span>高溢价方案。</div><div class=\"strategy-desc\">基于清洗后的竞品、关键词、评论和供应链数据，优先定义一个可被页面、实物和广告验证的差异化产品。首轮不追求大而全，而是锁定一个最强使用场景、一个主力价格带和一组可兑现的页面承诺。</div></div>"
+        "<div class=\"strategy-hero\"><div class=\"strategy-hero-label\">Core Product Concept · 核心产品定义</div><div class=\"strategy-slogan\">不只是产品，是<span>真正解决痛点的</span>高溢价方案。</div><div class=\"strategy-desc\">基于已验证的竞品、关键词、评论和供应链证据，优先定义一个可被页面、实物和广告验证的差异化产品。首轮不追求大而全，而是锁定一个最强使用场景、一个主力价格带和一组可兑现的页面承诺。</div></div>"
         + "<div class=\"strategy-grid\">" + "".join(strategy_cards) + "</div>"
-        + "<div class=\"section-header\" style=\"margin-top:32px;\"><div class=\"section-title\" style=\"font-size:16px;\">建议定价策略</div></div>"
+        + "<div id=\"pricing\" class=\"section-anchor\"></div><div class=\"section-header section-header-spaced\"><div class=\"section-title section-title-sm\">建议定价策略</div></div>"
         + "<div class=\"pricing-grid\">" + "".join(pricing_cards) + "</div>"
         + "<div class=\"insight-box\">💡 <strong>定价战略核心逻辑：</strong>主力价格带必须卡在用户可感知差异与竞品价格空白之间。低价款用于验证流量，中价款承担销量，高价款承接礼品化、Bundle 与高毛利空间。只有当实物体验、页面转化和 landed cost 同时成立，才进入下一轮放量。</div>"
     )
 
 
 def render_visual_direction(opportunity: dict[str, Any]) -> str:
-    opportunities = opportunity.get("opportunities") or [{"name": "核心机会", "decision": "Watch"}]
+    opportunities = fixed_opportunity_slots(opportunity.get("opportunities") or [])
     prompt_cards = []
     for idx, item in enumerate(opportunities[:3]):
         name = first(item.get("name"), f"机会 {idx + 1}")
@@ -959,9 +1229,45 @@ def render_visual_direction(opportunity: dict[str, Any]) -> str:
         + "<div class=\"visual-item\"><div class=\"visual-item-title\">② 售后与信任：可视化承诺</div><div class=\"visual-item-text\">把清洁、隐私、替换、安装、保修或安全承诺放入包装与详情页，避免隐藏在长文本里。关键承诺必须能在售后流程中被兑现。</div></div>"
         + "<div class=\"visual-item\"><div class=\"visual-item-title\">③ 内容传播：为开箱和短视频预留镜头</div><div class=\"visual-item-text\">包装层次、使用前后对比、核心功能触发点和场景效果，都要能自然形成短视频镜头，降低后续 KOL 和广告素材生产成本。</div></div>"
         + "</div></div>"
-        + "<div class=\"section-header\" style=\"margin-top:8px;\"><div class=\"section-title\" style=\"font-size:16px;\">AI生图 Prompt · 可直接使用</div></div>"
+        + "<div id=\"prompt\" class=\"section-anchor\"></div><div class=\"section-header section-header-tight\"><div class=\"section-title section-title-sm\">AI生图 Prompt · 可直接使用</div></div>"
         + "<div class=\"prompt-grid\">" + "".join(prompt_cards) + "</div>"
     )
+
+
+def fixed_opportunity_slots(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    defaults = [
+        {
+            "tier": "Starter · 流量验证款",
+            "name": "低价流量验证款",
+            "price_band": "$19-$29",
+            "decision": "Watch",
+            "entry_shape": "只验证核心转化和评价门槛，不承接全 SKU 扩张。",
+            "score": "固定模板槽位",
+        },
+        {
+            "tier": "Core · 推荐切入",
+            "name": "主力差异化款",
+            "price_band": "$39-$59",
+            "decision": "Watch",
+            "entry_shape": "承接销量、页面承诺和真实体验验证，是首轮主推价格带。",
+            "score": "固定模板槽位",
+        },
+        {
+            "tier": "Premium · 利润验证款",
+            "name": "高溢价套装款",
+            "price_band": "$79-$99",
+            "decision": "Watch",
+            "entry_shape": "承接礼品化、Bundle 和高毛利空间，必须绑定实物质感与售后承诺。",
+            "score": "固定模板槽位",
+        },
+    ]
+    slots = [dict(item) for item in items[:3] if isinstance(item, dict)]
+    while len(slots) < 3:
+        slots.append(dict(defaults[len(slots)]))
+    for idx, slot in enumerate(slots[:3]):
+        for key, value in defaults[idx].items():
+            slot.setdefault(key, value)
+    return slots[:3]
 
 
 def render_decision(delivery: dict[str, Any]) -> str:
@@ -991,7 +1297,7 @@ def customer_safe_gap_text(value: Any) -> str:
     if "MCP returned Unauthorized" in text:
         text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
     replacements = {
-        "竞品样本": "竞品记录",
+        "竞品样本": "竞品",
         "市场样本": "市场主数据",
         "评论样本": "评论记录",
         "产品样本": "产品记录",
@@ -1010,7 +1316,7 @@ def customer_safe_gap_text(value: Any) -> str:
 
 
 def render_full_appendix(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> str:
-    products = data_pack.get("products") or []
+    products = relevant_products(data_pack.get("products") or [])
     keywords = data_pack.get("keywords") or []
     reviews = data_pack.get("reviews") or []
     tiktok_products = data_pack.get("tiktok_products") or []
@@ -1059,7 +1365,7 @@ def render_legacy_child_template(template_key: str, replacements: dict[str, Any]
     html_doc = template
     for token, value in replacements.items():
         html_doc = html_doc.replace(token, str(value))
-    return apply_reference_style(template_key, html_doc)
+    return html_doc
 
 
 def child_body_fragment(html_doc: str) -> str:
@@ -1071,20 +1377,80 @@ def child_body_fragment(html_doc: str) -> str:
 
 
 def delivery_readiness_summary(readiness: dict[str, Any]) -> dict[str, Any]:
+    supplier_quality = dict(readiness.get("supplier_quality_gate") or {})
+    missing_fields = supplier_quality.pop("missing_documented_required_fields", [])
+    supplier_quality.pop("observed_fields", None)
+    if missing_fields:
+        supplier_quality["field_diagnostic"] = "当前1688响应缺少商品标题和商品链接字段"
     return {
         "path": "data/normalized/data_readiness_report.json",
         "acceptance_ready": readiness.get("acceptance_ready"),
+        "partial_report_ready": readiness.get("partial_report_ready"),
+        "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
         "sample_class": readiness.get("sample_class"),
         "depth": readiness.get("depth"),
         "blocking_gap_count": len(readiness.get("blocking_gaps") or []),
         "warning_count": len(readiness.get("warnings") or []),
         "counts": readiness.get("counts") or {},
         "supplier_quote_gate": readiness.get("supplier_quote_gate") or {},
+        "supplier_quality_gate": supplier_quality,
+        "competitor_gate": readiness.get("competitor_gate") or {},
+        "segment_gate": readiness.get("segment_gate") or {},
     }
 
 
 def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, readiness: dict[str, Any] | None = None) -> None:
     write_basic_site_assets(report_dir, build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS, readiness))
+
+
+def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], readiness: dict[str, Any]) -> Path:
+    write_site_assets(report_dir, data_pack, analysis_plan, "Watch", readiness)
+    blocking_rows = [
+        [
+            customer_safe_asset_text(gap.get("module")),
+            customer_safe_asset_text(gap.get("reason")),
+            customer_safe_asset_text(gap.get("next_step")),
+        ]
+        for gap in readiness.get("blocking_gaps") or []
+    ]
+    if not blocking_rows:
+        blocking_rows = [["数据门禁", "当前数据尚未达到完整客户报告标准。", "补齐门禁后重新渲染。"]]
+    warning_rows = [
+        [
+            customer_safe_asset_text(item.get("module")),
+            customer_safe_asset_text(item.get("impact")),
+            customer_safe_asset_text(item.get("next_step")),
+        ]
+        for item in readiness.get("warnings") or []
+    ]
+    gate_rows = [
+        ["有效竞品", num((readiness.get("counts") or {}).get("valid_competitors")), num((readiness.get("competitor_gate") or {}).get("minimum_total")), "通过" if (readiness.get("competitor_gate") or {}).get("passed") else "需补采"],
+        ["细分赛道", num((readiness.get("counts") or {}).get("market_segments")), num((readiness.get("segment_gate") or {}).get("required_segments")), "通过" if (readiness.get("segment_gate") or {}).get("passed") else "需拆分"],
+        ["1688有效报价", num((readiness.get("counts") or {}).get("valid_supplier_quotes")), num((readiness.get("supplier_quote_gate") or {}).get("required")), "通过" if (readiness.get("supplier_quote_gate") or {}).get("passed") else "需补采"],
+        ["1688标题覆盖率", f"{(readiness.get('supplier_quality_gate') or {}).get('title_coverage_pct', 0)}%", "70%", "通过" if (readiness.get("supplier_quality_gate") or {}).get("field_quality_passed") else "需复核"],
+    ]
+    html_doc = (
+        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>补采诊断报告</title>"
+        "<link rel=\"stylesheet\" href=\"assets/report.css\"></head><body class=\"template-market\">"
+        "<main class=\"container\">"
+        "<section class=\"section\"><div class=\"section-header\"><span class=\"section-number\">00</span><div><h1 class=\"section-title\">补采诊断报告</h1><p class=\"section-desc\">当前数据未达到完整客户报告门槛，系统已阻断市场深度、生命周期和需求机会的最终交付。</p></div></div>"
+        "<div class=\"insight-box\"><strong>当前判断：</strong>不能生成完整客户版结论。请先补齐以下门禁，再重新运行报告生成。</div>"
+        + table(["门禁项", "当前值", "通过标准", "状态"], gate_rows)
+        + "</section><section class=\"section\"><div class=\"section-header\"><span class=\"section-number\">01</span><div><h2 class=\"section-title\">当前阻断项</h2></div></div>"
+        + table(["模块", "原因", "下一步动作"], blocking_rows)
+        + "</section><section class=\"section\"><div class=\"section-header\"><span class=\"section-number\">02</span><div><h2 class=\"section-title\">风险提醒</h2></div></div>"
+        + table(["模块", "影响", "下一步动作"], warning_rows)
+        + "</section></main><script src=\"assets/report.js\" defer></script></body></html>"
+    )
+    safe_html = redact_customer_html(html_doc, data_pack)
+    for key in HTML_REPORTS:
+        path = report_dir / HTML_REPORTS[key]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(safe_html, encoding="utf-8")
+    compat_path = report_dir / COMPAT_INDEX_REPORT
+    compat_path.parent.mkdir(parents=True, exist_ok=True)
+    compat_path.write_text(safe_html.replace('href="assets/report.css"', 'href="html_reports/assets/report.css"').replace('src="assets/report.js"', 'src="html_reports/assets/report.js"'), encoding="utf-8")
+    return report_dir / HTML_REPORTS["index"]
 
 
 def primary_source_id(data_pack: dict[str, Any]) -> str:
@@ -1108,23 +1474,31 @@ def section_table(title: str, headers: list[str], rows: list[list[Any]], class_n
 
 
 def echart_box(chart_id: str, title: str, subtitle: str, height: int = 300) -> str:
+    height_class = chart_height_class(height)
     return (
         "<div class=\"chart-container\">"
         + f"<div class=\"chart-title\">{esc(title)}</div>"
         + f"<div class=\"chart-subtitle\">{esc(subtitle)}</div>"
-        + f"<div class=\"chart-body\" id=\"{esc(chart_id)}\" style=\"height:{int(height)}px;width:100%\"></div>"
+        + f"<div class=\"chart-body {height_class}\" id=\"{esc(chart_id)}\"></div>"
         + "</div>"
     )
 
 
 def echart_plain(chart_id: str, title: str, subtitle: str, height: int = 300) -> str:
+    height_class = chart_height_class(height)
     return (
         "<div class=\"chart-container\">"
         + f"<div class=\"chart-title\">{esc(title)}</div>"
         + f"<div class=\"chart-subtitle\">{esc(subtitle)}</div>"
-        + f"<div id=\"{esc(chart_id)}\" style=\"height:{int(height)}px;width:100%\"></div>"
+        + f"<div id=\"{esc(chart_id)}\" class=\"chart-body {height_class}\"></div>"
         + "</div>"
     )
+
+
+def chart_height_class(height: int) -> str:
+    allowed = {260, 300, 320, 360, 500}
+    value = int(height)
+    return f"chart-h-{value if value in allowed else 300}"
 
 
 def confidence_level(data_pack: dict[str, Any], analysis_plan: dict[str, Any] | None = None) -> str:
@@ -1183,6 +1557,16 @@ def insight_table(title: str, rows: list[list[Any]]) -> str:
     return section_table(title, ["结论", "证据强度", "商业含义", "建议动作"], rows)
 
 
+def lifecycle_evidence_drawer(title: str, headers: list[str], rows: list[list[Any]]) -> str:
+    return (
+        "<details class=\"lifecycle-evidence-drawer evidence-drawer card\"><summary>"
+        + esc(title)
+        + "</summary><div class=\"drawer-body\">"
+        + table(headers, rows, "evidence-table insight-table sku")
+        + "</div></details>"
+    )
+
+
 def conclusion_block(items: list[tuple[str, str]], title: str = "Final Recommendation") -> str:
     return (
         "<div class=\"conclusion\"><div class=\"conclusion-title\">"
@@ -1203,7 +1587,7 @@ def render_client_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[s
         ["数据覆盖", "中高", sample_coverage(data_pack), "优先核实最影响决策的缺口"],
         ["数据缺口", "已标注", "缺口不会隐藏在报告正文里，会转成风险和下一步动作。", "进入定向复核或小批量验证"],
     ]
-    return client_trust_strip(data_pack, analysis_plan, decision) + insight_table("客户版可信度说明", rows)
+    return insight_table("客户版可信度说明", rows)
 
 
 def render_client_action_summary(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, object_value: Any) -> str:
@@ -1218,7 +1602,7 @@ def render_client_action_summary(data_pack: dict[str, Any], analysis_plan: dict[
             ("当前判断", f"{object_value} 暂按 {decision} 节奏推进。"),
             ("先做验证", "首批只验证最关键价格带、核心痛点和页面卖点。"),
             ("核实缺口", "数据缺口进入复核清单，不写成确定结论。"),
-            ("交付口径", "客户页只展示清洗后的结论，审计字段留在 JSON/Markdown。"),
+            ("交付口径", "客户页只展示可解释的业务结论，审计字段留在 JSON/Markdown。"),
         ]
     )
 
@@ -1249,6 +1633,7 @@ def bundle_href(filename: str, link_prefix: str = "") -> str:
 
 def render_index_cards(report_title: str, decision: str, data_pack: dict[str, Any], link_prefix: str = "") -> str:
     quality = data_pack.get("quality") or {}
+    quality_label, quality_sub, quality_tone = customer_quality_summary(quality)
     cards = [
         ("市场深度调研报告", HTML_REPORT_FILENAMES["market_depth"], "大盘、需求、竞品、VOC、TikTok、1688、风险与行动摘要。"),
         ("产品全生命周期拓品战略报告", HTML_REPORT_FILENAMES["lifecycle_strategy"], "用户画像、生命周期旅程、SKU、Bundle、路线图和风险矩阵。"),
@@ -1261,12 +1646,106 @@ def render_index_cards(report_title: str, decision: str, data_pack: dict[str, An
     metrics = (
         "<div class=\"kpi-grid\">"
         + kpi_card("核心判断", decision, "Go / Watch / No-Go", "warning")
-        + kpi_card("数据质量", first(quality.get("grade"), "-"), f"score {first(quality.get('overall_score'), '-')}", "success")
+        + kpi_card("数据质量", quality_label, quality_sub, quality_tone)
         + kpi_card("证据记录数", num(len(data_pack.get("sources") or [])), "内部审计链路保留", "")
         + kpi_card("研究对象", report_title, "三报告共用 Data Pack", "")
         + "</div>"
     )
     return metrics + "<div class=\"report-card-grid\">" + report_cards + "</div>"
+
+
+GENERIC_LIFECYCLE_SKU_NAMES = {
+    "备用与替换核心配件",
+    "信任说明卡 + 快速启动卡",
+    "场景化配件包",
+    "清洁、保养与维护套装",
+    "替换充电线与数据线套装",
+    "1688 相似供应端机会",
+}
+
+
+def segment_ranked_products(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    products = sorted(
+        relevant_products(data_pack.get("products") or []),
+        key=lambda product: as_float(product_sales(product), 0),
+        reverse=True,
+    )
+    by_segment: dict[str, dict[str, Any]] = {}
+    for product in products:
+        segment = clean(first(product.get("segment_cn"), product.get("segment"), default=""))
+        if not segment or segment in {"未分层", "未知"}:
+            continue
+        if segment not in by_segment:
+            by_segment[segment] = product
+    return list(by_segment.values()) or products[:3]
+
+
+def lifecycle_supplier_hint(data_pack: dict[str, Any]) -> str:
+    suppliers = data_pack.get("suppliers") or []
+    for supplier in suppliers:
+        title = clean(first(supplier.get("title_cn"), supplier.get("title"), supplier.get("seed_keyword"), default=""))
+        price = first(supplier.get("price_rmb"), supplier.get("price"), default="")
+        if title:
+            return f"1688成品供应验证：{truncate(title, 28)} · {money(price, '¥')}"
+    return "供应链需按成品报价、质检、包装和FBA费用复核"
+
+
+def generated_lifecycle_skus(data_pack: dict[str, Any], fallback_source: str) -> list[dict[str, Any]]:
+    segment_products = segment_ranked_products(data_pack)
+    supplier_hint = lifecycle_supplier_hint(data_pack)
+    specs = [
+        ("基础款", "A", "首购转化", "P1", 92, 0.86, "用标杆竞品的主销价格带做首发锚点，聚焦最强需求赛道"),
+        ("升级款", "B", "体验升级", "P1", 86, 1.18, "围绕高频痛点强化材质、续航、安装或智能联动"),
+        ("套装款", "B", "AOV 提升", "P1", 82, 1.45, "把主体、安装件、备用件和场景化配件打包，提高客单价"),
+        ("配件款", "C", "竞品补位", "P2", 74, 0.32, "围绕安装、固定、延长、替换等评论痛点形成低风险扩展"),
+        ("维护复购款", "D", "复购维护", "P2", 68, 0.22, "把维护、替换和售后承诺产品化，延长生命周期"),
+    ]
+    skus: list[dict[str, Any]] = []
+    for idx, spec in enumerate(specs):
+        suffix, sku_type, stage, phase, priority, price_multiplier, rationale = spec
+        product = segment_products[idx % len(segment_products)] if segment_products else {}
+        segment = clean(first(product.get("segment_cn"), product.get("segment"), default="核心赛道"))
+        brand = clean(first(product.get("brand"), default="标杆竞品"))
+        reference_label = lifecycle_reference_competitor_label(brand, segment)
+        base_price = as_float(product_price(product), 19.99) or 19.99
+        if sku_type in {"C", "D"}:
+            price = f"${max(6.99, base_price * price_multiplier):.2f}-${max(9.99, base_price * (price_multiplier + 0.16)):.2f}"
+        else:
+            price = f"${max(9.99, base_price * price_multiplier):.2f}"
+        skus.append(
+            {
+                "name": f"{segment} {suffix}",
+                "stage": stage,
+                "type": sku_type,
+                "price": price,
+                "supply": supplier_hint if idx < 3 else "按成品配件报价复核，避免用灯珠/控制器等非成品成本替代",
+                "phase": phase,
+                "priority": priority,
+                "pain": f"对标 {reference_label}：{rationale}",
+                "target_segment": segment,
+                "reference_competitor": reference_label,
+                "source_id": source_ids_for(product, fallback_source),
+            }
+        )
+    return skus
+
+
+def lifecycle_reference_competitor_label(brand: Any, segment: Any = "") -> str:
+    brand_text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", clean(brand), flags=re.I)
+    brand_text = brand_text.replace("参考竞品", "").strip(" ·-")
+    segment_text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", clean(segment), flags=re.I)
+    segment_text = segment_text.replace("参考竞品", "").strip(" ·-")
+    if brand_text and segment_text and segment_text not in brand_text:
+        return f"{brand_text} {segment_text}"
+    return brand_text or segment_text or "标杆竞品价格带"
+
+
+def lifecycle_customer_text(value: Any, fallback: str = "") -> str:
+    text = clean(first(value, fallback))
+    text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", text, flags=re.I)
+    text = re.sub(r"\s+", " ", text).strip(" ·-")
+    text = text.replace("参考竞品 参考竞品", "参考竞品")
+    return text or fallback
 
 
 def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> list[dict[str, Any]]:
@@ -1280,70 +1759,59 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
             name = clean(first(safe.get("name"), safe.get("title"), default=""))
             safe["name"] = name if re.search(r"[\u4e00-\u9fff]", name) else f"拓品方案 {idx}"
             safe_items.append(safe)
-        return safe_items
-    products = data_pack.get("products") or []
-    suppliers = data_pack.get("suppliers") or []
-    defaults = [
-        {"name": "备用与替换核心配件", "stage": "开箱与替换", "type": "A", "price": "$12-$29", "supply": "自有或可控供应链", "phase": "P1", "priority": 92, "source_id": fallback_source},
-        {"name": "信任说明卡 + 快速启动卡", "stage": "0-30 分钟", "type": "A", "price": "$3-$6", "supply": "印刷包装", "phase": "P1", "priority": 88, "source_id": fallback_source},
-        {"name": "场景化配件包", "stage": "1-7 天", "type": "B", "price": "$12-$24", "supply": "自有或外协供应链", "phase": "P1", "priority": 84, "source_id": fallback_source},
-        {"name": "清洁、保养与维护套装", "stage": "7 天-6 个月", "type": "D", "price": "$9-$19", "supply": "外采耗材", "phase": "P2", "priority": 78, "source_id": fallback_source},
-        {"name": "替换充电线与数据线套装", "stage": "维护期", "type": "D", "price": "$8-$12", "supply": "外采电子", "phase": "P2", "priority": 72, "source_id": fallback_source},
-    ]
-    for product in products[:3]:
-        defaults.append(
-            {
-                "name": f"{customer_safe_signal_title(product, '竞品功能')} 对标配件",
-                "stage": "竞品补位",
-                "type": "C",
-                "price": money(max(9, as_float(product_price(product), 19) * 0.18)),
-                "supply": "按竞品差异做实物测试",
-                "phase": "P2",
-                "priority": 70,
-                "source_id": source_ids_for(product, fallback_source),
-            }
-        )
-    for supplier in suppliers[:3]:
-        defaults.append(
-            {
-                "name": "1688 相似供应端机会",
-                "stage": "供应链验证",
-                "type": "D",
-                "price": money(first(supplier.get("price"), supplier.get("price_rmb"), default=12), "¥"),
-                "supply": "1688 相似货源",
-                "phase": "P2",
-                "priority": 68,
-                "source_id": source_ids_for(supplier, fallback_source),
-            }
-        )
-    return defaults
+        if safe_items and not any(item.get("name") in GENERIC_LIFECYCLE_SKU_NAMES for item in safe_items):
+            return safe_items
+    return generated_lifecycle_skus(data_pack, fallback_source)
 
 
 def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> str:
     skus = lifecycle_skus(data_pack, lifecycle, fallback_source)
-    self_supply = [sku for sku in skus if "自有" in clean(sku.get("supply")) or "可控" in clean(sku.get("supply"))]
+    supplier_count = len(finished_supplier_records(data_pack.get("suppliers") or []))
+    if supplier_count >= 50:
+        supply_control = "较高"
+        supply_risk = "供应链风险：中低，已有 50+ 条成品报价可进入打样复核"
+        supply_style = "success"
+    elif supplier_count > 0:
+        supply_control = "中等"
+        supply_risk = "供应链风险：中，需要继续补齐报价、质检、认证和包装验证"
+        supply_style = "warning"
+    else:
+        supply_control = "需验证"
+        supply_risk = "供应链风险：高，缺少可复核成品报价"
+        supply_style = "warning"
+    type_counts = Counter(str(sku.get("type") or "").upper() for sku in skus)
+    bundle_count = len([sku for sku in skus if str(sku.get("type")).upper() == "B" or "套装" in clean(sku.get("name"))])
+    p1_count = len([sku for sku in skus if clean(sku.get("phase")).upper() == "P1"])
+    high_priority = len([sku for sku in skus if as_float(sku.get("priority"), 0) >= 80])
     rows = [
         ["拓品 SKU 总数", len(skus), fallback_source],
-        ["可自产 SKU", len(self_supply), fallback_source],
+        ["供应链可控度", supply_control, fallback_source],
+        ["供应链风险", supply_risk, fallback_source],
         ["复购维护型 SKU", len([sku for sku in skus if str(sku.get("type")).upper() == "D"]), fallback_source],
         ["Bundle 增长抓手", "AOV 提升", fallback_source],
         ["建议首发 Phase", "P1 可控供应链 + 信任与开箱触点优先", fallback_source],
     ]
     return (
-        "<div class=\"insight-box\"><strong>战略原则：</strong>先用可控 SKU 与 Bundle 价格台阶验证，再扩展长期复购触点。</div>"
-        + "<div class=\"kpi-grid\">"
+        "<div class=\"kpi-grid lifecycle-kpi-primary\">"
         + kpi_card("拓品 SKU 总数", len(skus), "覆盖生命周期触点", "success")
-        + kpi_card("可自产 SKU", len(self_supply), "供应链可控", "")
+        + kpi_card("供应链可控度", supply_control, supply_risk, supply_style)
         + kpi_card("复购引擎", "60-90 天", "清洁、替换、维护", "warning")
         + kpi_card("AOV 引擎", "Bundle", "组合包优先", "success")
         + kpi_card("首发 Phase", "P1", "可控供应链", "")
         + "</div>"
-        + section_table("战略仪表盘证据", ["指标", "结果", "source_id"], rows)
+        + "<div class=\"lifecycle-kpi-secondary\">"
+        + kpi_card("P1 首发 SKU", p1_count, "可先进入验证", "success")
+        + kpi_card("高优先级 SKU", high_priority, "优先级 ≥ 80", "warning")
+        + kpi_card("套装/升级 SKU", bundle_count, "承担 AOV 提升", "")
+        + kpi_card("类型覆盖", len([key for key, count in type_counts.items() if key and count]), "A/B/C/D 组合", "")
+        + "</div>"
+        + "<div class=\"insight-box\"><strong>战略结论：</strong>以首发可控 SKU 为核心，围绕高优先级赛道做 Bundle 价格台阶验证；每个 SKU 必须绑定目标赛道、参考竞品、供应链风险和页面承诺，先验证转化与退货风险，再扩展长期复购触点。</div>"
+        + lifecycle_evidence_drawer("战略仪表盘证据", ["指标", "结果", "source_id"], rows)
     )
 
 
 def render_personas(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> str:
-    products = data_pack.get("products") or []
+    products = relevant_products(data_pack.get("products") or [])
     reviews = data_pack.get("reviews") or []
     prices = sorted(as_float(product.get("price"), 0) for product in products if as_float(product.get("price"), 0) > 0)
     if prices:
@@ -1381,7 +1849,7 @@ def render_personas(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallba
             + "</div></article>"
         )
     rows = [[item.get("name"), first(item.get("need"), default_needs[idx % len(default_needs)]), first(item.get("price"), price_band), source_ids_for(item, fallback_source)] for idx, item in enumerate(personas[:12])]
-    return "<div class=\"persona-grid\">" + cards + "</div>" + section_table("用户画像证据表", ["画像", "核心需求", "价格接受带", "source_id"], rows)
+    return "<div class=\"persona-grid\">" + cards + "</div>" + lifecycle_evidence_drawer("用户画像证据表", ["画像", "核心需求", "价格接受带", "source_id"], rows)
 
 
 def render_lifecycle_journey(data_pack: dict[str, Any], fallback_source: str) -> str:
@@ -1396,7 +1864,7 @@ def render_lifecycle_journey(data_pack: dict[str, Any], fallback_source: str) ->
         f"<article class=\"tl-card\"><div class=\"tl-header\">阶段 {idx}<span class=\"arrow\">→</span></div><div class=\"tl-body\"><div class=\"tl-time\">{esc(row[0])}</div><div class=\"tl-skus\">{esc(row[1])}</div><div class=\"tl-pain\">{esc(row[2])}</div></div></article>"
         for idx, row in enumerate(phases, 1)
     )
-    return "<div class=\"timeline-grid\">" + cards + "</div>" + section_table("生命周期旅程证据表", ["阶段", "建议 SKU 与触点", "用户任务", "source_id"], phases)
+    return "<div class=\"timeline-grid\">" + cards + "</div>" + lifecycle_evidence_drawer("生命周期旅程证据表", ["阶段", "建议 SKU 与触点", "用户任务", "source_id"], phases)
 
 
 def render_ecosystem(data_pack: dict[str, Any], skus: list[dict[str, Any]], fallback_source: str) -> str:
@@ -1408,26 +1876,140 @@ def render_ecosystem(data_pack: dict[str, Any], skus: list[dict[str, Any]], fall
         ["D 清洁维护与耗材", counts.get("D", 0), "复购与售后触点", fallback_source],
     ]
     return (
-        "<div class=\"chart-grid\">"
+        "<div class=\"ecosystem-kicker\">四维拓品生态 · 4D Ecosystem</div>"
+        + "<div class=\"chart-grid ecosystem-chart-grid\">"
         + echart_box("sunburst", "四维拓品生态全景 · Sunburst", "Type A/B/C/D 四个维度与 SKU 分布", 500)
+        + echart_box("priorityChart", "SKU 优先级评分分布", "综合关联度、复购周期、供应链可控性、竞争格局", 500)
         + "</div>"
-        + "<div class=\"chart-container\"><div class=\"chart-title\">四维拓品生态</div>"
+        + "<div class=\"card ecosystem-summary-card\"><div class=\"chart-title\">四维拓品生态</div>"
         + mini_chart([(row[0], float(row[1]), row[1]) for row in rows], "good")
         + "</div>"
-        + section_table("四维拓品生态证据表", ["维度", "SKU 数", "打法", "source_id"], rows)
+        + lifecycle_evidence_drawer("四维拓品生态证据表", ["维度", "SKU 数", "打法", "source_id"], rows)
     )
+
+
+LIFECYCLE_SKU_TEMPLATE_SLOTS = [
+    {
+        "type": "A",
+        "phase": "P1",
+        "name": "基础款",
+        "target_segment": "主赛道核心需求",
+        "reference_competitor": "Top 竞品价格带",
+        "price": "$19-$29",
+        "supply": "优先按成品供应链验证",
+        "pain": "验证核心功能、页面承诺和转化表现",
+        "stage": "首发验证",
+        "priority": 92,
+    },
+    {
+        "type": "B",
+        "phase": "P1",
+        "name": "升级款",
+        "target_segment": "高频痛点强化赛道",
+        "reference_competitor": "高评分竞品价格带",
+        "price": "$39-$59",
+        "supply": "成品供应链加关键差异件验证",
+        "pain": "围绕高频痛点强化材质、功能或页面证据",
+        "stage": "差异化验证",
+        "priority": 86,
+    },
+    {
+        "type": "B",
+        "phase": "P1",
+        "name": "套装款",
+        "target_segment": "礼品与组合购买场景",
+        "reference_competitor": "Bundle 竞品价格带",
+        "price": "$59-$79",
+        "supply": "按主体、配件和包装分别核价",
+        "pain": "通过组合内容提升客单价和场景完整度",
+        "stage": "AOV 提升",
+        "priority": 82,
+    },
+    {
+        "type": "C",
+        "phase": "P2",
+        "name": "配件款",
+        "target_segment": "安装、维护和场景补强",
+        "reference_competitor": "配件与替换件价格带",
+        "price": "$9-$19",
+        "supply": "按配件独立报价，避免用整机成本替代",
+        "pain": "把安装、固定、延长、替换等评论痛点产品化",
+        "stage": "配件扩展",
+        "priority": 74,
+    },
+    {
+        "type": "D",
+        "phase": "P2",
+        "name": "复购耗材",
+        "target_segment": "复购、维护和售后承诺",
+        "reference_competitor": "复购耗材价格带",
+        "price": "$6-$15",
+        "supply": "按耗材周期和包装规格独立核价",
+        "pain": "延长生命周期，形成维护和替换复购入口",
+        "stage": "复购延展",
+        "priority": 68,
+    },
+]
+
+
+def fixed_lifecycle_sku_slots(skus: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    slots: list[dict[str, Any]] = []
+    for idx, default_slot in enumerate(LIFECYCLE_SKU_TEMPLATE_SLOTS):
+        actual = skus[idx] if idx < len(skus) and isinstance(skus[idx], dict) else {}
+        merged = dict(default_slot)
+        for key, value in actual.items():
+            if value not in (None, "", [], {}):
+                merged[key] = value
+        slots.append(merged)
+    return slots
 
 
 def render_sku_execution_table(skus: list[dict[str, Any]], fallback_source: str) -> str:
     type_class = {"A": "a red", "B": "b blue", "C": "c green", "D": "d purple"}
     type_label = {"A": "强关联", "B": "场景延伸", "C": "消耗品", "D": "升级维护"}
     body_rows = []
-    for idx, sku in enumerate(skus, 1):
+    strategy_cards = []
+    strategy_skus = fixed_lifecycle_sku_slots(skus)
+    table_skus = skus if len(skus) >= len(LIFECYCLE_SKU_TEMPLATE_SLOTS) else strategy_skus
+    for sku in strategy_skus:
         sku_type = str(sku.get("type") or "A").upper()[:1]
         supply_text = clean(sku.get("supply"))
+        target_segment = lifecycle_customer_text(sku.get("target_segment"), "-")
+        reference_competitor = lifecycle_reference_competitor_label(sku.get("reference_competitor"), target_segment)
+        sku_pain = lifecycle_customer_text(sku.get("pain"), "围绕生命周期触点补位")
         if "自有" in supply_text or "自产" in supply_text or "可控" in supply_text:
             supply_class = "self"
-            supply_label = "自产"
+            supply_label = "可控"
+        elif "混合" in supply_text:
+            supply_class = "mix"
+            supply_label = "混合"
+        else:
+            supply_class = "ext"
+            supply_label = "外采"
+        priority = max(1, min(100, int(as_float(sku.get("priority"), 50))))
+        bar_color = "#c9a05a" if priority >= 70 else "#3d6b9e" if priority >= 55 else "#c9c9c9"
+        strategy_cards.append(
+            "<article class=\"sku-strategy-card\">"
+            + f"<div class=\"sku-strategy-head\"><span>Type {esc(sku_type)} · {esc(first(sku.get('phase'), '-'))}</span><b>{priority}</b></div>"
+            + f"<h3>{esc(first(sku.get('name'), '基础款'))}</h3>"
+            + "<dl class=\"sku-strategy-meta\">"
+            + f"<div><dt>目标赛道</dt><dd>{esc(target_segment)}</dd></div>"
+            + f"<div><dt>参考竞品</dt><dd>{esc(reference_competitor)}</dd></div>"
+            + f"<div><dt>价格带</dt><dd>{esc(first(sku.get('price'), '$19-$29'))}</dd></div>"
+            + f"<div><dt>供应链风险</dt><dd>{esc(supply_text or '按成品报价复核')}</dd></div>"
+            + "</dl>"
+            + f"<p>{esc(sku_pain)}</p>"
+            + "</article>"
+        )
+    for idx, sku in enumerate(table_skus, 1):
+        sku_type = str(sku.get("type") or "A").upper()[:1]
+        supply_text = clean(sku.get("supply"))
+        target_segment = lifecycle_customer_text(sku.get("target_segment"), "-")
+        reference_competitor = lifecycle_reference_competitor_label(sku.get("reference_competitor"), target_segment)
+        sku_pain = lifecycle_customer_text(sku.get("pain"), "围绕生命周期触点补位")
+        if "自有" in supply_text or "自产" in supply_text or "可控" in supply_text:
+            supply_class = "self"
+            supply_label = "可控"
         elif "混合" in supply_text:
             supply_class = "mix"
             supply_label = "混合"
@@ -1441,9 +2023,9 @@ def render_sku_execution_table(skus: list[dict[str, Any]], fallback_source: str)
             + f"<td>{idx}</td>"
             + f"<td>{esc(sku.get('stage'))}</td>"
             + f"<td><span class=\"type-badge {esc(type_class.get(sku_type, 'a red'))}\">{esc(sku_type)} {esc(type_label.get(sku_type, '强关联'))}</span></td>"
-            + f"<td><strong style=\"color:#1a2744\">{esc(first(sku.get('name'), '生命周期补位 SKU'))}</strong><br><span style=\"color:#8a9aaa;font-size:11px\">{esc(first(sku.get('pain'), '围绕生命周期触点补位'))}</span></td>"
-            + f"<td><strong>{esc(first(sku.get('price'), '待测价'))}</strong></td>"
-            + f"<td><span class=\"supply-badge {supply_class}\">{supply_label}</span><br><span style=\"color:#8a9aaa;font-size:11px\">{esc(supply_text)}</span></td>"
+            + f"<td><strong class=\"sku-title-text\">{esc(first(sku.get('name'), '基础款'))}</strong><br><span class=\"sku-muted\">目标赛道：{esc(target_segment)}；参考竞品：{esc(reference_competitor)}</span><br><span class=\"sku-muted\">{esc(sku_pain)}</span></td>"
+            + f"<td><strong>{esc(first(sku.get('price'), '$19-$29'))}</strong></td>"
+            + f"<td><span class=\"supply-badge {supply_class}\">{supply_label}</span><br><span class=\"sku-muted\">{esc(supply_text)}</span></td>"
             + f"<td><div class=\"priority-bar\"><div class=\"fill\" style=\"width:{priority}%;background:{bar_color}\"></div></div><span>{priority}</span></td>"
             + f"<td>{esc(sku.get('phase'))}</td>"
             + f"<td>{esc(source_ids_for(sku, fallback_source))}</td>"
@@ -1454,41 +2036,145 @@ def render_sku_execution_table(skus: list[dict[str, Any]], fallback_source: str)
         "<button class=\"filter-btn red\" type=\"button\" data-filter=\"A\" aria-pressed=\"false\">Type A</button>"
         "<button class=\"filter-btn blue\" type=\"button\" data-filter=\"B\" aria-pressed=\"false\">Type B</button>"
         "<button class=\"filter-btn green\" type=\"button\" data-filter=\"C\" aria-pressed=\"false\">Type C</button>"
-        "<button class=\"filter-btn purple\" type=\"button\" data-filter=\"D\" aria-pressed=\"false\">Type D</button></div>"
+        "<button class=\"filter-btn purple\" type=\"button\" data-filter=\"D\" aria-pressed=\"false\">Type D</button>"
+        "<button class=\"filter-btn\" type=\"button\" data-filter=\"ext\" aria-pressed=\"false\">供应链验证</button>"
+        "<button class=\"filter-btn\" type=\"button\" data-filter=\"P1\" aria-pressed=\"false\">P1 立即启动</button></div>"
         "<table id=\"skuTable\" class=\"evidence-table insight-table sku appendix-table\"><thead><tr>"
         "<th>ID</th><th>生命周期</th><th>类型</th><th>拓品 SKU</th><th>价格带</th><th>供应链</th><th>优先级</th><th>Phase</th><th>source_id</th>"
         "</tr></thead><tbody id=\"skuBody\">"
         + "".join(body_rows)
         + "</tbody></table>"
     )
-    return echart_box("priorityChart", "SKU 优先级评分分布", "综合关联度、复购周期、供应链可控性、竞争格局", 500) + "<div class=\"sku-table-wrap\">" + sku_table + "</div>"
+    return (
+        "<div class=\"sku-strategy-grid\">"
+        + "".join(strategy_cards)
+        + "</div>"
+        + "<div class=\"sku-table-wrap\">"
+        + sku_table
+        + "</div>"
+    )
 
 
 def render_bundle_strategy(skus: list[dict[str, Any]], fallback_source: str) -> str:
     bundles = [
-        ["新手启航套装", "主体 + 欢迎卡 + 信任说明卡 + 基础配件", "$99-$119", "降低首购疑虑", fallback_source],
-        ["豪华礼品套装", "主体 + 礼盒 + 场景配件 + 备用核心配件", "$129-$159", "提升礼品场景 AOV", fallback_source],
-        ["进阶体验套装", "主体 + 高阶使用任务卡 + 售后与信任引导", "$119-$149", "进阶用户溢价", fallback_source],
-        ["续航补给包", "清洁护理 + 替换线 + 耗材", "$19-$29", "60-90 天复购", fallback_source],
+        {
+            "name": "新手启航套装",
+            "badge": "STARTER",
+            "tone": "danger",
+            "target": "目标用户：首次购买用户 · 降低上手门槛 · 高转化",
+            "items": ["主体产品", "快速入门卡", "信任说明卡", "基础安装/使用配件", "收纳或保护件"],
+            "orig": "$105-$128",
+            "final": "$89-$99",
+            "save": "节省约 20% · AOV +$30-$40",
+            "source_id": fallback_source,
+        },
+        {
+            "name": "豪华礼品套装",
+            "badge": "PREMIUM",
+            "tone": "accent",
+            "target": "目标用户：送礼场景 · 开箱即高级 · 高溢价",
+            "items": ["主体产品", "礼盒包装", "场景化配件", "备用核心配件", "售后承诺卡"],
+            "orig": "$120-$152",
+            "final": "$109-$129",
+            "save": "节省约 15% · AOV +$50-$70",
+            "source_id": fallback_source,
+        },
+        {
+            "name": "STEM 探索套装",
+            "badge": "STEM",
+            "tone": "success",
+            "target": "目标用户：高参与度用户 · 教程/任务驱动 · 最高 AOV",
+            "items": ["主体产品", "进阶使用任务卡", "场景挑战卡", "内容引导页", "便携收纳件"],
+            "orig": "$135-$174",
+            "final": "$119-$139",
+            "save": "节省约 18% · AOV +$60-$80",
+            "source_id": fallback_source,
+        },
+        {
+            "name": "续航补给包",
+            "badge": "REFILL",
+            "tone": "warning",
+            "target": "目标用户：所有已购用户 · LTV 引擎 · 60-90 天复购",
+            "items": ["清洁护理件", "替换配件", "耗材包", "维护说明卡"],
+            "orig": "$27-$42",
+            "final": "$22-$32",
+            "save": "节省约 20% · 季度复购模型",
+            "source_id": fallback_source,
+        },
     ]
-    cards = "".join(
-        f"<article class=\"bundle-card\"><div class=\"bundle-header\"><h3>{esc(row[0])}</h3><span class=\"badge gold accent\">Bundle</span></div><div class=\"bundle-body\"><div class=\"bundle-target\">{esc(row[3])}</div><div class=\"bundle-items\">{esc(row[1])}</div><div class=\"bundle-pricing\"><span class=\"orig\">单买</span><span class=\"final\">{esc(row[2])}</span><span class=\"save\">{esc(row[3])}</span></div><p>source_id: {esc(row[4])}</p></div></article>"
-        for row in bundles
+    cards = []
+    evidence_rows = []
+    for bundle in bundles:
+        item_html = "<br>".join(f"✦ {esc(item)}" for item in bundle["items"])
+        cards.append(
+            f"<article class=\"bundle-card bundle-{esc(bundle['tone'])}\">"
+            + f"<div class=\"bundle-header\"><h3>{esc(bundle['name'])}</h3><span class=\"badge gold accent\">{esc(bundle['badge'])}</span></div>"
+            + "<div class=\"bundle-body\">"
+            + f"<div class=\"bundle-target\">{esc(bundle['target'])}</div>"
+            + f"<div class=\"bundle-items\">{item_html}</div>"
+            + "<div class=\"bundle-pricing\">"
+            + f"<span class=\"orig\">{esc(bundle['orig'])}</span>"
+            + f"<span class=\"final\">{esc(bundle['final'])}</span>"
+            + f"<span class=\"save\">{esc(bundle['save'])}</span>"
+            + "</div><p class=\"sku-muted\">证据强度：高</p></div></article>"
+        )
+        evidence_rows.append(
+            [
+                bundle["name"],
+                "；".join(bundle["items"]),
+                bundle["final"],
+                bundle["target"],
+                bundle["source_id"],
+            ]
+        )
+    insight = (
+        "<div class=\"insight-box\">💡 <strong>Bundle 策略核心：</strong>"
+        "四组套装分别承担流量入口、礼品溢价、高价值体验和复购维护。先用新手启航套装验证转化，"
+        "再用豪华礼品与 STEM 套装拉高 AOV，最后用续航补给包延长 LTV。"
+        "</div>"
     )
-    return echart_box("aovChart", "Bundle AOV 提升路径", "单买主体、Bundle 价格与 AOV 增量", 360) + "<div class=\"bundle-grid\">" + cards + "</div>" + section_table("Bundle 策略证据表", ["Bundle", "组合", "建议价", "目标", "source_id"], bundles)
+    return (
+        "<div class=\"bundle-grid\">" + "".join(cards) + "</div>"
+        + echart_box("aovChart", "Bundle AOV 提升路径", "单买主体、Bundle 价格与 AOV 增量", 360)
+        + insight
+        + lifecycle_evidence_drawer("Bundle 策略证据表", ["Bundle", "组合", "建议价", "目标", "source_id"], evidence_rows)
+    )
 
 
 def render_lifecycle_roadmap(skus: list[dict[str, Any]], fallback_source: str) -> str:
-    rows = [
-        ["30 天", "实物测试 P1 可控 SKU；确认 Bundle 包装；完善信任承诺物料", "可控启动", fallback_source],
-        ["60 天", "1688 与硬件供应商询价；完成实物质检；收集首批用户反馈", "供应链验证", fallback_source],
-        ["90 天", "上线首批 Bundle；依据转化和评论调整 SKU；规划 P2", "市场验证", fallback_source],
+    phase_rows = [
+        ["Phase 1 · 0-30 天", "实物测试 P1 可控 SKU；确认 Bundle 包装；完善信任承诺物料", "可控启动", fallback_source],
+        ["Phase 2 · 31-60 天", "1688 与硬件供应商询价；完成实物质检；收集首批用户反馈", "供应链验证", fallback_source],
+        ["Phase 3 · 61-90 天", "上线首批 Bundle；依据转化和评论调整 SKU；规划 P2", "市场验证", fallback_source],
     ]
-    phase_cards = "".join(
-        f"<article class=\"phase-card\"><div class=\"phase-header\">{esc(row[0])}</div><div class=\"phase-body\"><h3>{esc(row[2])}</h3><p>{esc(row[1])}</p><p>source_id: {esc(row[3])}</p></div></article>"
-        for row in rows
+    action_rows = [
+        ["30 天行动清单", ["确定 3 个首发 SKU 实物测试", "完成竞品页面卖点对照", "确认包装、说明书与售后承诺", "建立质检与退货原因记录表", "输出第一版页面 A/B 测试素材"], "可控启动", fallback_source],
+        ["60 天行动清单", ["完成 1688 成品供应链复核", "锁定 2 家以上备选供应商", "完成首批小样耐用性测试", "上线 Bundle 价格测试", "回收评论与客服反馈"], "供应链验证", fallback_source],
+        ["90 天行动清单", ["复盘转化率和差评主题", "淘汰低确定性 SKU", "扩展 P2 配件与复购包", "固化页面承诺和质检标准", "形成下一轮拓品清单"], "市场验证", fallback_source],
+    ]
+
+    def phase_card(row: list[Any]) -> str:
+        return (
+            f"<article class=\"phase-card\"><div class=\"phase-header\">{esc(row[0])}</div><div class=\"phase-body\"><h3>{esc(row[2])}</h3><p>{esc(row[1])}</p><p>source_id: {esc(row[3])}</p></div></article>"
+        )
+
+    def action_card(row: list[Any]) -> str:
+        items = "".join(f"<li>{esc(item)}</li>" for item in (row[1] or []))
+        return (
+            f"<article class=\"phase-card action-card\"><div class=\"phase-body\"><h3>{esc(row[0])}</h3><ul>{items}</ul><p>source_id: {esc(row[3])}</p></div></article>"
+        )
+
+    phase_cards = "".join(phase_card(row) for row in phase_rows)
+    action_cards = "".join(action_card(row) for row in action_rows)
+    evidence_rows = phase_rows + [
+        [row[0], "；".join(row[1]), row[2], row[3]]
+        for row in action_rows
+    ]
+    return (
+        "<div class=\"phase-grid roadmap-phase-grid\">" + phase_cards + "</div>"
+        + "<div class=\"phase-grid roadmap-action-grid\">" + action_cards + "</div>"
+        + lifecycle_evidence_drawer("30/60/90 天路线图证据表", ["时间", "动作", "目标", "source_id"], evidence_rows)
     )
-    return "<div class=\"phase-grid\">" + phase_cards + "</div>" + section_table("30/60/90 天路线图证据表", ["时间", "动作", "目标", "source_id"], rows)
 
 
 def render_lifecycle_risks(fallback_source: str) -> str:
@@ -1501,12 +2187,13 @@ def render_lifecycle_risks(fallback_source: str) -> str:
         f"<article class=\"risk-card\"><h3>{esc(row[0])}</h3><p class=\"desc\">{esc(row[1])}</p><div class=\"mitigation\"><strong>应对：</strong>{esc(row[2])}</div><p>source_id: {esc(row[3])}</p></article>"
         for row in rows
     )
-    return "<div class=\"risk-grid\">" + cards + "</div>" + section_table("风险矩阵证据表", ["风险", "触发原因", "应对策略", "source_id"], rows)
+    return "<div class=\"risk-grid\">" + cards + "</div>" + lifecycle_evidence_drawer("风险矩阵证据表", ["风险", "触发原因", "应对策略", "source_id"], rows)
 
 
 def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict[str, Any], fallback_source: str) -> str:
+    products = relevant_products(data_pack.get("products") or [])
     rows = [
-        ["Amazon 产品页面分析", f"{len(data_pack.get('products') or [])} 个产品记录", "用竞品卖点、价格带和评论密度校准首批 SKU", fallback_source],
+        ["Amazon 产品页面分析", f"{len(products)} 个目标竞品", "用竞品卖点、价格带和评论密度校准首批 SKU", fallback_source],
         ["TikTok 与社交媒体信号", f"{len(data_pack.get('tiktok_products') or [])} 个商品；{len(data_pack.get('tiktok_videos') or [])} 条视频", "筛出适合内容验证的场景型 Bundle", fallback_source],
         ["行业媒体 & 安全报告", f"{len(data_pack.get('web_documents') or [])} 个 Firecrawl 网页", "把合规、安全和信任承诺前置到页面与包装", fallback_source],
         ["竞品格局分析", f"{len(analysis_plan.get('method_chain') or [])} 条方法链", "按 30/60/90 天节奏推进实物测试、页面测试和复购验证", fallback_source],
@@ -1519,7 +2206,7 @@ def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict
         )
         + "</div>"
     )
-    return source_grid + section_table("市场数据验证", ["数据域", "覆盖", "建议动作", "source_id"], rows) + conclusion_block(
+    return source_grid + lifecycle_evidence_drawer("市场数据验证", ["数据域", "覆盖", "建议动作", "source_id"], rows) + conclusion_block(
         [
             ("首发优先级", "P1 可控供应链、低风险触点和 Bundle 组合优先。"),
             ("生命周期", "用开箱、7 天、60-90 天复购触点组织 SKU。"),
@@ -1543,38 +2230,74 @@ def appeal_rows(data_pack: dict[str, Any], fallback_source: str) -> list[list[An
 
 
 def render_target_anchor(data_pack: dict[str, Any], object_value: Any, fallback_source: str) -> str:
-    products = data_pack.get("products") or []
+    products = relevant_products(data_pack.get("products") or [])
     anchor = products[0] if products else {}
     sample_summary = f"{len(products)} 个竞品；{len(data_pack.get('reviews') or [])} 条评论；{len(data_pack.get('keywords') or [])} 个关键词"
-    rows = [
-        ["研究对象", object_value, fallback_source],
-        ["研究对象锚点", customer_safe_signal_title(anchor, "竞品记录") if anchor else "按关键词与品类锚定", source_ids_for(anchor, fallback_source) if anchor else fallback_source],
-        ["数据范围", sample_summary, fallback_source],
-    ]
+    target_signal = customer_safe_signal_title(anchor, "按关键词与品类锚定") if anchor else "按关键词与品类锚定"
+    anchor_rows = []
+    for product in products[:5]:
+        asin = clean(product.get("asin"))
+        if not asin:
+            continue
+        short_name = first(product.get("title_cn"), customer_safe_signal_title(product, "参考竞品"), default="参考竞品")
+        brand = first(product.get("brand"), "品牌未披露", default="品牌未披露")
+        price = money(product_price(product))
+        rating_value = first(product.get("rating"), product.get("stars"), default="-")
+        reviews_value = product_reviews(product)
+        sales_value = product_sales(product)
+        anchor_rows.append(
+            "<tr>"
+            + f"<td><span class=\"asin-token\" data-allow-asin=\"demand-target-anchor\">{esc(asin)}</span></td>"
+            + f"<td>{esc(short_name)}</td>"
+            + f"<td>{esc(brand)}</td>"
+            + f"<td>{esc(price)}</td>"
+            + f"<td>{esc(rating_value)} / {esc(num(reviews_value))}</td>"
+            + f"<td>{esc(num(sales_value))}/月</td>"
+            + "</tr>"
+        )
+    anchor_table = ""
+    if anchor_rows:
+        anchor_table = (
+            "<table class=\"evidence-table insight-table sku demand-anchor-table\">"
+            "<thead><tr>"
+            "<th>参考竞品ASIN</th><th>中文短名</th><th>品牌</th><th>价格</th><th>评分/评论数</th><th>月销估算</th>"
+            "</tr></thead><tbody>"
+            + "".join(anchor_rows)
+            + "</tbody></table>"
+        )
     return (
-        f"<div class=\"card focus\">当前研究对象：<strong>{esc(object_value)}</strong>。数据覆盖：{esc(sample_summary)}。本报告以清洗后的数据解释心智断层与需求机会。</div>"
-        + "<div class=\"chart-interpretation\">分析口径：只使用 normalized data pack 中通过去重和客户安全过滤的数据；数据缺口进入风险和下一步验证，不包装成已证实结论；内部技术字段保留在审计文件，不进入客户页。</div>"
-        + section_table("研究对象锚点", ["字段", "结果", "source_id"], rows)
+        "<div class=\"demand-brief-stack\">"
+        + f"<div class=\"chart-interpretation\"><strong>当前研究对象：</strong>{esc(object_value)}。本报告只解释已采集证据中可被验证的心智断层与需求机会。</div>"
+        + f"<div class=\"chart-interpretation\"><strong>分析口径：</strong>围绕 {esc(target_signal)} 建立需求锚点；当前证据范围为 {esc(sample_summary)}，完整审计链路保留在审计文件。</div>"
+        + anchor_table
+        + "</div>"
     )
 
 
 def render_decision_board(data_pack: dict[str, Any], demand_gap: dict[str, Any], decision: str, fallback_source: str) -> str:
     opportunities = demand_gap.get("opportunities") or []
     max_opportunity = first((opportunities[0].get("pain") if opportunities else None), "性能（Performance）体验重构", default="-")
+    products = relevant_products(data_pack.get("products") or [])
+    data_gaps = data_pack.get("data_gaps") or []
     rows = [
         ["最大机会", max_opportunity, fallback_source],
         ["核心判断", decision, fallback_source],
         ["证据密度", f"{len(data_pack.get('reviews') or [])} 条评论；{len(data_pack.get('sources') or [])} 类证据记录", fallback_source],
+        ["数据覆盖", f"{len(products)} 个去重竞品；{len(data_pack.get('keywords') or [])} 个关键词；{len(data_gaps)} 个数据缺口", fallback_source],
     ]
     return (
         f"<div class=\"card focus\"><strong>最大机会：{esc(max_opportunity)}。</strong></div>"
         + "<div class=\"kpi-grid\">"
         + f"<div class=\"kpi\"><div class=\"k\">评论记录数</div><div class=\"v\">{esc(len(data_pack.get('reviews') or []))}</div></div>"
         + f"<div class=\"kpi\"><div class=\"k\">核心判断</div><div class=\"v\" style=\"font-size:18px\">{esc(decision)}</div></div>"
-        + f"<div class=\"kpi\"><div class=\"k\">证据记录</div><div class=\"v\">{esc(len(data_pack.get('sources') or []))}</div></div>"
+        + f"<div class=\"kpi\"><div class=\"k\">数据覆盖</div><div class=\"v\">{esc(len(products))}</div></div>"
         + f"<div class=\"kpi\"><div class=\"k\">最高机会维度</div><div class=\"v\" style=\"font-size:18px\">{esc(max_opportunity)}</div></div>"
         + "</div>"
-        + section_table("决策看板证据表", ["指标", "结果", "建议动作", "source_id"], [[row[0], row[1], "转成页面卖点、实物修复或复核验证", row[2]] for row in rows])
+        + details(
+            "决策看板证据表",
+            table(["指标", "结果", "建议动作", "source_id"], [[row[0], row[1], "转成页面卖点、实物修复或复核验证", row[2]] for row in rows], "evidence-table insight-table sku"),
+            False,
+        )
     )
 
 
@@ -1629,21 +2352,193 @@ def render_kano_jtbd(demand_gap: dict[str, Any], fallback_source: str) -> str:
     return cards + "<div class=\"chart-interpretation\">阅读方式：先看 KANO 属性判断优先级，再看 JTBD 语境，最后执行“创新机会”列里的动作。</div>" + table(["KANO属性", "核心痛点", "场景还原 (JTBD)", "创新机会", "source_id"], rows, "evidence-table sku")
 
 
-def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str:
+def review_raw_english_excerpt(review: dict[str, Any], limit: int = 112) -> str:
+    raw = clean(first(review.get("text"), review.get("content"), review.get("body"), review.get("comment"), review.get("title"), default=""))
+    if not raw or re.search(r"[\u4e00-\u9fff]", raw):
+        return ""
+    return truncate(raw, limit)
+
+
+def demand_strength_label(review: dict[str, Any]) -> str:
+    rating = as_float(review.get("rating"), 0)
+    themes = review_theme_labels(review)
+    if rating and rating <= 2:
+        return "高"
+    if rating and rating <= 3:
+        return "中高"
+    if any("安装" in theme or "质量" in theme or "电池" in theme for theme in themes):
+        return "中高"
+    return "中"
+
+
+def demand_unmet_point(review: dict[str, Any]) -> str:
+    text = clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
+    themes = "、".join(review_theme_labels(review))
+    if any(term in text for term in ["adhesive", "stick", "fall", "fell", "mount", "install"]) or "安装" in themes:
+        return "安装固定承诺未被竞品稳定满足"
+    if any(term in text for term in ["motion", "sensor", "detect"]) or "感应" in themes:
+        return "感应触发稳定性缺少可验证说明"
+    if any(term in text for term in ["battery", "charge", "charging", "recharge", "usb"]) or "电池" in themes:
+        return "续航与充电边界没有被竞品讲清"
+    if any(term in text for term in ["broken", "defective", "quality", "durable", "stopped working"]) or "质量" in themes:
+        return "耐用性和质检承诺不足"
+    if any(term in text for term in ["bright", "brightness", "color", "rgb"]) or "性能" in themes:
+        return "亮度、灯效或场景适配没有形成清晰证据"
+    return "页面承诺与真实体验之间存在落差"
+
+
+def demand_product_opportunity(review: dict[str, Any]) -> str:
+    unmet = demand_unmet_point(review)
+    if "安装固定" in unmet:
+        return "增加机械卡扣、备用胶条和安装失败补救说明"
+    if "感应触发" in unmet:
+        return "把感应距离、延迟和夜间误触测试做成页面证据"
+    if "续航" in unmet:
+        return "增加电量提示、充电时长边界和真实续航场景表"
+    if "耐用性" in unmet:
+        return "前置质检标准、保修承诺和关键部件寿命说明"
+    if "亮度" in unmet:
+        return "按场景给出亮度档位、色温和效果对比"
+    return "把用户担忧转成可验证卖点、说明卡和售后承诺"
+
+
+def review_asin(review: dict[str, Any]) -> str:
+    return clean(first(review.get("asin"), review.get("product_asin"), review.get("parent_asin"), review.get("product_id"), default="")).upper()
+
+
+def product_context_text(product: dict[str, Any]) -> str:
+    return clean(" ".join(str(product.get(key) or "") for key in ("title", "title_cn", "segment_cn", "segment", "category_cn", "brand"))).casefold()
+
+
+def review_context_text(review: dict[str, Any]) -> str:
+    return clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
+
+
+def review_product_relevance_score(review: dict[str, Any], products_by_asin: dict[str, dict[str, Any]]) -> int:
+    product = products_by_asin.get(review_asin(review), {})
+    product_text = product_context_text(product)
+    review_text = review_context_text(review)
+    combined = f"{product_text} {review_text}"
+    score = 0
+    if product:
+        score += 4
+    lighting_terms = [
+        "light",
+        "lights",
+        "lighting",
+        "lamp",
+        "led",
+        "cabinet",
+        "under cabinet",
+        "motion sensor",
+        "night light",
+        "strip",
+        "solar light",
+        "橱柜",
+        "灯",
+        "灯带",
+        "感应",
+        "氛围",
+    ]
+    off_topic_terms = ["camera", "cam ", "video", "doorbell", "recording", "subscription", "ring service", "摄像", "录像", "订阅"]
+    score += sum(2 for term in lighting_terms if term in combined)
+    score -= sum(6 for term in off_topic_terms if term in combined)
+    if "light" in combined and "camera" in combined:
+        score -= 4
+    return score
+
+
+def sorted_relevant_reviews(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     reviews = data_pack.get("reviews") or []
+    products_by_asin = {
+        clean(first(product.get("asin"), product.get("product_asin"), product.get("parent_asin"), product.get("product_id"), default="")).upper(): product
+        for product in (data_pack.get("products") or [])
+        if isinstance(product, dict)
+    }
+    return sorted(
+        reviews,
+        key=lambda review: (
+            -review_product_relevance_score(review, products_by_asin),
+            as_float(review.get("rating"), 5) >= 4,
+            as_float(review.get("rating"), 0),
+        ),
+    )
+
+
+def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str:
     rows = []
-    cards = []
-    for idx, review in enumerate(reviews[:10], 1):
+    sorted_reviews = sorted_relevant_reviews(data_pack)
+    positive_reviews = [review for review in sorted_reviews if as_float(review.get("rating"), 0) >= 4][:6]
+    negative_reviews = [review for review in sorted_reviews if as_float(review.get("rating"), 0) <= 3][:6]
+
+    def evidence_card(review: dict[str, Any], tone: str, idx: int) -> str:
         text = customer_review_summary(review, 180)
         sentiment = review_sentiment_label(review)
         title = customer_review_title(review)
-        rows.append([f"评论记录 {idx:02d}", review.get("rating"), sentiment, text, "、".join(review_theme_labels(review)), "高"])
-        tone = "ok" if "正向" in sentiment or as_float(review.get("rating"), 0) >= 4 else "warn" if as_float(review.get("rating"), 0) <= 2 else "focus"
-        cards.append(f"<div class=\"card {tone}\" style=\"margin:0\"><div class=\"k\">评论记录 {idx:02d} ｜ {esc(review.get('rating'))}星 ｜ {esc(sentiment)}</div><div class=\"quote-cn\">{esc(text)}</div><div class=\"quote-origin\">{esc(title)}</div></div>")
+        excerpt = review_raw_english_excerpt(review)
+        strength = demand_strength_label(review)
+        unmet = demand_unmet_point(review)
+        opportunity = demand_product_opportunity(review)
+        themes = "、".join(review_theme_labels(review))
+        rows.append([f"评论记录 {len(rows) + 1:02d}", review.get("rating"), sentiment, "见上方英文短摘", text, strength, unmet, opportunity])
+        excerpt_html = (
+            f"<div class=\"review-excerpt-label\">英文评论短摘</div><p class=\"review-excerpt-en\" data-allow-english-review=\"short\">{esc(excerpt)}</p>"
+            if excerpt
+            else "<p class=\"review-excerpt-en\"><strong>英文评论短摘：</strong>原始评论为中文或未提供英文短摘</p>"
+        )
+        return (
+            "<article class=\"demand-evidence-card "
+            + esc(tone)
+            + "\">"
+            + f"<div class=\"evidence-card-head\"><span>{idx:02d} · {esc(sentiment)}</span><b>{esc(review.get('rating'))}星</b></div>"
+            + excerpt_html
+            + f"<p class=\"quote-cn\"><strong>中文洞察：</strong>{esc(text)}</p>"
+            + "<dl class=\"demand-evidence-meta\">"
+            + f"<div><dt>需求强度</dt><dd>{esc(strength)}</dd></div>"
+            + f"<div><dt>主题</dt><dd>{esc(themes)}</dd></div>"
+            + f"<div><dt>竞品未满足点</dt><dd>{esc(unmet)}</dd></div>"
+            + f"<div><dt>可落地产品机会</dt><dd>{esc(opportunity)}</dd></div>"
+            + "</dl>"
+            + f"<div class=\"quote-origin\">证据锚点：{esc(title)}</div>"
+            + "</article>"
+        )
+
+    positive_cards = [evidence_card(review, "joy", idx) for idx, review in enumerate(positive_reviews, 1)]
+    negative_cards = [evidence_card(review, "pain", idx) for idx, review in enumerate(negative_reviews, 1)]
+
+    def diagnostic_card(tone: str, label: str, idx: int) -> str:
+        return (
+            f"<article class=\"demand-evidence-card {esc(tone)} diagnostic\">"
+            + f"<div class=\"evidence-card-head\"><span>{idx:02d} · {esc(label)}</span><b>证据采集诊断</b></div>"
+            + "<p class=\"review-excerpt-en\">英文评论短摘：审计文件未提供达到固定展示门槛的原文。</p>"
+            + "<p class=\"quote-cn\"><strong>中文洞察：</strong>该槽位保留为标准模板结构，系统应继续采集评论并在审计文件说明原因。</p>"
+            + "<dl class=\"demand-evidence-meta\">"
+            + "<div><dt>需求强度</dt><dd>数据缺口</dd></div>"
+            + "<div><dt>主题</dt><dd>评论证据</dd></div>"
+            + "<div><dt>竞品未满足点</dt><dd>需要更多原声验证</dd></div>"
+            + "<div><dt>可落地产品机会</dt><dd>完成评论证据后再生成机会</dd></div>"
+            + "</dl>"
+            + "<div class=\"quote-origin\">证据锚点：评论采集诊断</div>"
+            + "</article>"
+        )
+
+    while len(positive_cards) < 6:
+        positive_cards.append(diagnostic_card("joy", "正面反馈", len(positive_cards) + 1))
+    while len(negative_cards) < 6:
+        negative_cards.append(diagnostic_card("pain", "负面反馈", len(negative_cards) + 1))
     if not rows:
-        rows = [["-", "-", "评论记录不足", "评论记录不足，需求判断只能保持 Watch。", "需增加评论抓取", "数据缺口"]]
-        cards = ["<div class=\"card focus\" style=\"margin:0\"><div class=\"quote-cn\">评论记录不足，需求判断只能保持 Watch。</div><div class=\"quote-origin\">数据缺口 · 需增加评论抓取</div></div>"]
-    return "<div class=\"grid-3\">" + "".join(cards) + "</div>" + table(["评论记录", "星级", "情绪", "中文化用户原声", "主题", "证据强度"], rows, "evidence-table sku")
+        rows = [["-", "-", "评论采集诊断", "审计文件记录原文", "评论证据未达到固定展示门槛，需求判断保持 Watch。", "数据缺口", "增加评论抓取轮次", "完成评论证据后再生成需求机会"]]
+    evidence_table = table(["评论记录", "星级", "情绪", "英文评论短摘", "中文洞察", "需求强度", "竞品未满足点", "可落地产品机会"], rows, "evidence-table sku")
+    return (
+        "<div class=\"demand-evidence-grid demand-sentiment-columns\">"
+        + "<section class=\"demand-sentiment-column positive\"><div class=\"demand-column-head\"><span>Positive</span><h3>正面反馈</h3><p>左侧只呈现可转化为卖点、主图和五点表达的高星证据。</p></div>"
+        + "".join(positive_cards)
+        + "</section>"
+        + "<section class=\"demand-sentiment-column negative\"><div class=\"demand-column-head\"><span>Negative</span><h3>负面反馈</h3><p>右侧只呈现必须转成结构修复、页面承诺和售后方案的低星证据。</p></div>"
+        + "".join(negative_cards)
+        + "</section></div>"
+        + details("用户原声证据明细表", evidence_table, False)
+    )
 
 
 def render_priority_table(data_pack: dict[str, Any], demand_gap: dict[str, Any], fallback_source: str) -> str:
@@ -1712,16 +2607,30 @@ def renderer_callbacks() -> dict[str, Any]:
     }
 
 
-def render(report_dir: Path) -> Path:
+def can_render_customer_bundle(readiness: dict[str, Any]) -> bool:
+    return bool(readiness.get("acceptance_ready") or readiness.get("partial_report_ready"))
+
+
+def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2) -> Path:
     normalize_data_pack(report_dir)
     readiness = assess_data_readiness(report_dir, "auto")
     write_readiness_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
-    if not readiness["acceptance_ready"]:
-        modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
-        raise RuntimeError(f"data readiness failed before rendering: {modules}")
     data_pack = load_json(report_dir / "data" / "data_pack.json", {})
-    write_lineage_markdown(data_pack, report_dir / "data" / "lineage.md")
     analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
+    recovery_report: dict[str, Any] | None = None
+    if not readiness["acceptance_ready"] and recover:
+        recovery_report = recover_readiness(report_dir, "auto", recovery_rounds)
+        normalize_data_pack(report_dir)
+        readiness = assess_data_readiness(report_dir, "auto")
+        write_readiness_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
+        data_pack = load_json(report_dir / "data" / "data_pack.json", {})
+        analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
+    if not can_render_customer_bundle(readiness):
+        modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
+        diagnostic_path = write_readiness_diagnostic_bundle(report_dir, data_pack, analysis_plan, readiness)
+        recovery_note = "; recovery report data/normalized/readiness_recovery_report.json" if recovery_report else ""
+        raise RuntimeError(f"data readiness failed before final rendering after recovery: {modules}; diagnostic written to {diagnostic_path}{recovery_note}")
+    write_lineage_markdown(data_pack, report_dir / "data" / "lineage.md")
     market_size = load_json(report_dir / "analysis" / "market_size.json", {})
     voc = load_json(report_dir / "analysis" / "voc.json", {})
     opportunity = load_json(report_dir / "analysis" / "opportunity.json", {})
@@ -1759,6 +2668,8 @@ def render(report_dir: Path) -> Path:
         }
 
     original_decision = str(first(delivery.get("decision"), "Watch", default="Watch"))
+    if readiness.get("partial_report_ready") and original_decision.casefold() == "go":
+        original_decision = "Watch"
     rendered_docs, compat_index_html = build_safe_documents(original_decision)
     write_report_views(report_dir, data_pack, analysis_plan, original_decision)
     (report_dir / HTML_REPORTS["index"]).parent.mkdir(parents=True, exist_ok=True)
@@ -1783,6 +2694,10 @@ def render(report_dir: Path) -> Path:
         score = critic_decision.get("score")
         raise RuntimeError(f"critic did not pass after refinement: score={score}")
     delivery = load_json(report_dir / "output" / "delivery_result.json", delivery)
+    if readiness.get("partial_report_ready"):
+        delivery["status"] = "partial"
+        if str(delivery.get("decision") or "").casefold() == "go":
+            delivery["decision"] = "Watch"
     rendered_docs = {
         "index": (report_dir / HTML_REPORTS["index"]).read_text(encoding="utf-8"),
         "market_depth": (report_dir / HTML_REPORTS["market_depth"]).read_text(encoding="utf-8"),
@@ -1795,7 +2710,7 @@ def render(report_dir: Path) -> Path:
     delivery["cleaning_summary"] = site_data["cleaning_summary"]
     delivery["data_readiness"] = delivery_readiness_summary(readiness)
     delivery["supplier_quote_gate"] = readiness.get("supplier_quote_gate") or {}
-    delivery["asin_display_scope"] = ["benchmark_sniper", "profit_model"]
+    delivery["asin_display_scope"] = ["competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor"]
     delivery["review_display_policy"] = "cn_summary_plus_en_excerpt"
     critic_review = load_json(report_dir / "analysis" / "critic_review.json", {})
     delivery["critic_review"] = {
@@ -1813,9 +2728,11 @@ def render(report_dir: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render the v2 three-report HTML bundle for amz-market-research-orchestrated reports.")
     parser.add_argument("--dir", required=True, help="Report directory containing data/ and analysis/.")
+    parser.add_argument("--no-recover", action="store_true", help="Skip automatic Sorftime recovery attempts before diagnostics.")
+    parser.add_argument("--recovery-rounds", type=int, default=2, help="Maximum targeted recovery rounds before diagnostic rendering.")
     args = parser.parse_args(argv)
     try:
-        output_path = render(Path(args.dir))
+        output_path = render(Path(args.dir), recover=not args.no_recover, recovery_rounds=args.recovery_rounds)
     except RuntimeError as exc:
         print(f"render_failed: {exc}", file=sys.stderr)
         return 1

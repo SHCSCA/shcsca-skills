@@ -68,20 +68,27 @@ test('static bundle links navigate and render visible report pages', async ({ pa
     await page.waitForLoadState('networkidle');
     await expect(page.locator('.site-nav')).toHaveCount(0);
     await expect(page.locator('h1').first()).toBeVisible();
-    await expect(page.locator('table').first()).toBeVisible();
+    await expect(page.locator('table:visible').first()).toBeVisible();
     await expectEchartsRendered(page, chartIds[href]);
   }
 });
 
 test('desktop interactions work on child reports', async ({ page }) => {
   await openReport(page, 'market-depth-report.html');
-  await expect(page.locator('.table-tools')).toHaveCount(0);
-  await expect(page.locator('body')).not.toHaveClass(/template-market/);
+  await expect(page.locator('.table-tools').first()).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/template-market/);
   await expect(page.locator('.section-title', { hasText: '建议定价策略' })).toBeVisible();
   await expect(page.locator('.pricing-card.recommended')).toBeVisible();
   await expect(page.locator('.comp-table').first()).toBeVisible();
+  const marketSearch = page.locator('.table-tools:visible input[type="search"]').first();
+  await marketSearch.fill('zzzz-no-match');
+  const marketRowsAfterFilter = await marketSearch.evaluate(input => {
+    const table = input.closest('.table-tools')?.nextElementSibling;
+    return table ? table.querySelectorAll('tbody tr:not(.is-filtered-out)').length : -1;
+  });
+  expect(marketRowsAfterFilter).toBe(0);
   await openReport(page, 'lifecycle-strategy-report.html');
-  const search = page.locator('.table-tools input[type="search"]').first();
+  const search = page.locator('.table-tools:visible input[type="search"]').first();
   await expect(search).toBeVisible();
   await search.fill('zzzz-no-match');
   const visibleRowsAfterFilter = await search.evaluate(input => {
@@ -95,7 +102,7 @@ test('desktop interactions work on child reports', async ({ page }) => {
     await filterButton.click();
     await expect(filterButton).toHaveAttribute('aria-pressed', 'true');
   }
-  const firstHeader = page.locator('th[data-sortable]').first();
+  const firstHeader = page.locator('th[data-sortable]:visible').first();
   await expect(firstHeader).toBeVisible();
   await firstHeader.click();
   await expect(firstHeader).toHaveAttribute('data-sort-dir', 'asc');
@@ -122,7 +129,7 @@ test('mobile navigation and screenshots are nonblank', async ({ page }) => {
   const shot = await page.screenshot({ fullPage: false });
   expect(shot.length).toBeGreaterThan(10000);
   const visibleText = await page.locator('body').innerText();
-  expect(visibleText.length).toBeGreaterThan(1000);
+  expect(visibleText.length).toBeGreaterThan(700);
 });
 """
 

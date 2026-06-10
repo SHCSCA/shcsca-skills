@@ -21,17 +21,35 @@ def review_theme_labels(review: dict[str, Any]) -> list[str]:
 
 
 def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
+    rating = as_float(review.get("rating"), 0)
+    raw_text = clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
+    negative_summary_phrases = ["没有达到预期", "需要加强", "出现失效", "信任下降", "不够清晰", "难以使用"]
     for key in ("summary_cn", "text_cn", "quote_cn", "review_cn"):
         value = clean(review.get(key))
         if value:
+            if rating >= 4 and any(phrase in value for phrase in negative_summary_phrases):
+                break
             return truncate(value, limit)
 
     raw = clean(first(review.get("text"), review.get("content"), review.get("body"), review.get("comment"), default=""))
     if has_cjk(raw):
         return truncate(raw, limit)
 
-    text = clean(" ".join(str(review.get(key) or "") for key in ("title", "text", "content", "body", "comment"))).casefold()
+    text = raw_text
     phrases: list[str] = []
+    if rating >= 4:
+        if any(term in text for term in ["bright", "brightness", "light", "color", "rgb"]):
+            phrases.append("亮度和灯效获得正向反馈")
+        if any(term in text for term in ["easy", "install", "setup", "stick", "adhesive"]):
+            phrases.append("安装和上手体验获得正向反馈")
+        if any(term in text for term in ["motion", "sensor", "detect"]):
+            phrases.append("感应触发体验获得正向反馈")
+        if any(term in text for term in ["battery", "charge", "charging", "last", "long time"]):
+            phrases.append("续航和充电便利性获得正向反馈")
+        if any(term in text for term in ["love", "great", "works well", "perfect", "recommend"]):
+            phrases.append("整体使用满意度形成正向反馈")
+        return "；".join(dict.fromkeys(phrases or ["用户正向反馈集中在功能效果、安装便利和场景适配"]))[:limit]
+
     if any(term in text for term in ["stopped working", "stop working", "not work", "doesn't work", "broken", "defective", "failed"]):
         phrases.append("短期使用后出现失效")
     if any(term in text for term in ["two days", "2 days", "after a day", "after one day", "within days"]):
@@ -48,7 +66,6 @@ def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
         phrases.append("售后承诺需要前置说明")
 
     if not phrases:
-        rating = as_float(review.get("rating"), 0)
         phrases.append("负面反馈集中在体验未达预期" if rating and rating <= 3 else "用户反馈需要继续归类后再转成需求动作")
     unique = []
     for phrase in phrases:
@@ -78,7 +95,7 @@ def customer_product_position(product: dict[str, Any]) -> str:
         value = clean(product.get(key))
         if value and has_cjk(value):
             return truncate(value, 90)
-    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品记录")
+    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品")
     price = money(product_price(product))
     rating = first(product.get("rating"), default="-")
     reviews = num(product_reviews(product))

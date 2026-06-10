@@ -89,7 +89,7 @@ The generated `data/normalized/data_readiness_report.json` must have:
 - `sample_class = acceptance_sample`,
 - no `blocking_gaps`.
 
-Standard/deep runs are `non_acceptance_sample` when source lineage is empty, product samples are empty, or deduped keyword samples are below 1000. In that state the report directory may be retained as a historical or demo sample, but it must not be presented as a completed client deliverable. Do not use AI-generated placeholder entities, copied template rows, or duplicated rows to satisfy sample counts.
+Standard/deep runs are `non_acceptance_sample` when source lineage is empty, deduped keyword samples are below 1000, Amazon valid competitor depth is below 30/60, or broad market terms are not split into at least three primary segments with ten competitors each after recovery attempts. When only 1688 supplier quote depth, field quality, or price-spread gates fail after recovery, the run is `partial_acceptance_sample`: customer-facing market, lifecycle, and demand analysis may be delivered, but supply-chain gross-margin conclusions must be disabled and replaced by a diagnostic panel. Do not use AI-generated placeholder entities, copied template rows, or duplicated rows to satisfy sample counts.
 
 Review depth is a confidence gate rather than a structural blocker:
 
@@ -154,11 +154,24 @@ Client HTML renders Chinese review summary first. It may also display a short En
 
 1688 supplier data is delivery-blocking for standard/deep supply and profitability sections:
 
-- Run multi-round Sorftime `ali1688_similar_product` collection until there are at least 50 deduped valid quotes or all configured rounds are exhausted.
+- Run multi-round, paged Sorftime `ali1688_similar_product(searchName,page)` collection until there are at least 50 deduped valid quotes or all configured rounds are exhausted.
 - A valid supplier quote has title, supplier/shop, positive RMB price, and canonical URL/product ID/title+shop identity.
 - Deduplicate suppliers by canonical URL, product ID, or title + store before counting the 50-quote gate.
-- `data_readiness_report.json`, `delivery_result.json`, and `report-data.json` must expose `supplier_quote_gate`.
-- Customer HTML must not render final 1688 cost or gross-margin conclusions when `supplier_quote_gate.passed=false`.
+- The 50-quote gate is only a quantity floor. Title coverage and URL/product-ID/stable identity coverage must each be at least 70%.
+- `supplier_1688_collection_summary.json` must include `documented_field_coverage` for the official 16 fields (`Title`, `Photo`, `URL`, `Price`, `ProductId`, `StoreName`, `ServiceScore`, `ServiceScoreDetail`, `OnlineDate`, `SalesOf30d`, `WholesalePriceRange`, `RepurchaseRate`, `ShippingOrigin`, `ReviewCount`, `Score`, `SkuCount`). Treat `Url`/`url` as aliases of `URL`.
+- If the active MCP response omits documented product-title or product-URL fields (`Title`, `URL`), preserve the raw response and fail the supplier field-quality gate instead of inventing customer-facing supplier titles or profitability conclusions.
+- Price distribution must be sane enough for cost modeling: `max/P50 > 20` or `P75/P25 > 5` fails the global spread gate. If a same-search-term `seed_keyword` bucket has at least 50 valid quotes and passes field/spread gates, the supply module may use only that bucket and must record the global spread problem as a warning. If no same-search bucket passes, block gross-margin conclusions.
+- `data_readiness_report.json`, `delivery_result.json`, and `report-data.json` must expose `supplier_quote_gate` and `supplier_quality_gate`.
+- Customer HTML must not render final 1688 cost or gross-margin conclusions when either supplier gate fails.
+
+Amazon competitor data is delivery-blocking for standard/deep market and profitability sections:
+
+- Standard reports require at least 30 deduped valid competitors; deep reports require at least 60.
+- Each valid competitor must have ASIN, title, brand, price, rating, review count, sales or ranking proxy, and segment.
+- Broad terms such as `smart lighting`, `lighting`, and `智能照明` must split into primary segments before analysis. At least three primary segments must each carry ten valid competitors.
+- Gross-margin tables must use real competitor ASIN prices as price-band anchors; brand averages and mixed-category averages cannot substitute for ASIN-backed prices.
+- Amazon and TikTok output-field coverage is verified from actual MCP result rows, not from `tools/list` input schemas. Zero-row ASIN/productId/category dimensions must be retried with alternate valid samples and recorded as data gaps only after retry evidence exists.
+- If `data_gaps[].type == amazon_product_enrichment_empty_dimensions`, it must include `retry_evidence` with multiple attempted ASINs, `empty_dimensions`, `successful_dimensions`, and per-tool `tool_stats`. A generic "returned no rows" message without retry evidence is invalid.
 
 ## Cleaning Boundary
 
@@ -169,6 +182,7 @@ Global cleaning belongs to `amz-market-research-orchestrated`:
 - reviews: ASIN + date + title + body fingerprint,
 - suppliers: canonical URL, product ID, or title + store,
 - web documents: canonical URL with query strings and fragments removed.
+- data_gaps: dedupe by `module/type + gap/reason` so repeated recovery or collector runs do not stack duplicate customer/audit blockers.
 
 Child report skills may do display-layer grouping, sorting, bucketing, and truncation, but they must not overwrite the global dedupe result or create a competing data pack.
 

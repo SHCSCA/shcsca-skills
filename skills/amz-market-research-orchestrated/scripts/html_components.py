@@ -110,7 +110,8 @@ def table_inner(headers: list[str], rows: list[list[Any]]) -> str:
 def kpi_card(label: str, value: Any, sub: Any = "", tone: str = "") -> str:
     tone_class = f" {tone}" if tone else ""
     trend_class = "hot" if tone in ("danger", "warning") else "up" if tone == "success" else ""
-    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(tone or 'up')}</div>" if trend_class else ""
+    trend_label = "注意" if tone in ("danger", "warning") else "通过"
+    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(trend_label)}</div>" if trend_class else ""
     return (
         f"<article class=\"kpi-card{tone_class}\">"
         f"<div class=\"kpi-label\">{esc(label)}</div>"
@@ -124,7 +125,8 @@ def kpi_card(label: str, value: Any, sub: Any = "", tone: str = "") -> str:
 def kpi_card_html(label: str, value_html: str, sub: Any = "", tone: str = "") -> str:
     tone_class = f" {tone}" if tone else ""
     trend_class = "hot" if tone in ("danger", "warning") else "up" if tone == "success" else ""
-    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(tone or 'up')}</div>" if trend_class else ""
+    trend_label = "注意" if tone in ("danger", "warning") else "通过"
+    trend = f"<div class=\"kpi-trend {trend_class}\">{esc(trend_label)}</div>" if trend_class else ""
     return (
         f"<article class=\"kpi-card{tone_class}\">"
         f"<div class=\"kpi-label\">{esc(label)}</div>"
@@ -146,14 +148,14 @@ def tag(value: Any, tone: str = "") -> str:
 
 def mini_chart(items: list[tuple[Any, float, Any]], tone: str = "") -> str:
     if not items:
-        return "<div class=\"mini-chart\"><div class=\"bar-row\"><span>无数据</span><div class=\"bar\"><span style=\"--w:0%\"></span></div><b>-</b></div></div>"
+        return "<div class=\"mini-chart\"><div class=\"bar-row\"><span>无数据</span><div class=\"bar\"><span data-width=\"0\"></span></div><b>-</b></div></div>"
     max_value = max(abs(value) for _, value, _ in items) or 1
     rows = []
     for label, value, display in items:
         width = max(3, min(100, abs(value) / max_value * 100))
         rows.append(
             f"<div class=\"bar-row\"><span>{esc(label)}</span>"
-            f"<div class=\"bar {tone}\"><span style=\"--w:{width:.1f}%\"></span></div>"
+            f"<div class=\"bar {tone}\"><span data-width=\"{width:.1f}\"></span></div>"
             f"<b>{esc(display)}</b></div>"
         )
     return "<div class=\"mini-chart\">" + "".join(rows) + "</div>"
@@ -180,8 +182,128 @@ def product_reviews(product: dict[str, Any]) -> Any:
     return first(product.get("review_count"), product.get("reviews"), product.get("评论数"), default=None)
 
 
+UNKNOWN_SEGMENTS = {
+    "",
+    "-",
+    "unknown",
+    "unclassified",
+    "未分层",
+    "未知",
+    "其他",
+    "n/a",
+    "na",
+}
+
+TARGET_SIGNAL_TOKENS = [
+    "light",
+    "lighting",
+    "lamp",
+    "led",
+    "bulb",
+    "strip",
+    "cabinet",
+    "sconce",
+    "vanity",
+    "motion sensor",
+    "solar",
+    "outdoor",
+    "night light",
+    "橱柜灯",
+    "感应灯",
+    "灯带",
+    "灯泡",
+    "壁灯",
+    "镜前灯",
+    "夜灯",
+    "户外灯",
+    "太阳能灯",
+    "智能照明",
+    "plush",
+    "toy",
+    "stuffed",
+    "companion",
+    "毛绒",
+    "玩具",
+    "陪伴",
+]
+
+OFF_TARGET_NOISE_TOKENS = [
+    "camera",
+    " cam ",
+    "security camera",
+    "video doorbell",
+    "doorbell",
+    "recording",
+    "subscription",
+    "ring service",
+    "protein",
+    "shake",
+    "energy drink",
+    "beverage",
+    "celsius",
+    "bounty",
+    "paper towel",
+    "toilet paper",
+    "coffee",
+    "soda",
+    "supplement",
+    "vitamin",
+    "snack",
+    "grocery",
+    "纸巾",
+    "饮料",
+    "蛋白",
+    "咖啡",
+    "维生素",
+    "零食",
+    "摄像",
+    "录像",
+    "门铃",
+    "订阅",
+]
+
+
+def product_text(product: dict[str, Any]) -> str:
+    return " ".join(
+        clean(product.get(key)).casefold()
+        for key in [
+            "title",
+            "title_cn",
+            "brand",
+            "segment",
+            "segment_cn",
+            "category",
+            "category_cn",
+            "positioning_cn",
+        ]
+    )
+
+
+def product_segment_value(product: dict[str, Any]) -> str:
+    return clean(first(product.get("segment_cn"), product.get("segment"), product.get("category_cn"), product.get("category"), default=""))
+
+
+def is_unknown_segment(segment: Any) -> bool:
+    return clean(segment).casefold() in UNKNOWN_SEGMENTS
+
+
+def is_off_target_product(product: dict[str, Any]) -> bool:
+    text = product_text(product)
+    return any(token in text for token in OFF_TARGET_NOISE_TOKENS)
+
+
+def has_product_relevance_signal(product: dict[str, Any]) -> bool:
+    segment = product_segment_value(product)
+    if segment and not is_unknown_segment(segment):
+        return True
+    text = product_text(product)
+    return any(token in text for token in TARGET_SIGNAL_TOKENS)
+
+
 def relevant_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return products
+    candidates = [product for product in products if isinstance(product, dict) and not is_off_target_product(product)]
+    signaled = [product for product in candidates if has_product_relevance_signal(product)]
+    return signaled if signaled else candidates
 
 
 def price_band(price: Any) -> str:

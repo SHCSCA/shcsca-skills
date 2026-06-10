@@ -45,10 +45,34 @@ The script prints `validate_ok` on success and `validate_failed: ...` on failure
 
 ## collect_sorftime_1688_suppliers.py
 
-Collects 1688 supplier quotes with multi-round Sorftime `ali1688_similar_product` searches. It derives Chinese search seeds from Amazon competitors and keywords, retries up to five seed rounds, dedupes quote identities, and writes `supplier_1688_collection_summary.json`.
+Collects 1688 supplier quotes with multi-round, paged Sorftime `ali1688_similar_product(searchName,page)` searches. It derives Chinese search seeds from Amazon competitors and keywords, retries up to five seed rounds, dedupes quote identities, and writes `supplier_1688_collection_summary.json`. The collector treats 50 quotes as a quantity floor only: title coverage, identity coverage, documented response fields, and price-spread gates must also pass.
 
 ```bash
-python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir reports/<task_id> --min-valid-quotes 50 --max-rounds 5
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_1688_suppliers.py --dir reports/<task_id> --min-valid-quotes 50 --max-rounds 5 --max-pages 3 --force-rounds
+```
+
+## collect_sorftime_products.py
+
+Collects Amazon competitor products into `data_pack.products`. It uses Amazon product-search schemas only, records raw MCP responses under `data/raw/`, and maps returned rows into the readiness fields: ASIN, title, brand, price, rating, review count, sales or rank proxy, and segment.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_products.py --dir reports/<task_id> --min-products 30 --max-seeds 8 --max-pages 3 --site US --min-segments 3 --min-per-segment 10
+```
+
+## collect_sorftime_product_enrichment.py
+
+Enriches existing Amazon ASINs after the competitor pool exists. It calls `product_detail`, `product_trend`, `product_variations`, `product_traffic_terms`, and `competitor_product_keywords` across multiple ASINs. Returned traffic and competitor keywords are written into `data_pack.keywords`; product detail/trend/variation rows are attached under each product's `sorftime_enrichment`. Empty dimensions are preserved in `product_enrichment_collection_summary.json` and one current `data_gaps` entry with `retry_evidence.asins_attempted`, not stacked across repeated runs.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/collect_sorftime_product_enrichment.py --dir reports/<task_id> --max-products 10 --max-pages 1 --site US
+```
+
+## audit_sorftime_mcp_contracts.py
+
+Audits Sorftime MCP schemas and actual returned fields for Amazon, TikTok, and 1688 using a real report's ASINs, keywords, and TikTok product IDs. Use this when official documentation and runtime responses appear inconsistent.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/audit_sorftime_mcp_contracts.py --dir reports/<task_id> --platform all
 ```
 
 ## collect_sorftime_tiktok_signals.py
@@ -103,6 +127,14 @@ python skills/amz-market-research-orchestrated/scripts/validate_template_parity_
 
 `run_acceptance_proof.py` runs this contract first. If template parity fails, the proof stops before readiness/render/validator.
 
+For local strict template review, run acceptance proof with the downloaded reference templates enabled:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<task_id> --depth deep --reference-visual --download-root C:\Users\wz\Downloads\downloadpage
+```
+
+This adds a `reference_visual_compare` step after final validation and records `output/template_reference_visual_compare/template_reference_visual_compare.json` in `output/acceptance_proof.json`.
+
 ## run_visual_parity_audit.py
 
 Runs a real browser screenshot audit against an already rendered report directory:
@@ -121,6 +153,36 @@ output/visual_parity_audit/*.png
 
 This is the screenshot-level evidence layer for the template parity checklist. It still does not replace human visual review for final brand/design approval.
 
+## run_template_reference_visual_compare.py
+
+Compares an already rendered report directory against the three downloaded reference HTML folders on the user's machine:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/run_template_reference_visual_compare.py --dir reports/<task_id> --download-root C:\Users\wz\Downloads\downloadpage
+```
+
+The script opens both the downloaded reference HTML and generated customer HTML at PC `1366x900` and `1440x900`, captures paired screenshots, and checks:
+
+- required generated template selectors are present;
+- selectors that exist in the reference template are also represented in the generated report;
+- screenshot byte ratio stays within `0.45-2.20`;
+- downsampled screenshot `pixelDistance` stays within `0.16`;
+- body background matches the reference page;
+- generated section count remains within the reference-compatible floor;
+- key component bounding boxes stay within `0.82-1.18` width ratio, `<=110px` left delta, and `<=110px` center delta;
+- rendered pages have no horizontal overflow and produce nonblank screenshots.
+
+It writes:
+
+```text
+output/template_reference_visual_compare/template_reference_visual_compare.json
+output/template_reference_visual_compare/template_reference_visual_compare.md
+output/template_reference_visual_compare/*-reference.png
+output/template_reference_visual_compare/*-generated.png
+```
+
+Use this as the local reference-template evidence layer when reviewing whether the generated reports still follow the provided downloaded HTML templates.
+
 ## check_data_readiness.py
 
 Checks whether a Data Pack is ready to enter standard/deep report generation:
@@ -129,7 +191,17 @@ Checks whether a Data Pack is ready to enter standard/deep report generation:
 python skills/amz-market-research-orchestrated/scripts/check_data_readiness.py --dir reports/<task_id> --depth standard --write
 ```
 
-The script reads `data/normalized/normalized_data_pack.json` when present, otherwise `data/data_pack.json`, and writes `data/normalized/data_readiness_report.json` with `acceptance_ready`, `sample_class`, `blocking_gaps`, `warnings`, entity counts, and collector commands. Standard/deep runs are blocked when source lineage is empty, product samples are empty, or keyword samples are below 1000. Review, Web, TikTok, and supplier gaps are warnings so the report can degrade honestly when the final validator still accepts the structure and the limitations are visible. Review recommendations are 80 samples for standard reports and 200 samples for deep reports.
+The script reads `data/normalized/normalized_data_pack.json` when present, otherwise `data/data_pack.json`, and writes `data/normalized/data_readiness_report.json` with `acceptance_ready`, `sample_class`, `blocking_gaps`, `warnings`, entity counts, and collector commands. Standard/deep runs are blocked when source lineage is empty, Amazon competitor depth is below 30/60, broad terms are not split into 3 primary segments with 10 competitors each, keyword samples are below 1000, or 1688 quote quality/spread gates fail. Review, Web, and TikTok gaps remain warnings so the report can degrade honestly when the final validator still accepts the structure and the limitations are visible. Review recommendations are 80 samples for standard reports and 200 samples for deep reports.
+
+## recover_data_readiness.py
+
+Runs targeted recovery before final diagnostics. It checks readiness, maps failed modules to the relevant Sorftime collectors, normalizes after each round, writes `data/normalized/readiness_recovery_report.json`, and returns `0` only when final readiness passes.
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/recover_data_readiness.py --dir reports/<task_id> --depth standard --max-rounds 2
+```
+
+`render_dashboard_html.py` calls this by default before writing a diagnostic HTML. If recovery leaves only supplier quote depth, supplier quote quality, or supplier price-spread blockers, the renderer writes a `partial` delivery: market/VOC/lifecycle analysis continues, while the 1688 gross-margin conclusion is disabled and replaced by a diagnostic panel. Use `--no-recover` only for negative tests or when you intentionally want to inspect the immediate gate result.
 
 When `sample_class=non_acceptance_sample`, keep the directory only as historical/demo evidence. Do not render or claim a completed client deliverable from it, even if older delivery or critic files contain `status=complete` or `pass=true`.
 
@@ -143,7 +215,7 @@ Exit codes:
 
 ## Rendering module boundaries
 
-`render_dashboard_html.py` is the orchestration entrypoint. It loads/normalizes data, runs critic refinement, calls the report document builder, applies final customer HTML redaction, and writes the delivery bundle.
+`render_dashboard_html.py` is the orchestration entrypoint. It loads/normalizes data, runs readiness recovery when needed, runs critic refinement, calls the report document builder, applies final customer HTML redaction, and writes the delivery bundle.
 
 Supporting modules keep the renderer small and auditable:
 

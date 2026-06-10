@@ -69,16 +69,16 @@ Input:
 
 Required evidence:
 
-- `output/html_reports/report.html` uses `data-report-style="three-report-index-v2"` and links to all three child reports with same-folder relative links
-- `output/report.html` uses `data-report-style="three-report-index-v2"` and links into `html_reports/`
-- `output/html_reports/market-depth-report.html` uses `data-report-style="market-depth-report-v2"`
-- `output/html_reports/lifecycle-strategy-report.html` uses `data-report-style="lifecycle-strategy-report-v2"`
-- `output/html_reports/demand-gap-report.html` uses `data-report-style="demand-gap-report-v2"`
+- `output/html_reports/report.html` links to all three child reports with same-folder relative links and does not expose internal template markers.
+- `output/report.html` links into `html_reports/` and does not expose internal template markers.
+- `output/html_reports/market-depth-report.html` passes required section, canonical class/id, and structure-level parity checks.
+- `output/html_reports/lifecycle-strategy-report.html` passes required section, canonical class/id, and structure-level parity checks.
+- `output/html_reports/demand-gap-report.html` passes required section, canonical class/id, and structure-level parity checks.
 - HTML files are designed reports, not Markdown wrappers
 - Entry page contains report title, market, depth, data quality, data gaps, and Go / Watch / No-Go
 - Market report modules remain visible: 大盘结论、需求结构、竞品格局、VOC 洞察、标杆打法、机会定义、TikTok 内容信号、1688 供应链判断、风险与行动摘要
 - Lifecycle report modules remain visible: 战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要
-- Demand-gap report modules remain visible: 研究对象概述、决策看板、$APPEALS 痛点图、满意度鸿沟、KANO × JTBD、用户原声、需求优先级
+- Demand-gap report modules remain visible: 目标ASIN锚点、决策看板、$APPEALS 痛点图、满意度鸿沟、KANO × JTBD、用户原声、需求优先级
 - Competitor, demand, supplier, TikTok, web, SKU, and KANO/JTBD evidence are rendered as customer-readable insight tables
 - Customer HTML includes `证据强度`, `数据覆盖`, `数据缺口`, and `建议动作`
 - Customer HTML does not display `source_id`, provider/tool names, raw paths, Product IDs, ASIN values, or source tables

@@ -13,6 +13,18 @@ CLIENT_VIEW_BLOCKED_KEYS = {"source_id", "source_ids", "used_source_ids", "provi
 REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
 
 CUSTOMER_LABEL_REPLACEMENTS = [
+    ("ready_for_normalization", "可用于方向判断，需供应链复核"),
+    ("low_confidence_watch", "证据不足，建议观察"),
+    ("amz-market-research-orchestrated", "市场研究报告"),
+    ("three-report-index-v2", "三合一报告入口"),
+    ("lifecycle-strategy-report-v2", "生命周期策略报告"),
+    ("demand-gap-report-v2", "需求机会报告"),
+    ("market-depth-report-v2", "市场深度报告"),
+    ("ProductId", "内容商品记录"),
+    ("竞品记录", "竞品"),
+    ("StoreName", "供应商名称"),
+    ("Photo", "图片记录"),
+    ("Price", "价格"),
     ("used_source_ids", "证据强度"),
     ("source_ids", "证据强度"),
     ("source_id", "证据强度"),
@@ -22,7 +34,7 @@ CUSTOMER_LABEL_REPLACEMENTS = [
     ("provider", "数据覆盖"),
     ("tool", "分析方法"),
     ("method_id", "分析方法"),
-    ("asin", "竞品记录"),
+    ("asin", "参考竞品"),
     ("Sorftime", "市场数据"),
     ("Firecrawl", "公开网页补充"),
     ("sorftime", "市场数据"),
@@ -38,6 +50,11 @@ CUSTOMER_LABEL_REPLACEMENTS = [
     ("reviews", "评论"),
     ("products", "竞品"),
     ("sources", "证据记录"),
+]
+
+STATUS_TEXT_REPLACEMENTS = [
+    ("success", "已通过"),
+    ("warning", "需复核"),
 ]
 
 
@@ -100,9 +117,27 @@ def review_redaction_needles(text: str) -> set[str]:
     return {needle for needle in needles if len(needle) >= 8}
 
 
+def replace_customer_labels_in_text_nodes(html_doc: str) -> str:
+    parts = re.split(r"(<[^>]+>)", html_doc)
+    for idx, part in enumerate(parts):
+        if idx % 2 == 1:
+            continue
+        for old, new in CUSTOMER_LABEL_REPLACEMENTS:
+            part = part.replace(old, new)
+        parts[idx] = part
+    return "".join(parts)
+
+
 def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
     preserved_asins: dict[str, str] = {}
     preserved_review_excerpts: dict[str, str] = {}
+
+    html_doc = re.sub(
+        r"\bdata-report-style=[\"'](?:three-report-index-v2|market-depth-report-v2|lifecycle-strategy-report-v2|demand-gap-report-v2)[\"']",
+        "",
+        html_doc,
+        flags=re.IGNORECASE,
+    )
 
     def preserve_asin(match: re.Match[str]) -> str:
         token = f"__AMZ_KEEP_A_{len(preserved_asins)}__"
@@ -110,7 +145,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
         return token
 
     html_doc = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         preserve_asin,
         html_doc,
         flags=re.IGNORECASE,
@@ -128,8 +163,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
         flags=re.IGNORECASE | re.DOTALL,
     )
 
-    for old, new in CUSTOMER_LABEL_REPLACEMENTS:
-        html_doc = html_doc.replace(old, new)
+    html_doc = replace_customer_labels_in_text_nodes(html_doc)
 
     replacement_by_key = {
         "source_id": "高",
@@ -138,7 +172,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
         "tool": "分析方法",
         "raw_path": "内部审计记录",
         "path": "内部审计记录",
-        "asin": "竞品记录",
+        "asin": "参考竞品",
         "product_id": "内容商品记录",
         "video_id": "内容记录",
     }
@@ -163,7 +197,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
     for review_text in raw_english_review_values(data_pack):
         for needle in review_redaction_needles(review_text):
             html_doc = html_doc.replace(needle, "中文化评论摘要")
-    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", html_doc)
+    html_doc = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", html_doc)
     html_doc = re.sub(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", "高", html_doc, flags=re.IGNORECASE)
     html_doc = re.sub(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", "高", html_doc, flags=re.IGNORECASE)
     html_doc = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", html_doc, flags=re.IGNORECASE)
@@ -185,9 +219,11 @@ def customer_safe_asset_text(value: Any) -> str:
         text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
     for old, new in CUSTOMER_LABEL_REPLACEMENTS:
         text = text.replace(old, new)
-    text = text.replace("ASIN", "竞品记录")
+    for old, new in STATUS_TEXT_REPLACEMENTS:
+        text = re.sub(rf"\b{re.escape(old)}\b", new, text)
+    text = text.replace("ASIN", "参考竞品")
     replacements = {
-        "竞品样本": "竞品记录",
+        "竞品样本": "竞品",
         "市场样本": "市场数据",
         "评论样本": "评论记录",
         "产品样本": "产品记录",
@@ -202,7 +238,7 @@ def customer_safe_asset_text(value: Any) -> str:
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", text)
+    text = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", text)
     text = re.sub(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
@@ -225,7 +261,9 @@ def client_safe_view_payload(value: Any) -> Any:
         text = clean(value)
         for old, new in CUSTOMER_LABEL_REPLACEMENTS:
             text = text.replace(old, new)
-        text = re.sub(r"\bB0[A-Z0-9]{8}\b", "竞品记录", text)
+        for old, new in STATUS_TEXT_REPLACEMENTS:
+            text = re.sub(rf"\b{re.escape(old)}\b", new, text)
+        text = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", text)
         text = re.sub(r"\b(?:src|sf)[_-][\w\u4e00-\u9fff-]+\b", "内部证据", text, flags=re.IGNORECASE)
         text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
         text = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", text)

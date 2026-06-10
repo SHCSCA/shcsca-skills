@@ -32,7 +32,7 @@ def esc(value: Any) -> str:
 
 def table_from_rows(rows: list[dict[str, Any]]) -> str:
     if not rows:
-        return "<p>数据缺口：当前 view model 没有可展示表格行，需补充样本后再细化。</p>"
+        return "<p>数据缺口：当前 view model 没有可展示表格行，需补齐有效数据后再细化。</p>"
     headers = list(rows[0].keys())[:8]
     head = "".join(f"<th>{esc(header)}</th>" for header in headers)
     body = "".join("<tr>" + "".join(f"<td>{esc(row.get(header, ''))}</td>" for header in headers) + "</tr>" for row in rows[:30])
@@ -60,17 +60,17 @@ def body_from_view(title: str, view: dict[str, Any]) -> str:
   <section>
     <span class="section-number">01</span>
     <h2>客户安全视图</h2>
-    <div class="insight-box">证据强度：{esc(view.get('evidence_strength'))}；样本覆盖和数据缺口来自主控 view model。</div>
+    <div class="insight-box">证据强度：{esc(view.get('evidence_strength'))}；数据覆盖和数据缺口来自主控 view model。</div>
   </section>
   <section>
     <span class="section-number">02</span>
-    <h2>样本覆盖</h2>
+    <h2>数据覆盖</h2>
     {table_html}
   </section>
   <section>
     <span class="section-number">03</span>
     <h2>数据缺口</h2>
-    <details class="evidence-drawer" open><summary>建议动作</summary><div class="drawer-body"><ul>{limitations or '<li>暂无新增缺口。</li>'}</ul></div></details>
+    <details class="evidence-drawer" open><summary>建议动作</summary><div class="drawer-body"><ul>{limitations or '<li>当前未识别新增缺口。</li>'}</ul></div></details>
   </section>
 </main>
 """.strip()
@@ -112,9 +112,7 @@ def render_child_report(report_dir: Path, module_dir: Path, view_file: str, outp
             )
             html_doc = redact_customer_html(docs[report_key], data_pack)
         except Exception as exc:
-            if report_key == "market_depth":
-                raise RuntimeError("market depth child renderer failed to reuse canonical market template") from exc
-            html_doc = ""
+            raise RuntimeError(f"{report_key} child renderer failed to reuse canonical template") from exc
     if not html_doc:
         view = load_json(report_dir / "analysis" / view_file)
         template = next((module_dir / "templates").glob("*.html")).read_text(encoding="utf-8")
