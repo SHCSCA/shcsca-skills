@@ -85,6 +85,39 @@ class DataReadinessTest(unittest.TestCase):
             review_warning = next(item for item in report["warnings"] if item["module"] == "review_sample_depth")
             self.assertEqual(review_warning["recommended"], 80)
 
+    def test_user_authorized_keyword_floor_waiver_is_run_specific(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(
+                root / "report_brief.json",
+                {
+                    "data_scope": {
+                        "keyword_sample_depth_waiver": {
+                            "authorized_by_user": True,
+                            "authorized_min_effective_keywords": 998,
+                            "reason": "User authorized continuing this run with 998 effective keywords.",
+                        }
+                    }
+                },
+            )
+            write_json(
+                root / "data" / "data_pack.json",
+                base_pack(
+                    products=competitor_rows(60),
+                    keywords=[
+                        {"keyword": f"motion sensor wall light keyword {idx}", "source_id": "src_001", "provider": "sorftime"}
+                        for idx in range(998)
+                    ]
+                ),
+            )
+
+            report = assess(root, "deep")
+
+            self.assertTrue(report["acceptance_ready"])
+            self.assertEqual(report["counts"]["keywords"], 998)
+            self.assertEqual(report["applied_waivers"][0]["authorized_required"], 998)
+            self.assertTrue(any(item["module"] == "keyword_sample_depth_waiver" for item in report["warnings"]))
+
     def test_zero_depth_pack_blocks_standard_rendering(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -262,6 +295,20 @@ class DataReadinessTest(unittest.TestCase):
             modules = {item["module"] for item in report["blocking_gaps"]}
             self.assertIn("market_segment_split", modules)
             self.assertFalse(report["segment_gate"]["passed"])
+
+    def test_keyword_duplicate_ratio_blocks_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            keywords = [{"keyword": "under cabinet lights", "source_id": "src_001", "provider": "sorftime"} for _ in range(120)]
+            keywords.extend({"keyword": f"motion sensor light {idx}", "source_id": "src_001", "provider": "sorftime"} for idx in range(1000))
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=keywords))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertFalse(report["keyword_duplicate_gate"]["passed"])
+            self.assertGreater(report["keyword_duplicate_gate"]["duplicate_ratio"], report["keyword_duplicate_gate"]["max_duplicate_ratio"])
+            self.assertIn("keyword_duplicate_ratio", {item["module"] for item in report["blocking_gaps"]})
 
     def test_supplier_gate_blocks_when_title_and_link_quality_is_low(self):
         with tempfile.TemporaryDirectory() as tmp:

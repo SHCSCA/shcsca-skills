@@ -145,7 +145,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
         return token
 
     html_doc = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor|sku-reference)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         preserve_asin,
         html_doc,
         flags=re.IGNORECASE,

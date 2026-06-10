@@ -13,8 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from normalize_data_pack import (
+    LIGHTING_KEYWORD_SIGNALS,
+    LIGHTING_HARD_PRODUCT_NOISE,
+    LIGHTING_NOISE_TOKENS,
+    LIGHTING_PRODUCT_SIGNALS,
     category_dedupe_key,
+    is_lighting_research,
     keyword_dedupe_key,
+    normalized_key,
     product_dedupe_key,
     review_dedupe_key,
     supplier_dedupe_key,
@@ -152,7 +158,7 @@ CHILD_REPORTS = {
         "sections": [
             "目标ASIN锚点",
             "决策看板",
-            "市场痛点全景图（$APPEALS）",
+            "市场痛点全景图（需求主题）",
             "满意度鸿沟",
             "KANO × JTBD",
             "用户原声",
@@ -464,6 +470,58 @@ def validate_normalized_data_pack_consistency(report_dir: Path, data_pack: dict[
     )
 
 
+def entity_text(entity: dict[str, Any], fields: list[str]) -> str:
+    return " ".join(normalized_key(entity.get(field)) for field in fields)
+
+
+def contains_any(text: str, needles: list[str] | set[str]) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def effective_records(data_pack: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    value = data_pack.get(f"effective_{key}")
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    value = data_pack.get(key)
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def validate_research_relevance_gate(data_pack: dict[str, Any]) -> None:
+    relevance = data_pack.get("research_relevance") or {}
+    effective_counts = relevance.get("effective_counts") or {}
+    for key in ("products", "keywords", "reviews", "suppliers"):
+        require(
+            int(effective_counts.get(key, len(effective_records(data_pack, key)))) == len(effective_records(data_pack, key)),
+            f"research_relevance.effective_counts.{key} must match effective_{key} length",
+        )
+    seed_terms = relevance.get("seed_terms") or []
+    lighting_mode = relevance.get("mode") == "lighting" or is_lighting_research([str(term) for term in seed_terms])
+    if not lighting_mode:
+        return
+    for idx, product in enumerate(effective_records(data_pack, "products")):
+        text = entity_text(product, ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "positioning_cn"])
+        has_signal = contains_any(text, LIGHTING_PRODUCT_SIGNALS)
+        require(not contains_any(text, LIGHTING_HARD_PRODUCT_NOISE), f"effective_products[{idx}] contains non-lighting pollution")
+        require(not (contains_any(text, LIGHTING_NOISE_TOKENS) and not has_signal), f"effective_products[{idx}] contains non-lighting pollution")
+        require(has_signal, f"effective_products[{idx}] missing lighting semantic signal")
+        require((product.get("research_relevance") or {}).get("passed") is True, f"effective_products[{idx}] missing passed research_relevance flag")
+    seen_keyword_buckets: set[str] = set()
+    for idx, keyword in enumerate(effective_records(data_pack, "keywords")):
+        keyword_text = normalized_key(keyword.get("keyword"))
+        require(not contains_any(keyword_text, LIGHTING_NOISE_TOKENS), f"effective_keywords[{idx}] contains non-lighting pollution")
+        require(contains_any(keyword_text, LIGHTING_KEYWORD_SIGNALS), f"effective_keywords[{idx}] missing lighting semantic signal")
+        require(not str(keyword.get("keyword_cn") or "").startswith("未映射关键词"), f"effective_keywords[{idx}] uses unmapped Chinese label")
+        source_type = normalized_key(keyword.get("source_type"))
+        asin = normalized_key(keyword.get("asin"))
+        bucket = f"traffic:{asin or 'unknown'}" if source_type == "product_traffic_terms" or asin else "market"
+        dedupe_key = f"{bucket}|{keyword_text}"
+        require(dedupe_key not in seen_keyword_buckets, f"effective_keywords duplicate bucket: {dedupe_key}")
+        seen_keyword_buckets.add(dedupe_key)
+    categorized_products = [product for product in effective_records(data_pack, "products") if product.get("category") or product.get("category_cn")]
+    if categorized_products:
+        require(data_pack.get("categories"), "data_pack.categories must be generated from effective product categories")
+
+
 def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, Any] | None = None) -> None:
     delivery = delivery or {}
     quality = data_pack.get("quality") or {}
@@ -695,7 +753,7 @@ def strip_allowed_customer_exceptions(text: str) -> str:
         flags=re.IGNORECASE,
     )
     text = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor|sku-reference)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         "竞品ASIN",
         text,
         flags=re.IGNORECASE,
@@ -1295,7 +1353,7 @@ def validate_delivery(report_dir: Path) -> None:
     features = set(delivery.get("interactive_features") or [])
     require(INTERACTIVE_FEATURES.issubset(features), "delivery_result.json missing required interactive_features")
     asin_scope = set(delivery.get("asin_display_scope") or [])
-    required_asin_scopes = {"competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor"}
+    required_asin_scopes = {"competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor", "sku_reference"}
     missing_asin_scopes = sorted(required_asin_scopes - asin_scope)
     require(
         not missing_asin_scopes,
@@ -1334,6 +1392,7 @@ def validate(report_dir: Path) -> None:
     validate_data_gaps_contract(data_pack)
     validate_data_readiness(report_dir)
     validate_normalized_data_pack_consistency(report_dir, data_pack)
+    validate_research_relevance_gate(data_pack)
     validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)
     validate_supply_html_readiness_alignment(report_dir)

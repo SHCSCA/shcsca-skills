@@ -65,7 +65,7 @@ Module outputs should also expose report-ready blocks for the v2 HTML bundle:
 | `supply_chain` | `suppliers`, `products` | 1688 cost proxy, MOQ/copyability signal, target landed-cost ceiling, supply risks. |
 | `opportunity` | All module outputs | Opportunity matrix, recommended wedge, target segment, experiments, Go/Watch/No-Go. |
 | `lifecycle_strategy` | `products`, `keywords`, `reviews`, `suppliers`, `tiktok_products`, `opportunity` | User personas, lifecycle journey, SKU table, bundle strategy, 30/60/90 roadmap, supply-chain risks. |
-| `demand_gap` | `reviews`, `keywords`, `products`, `web_documents`, `tiktok_videos` | `$APPEALS` pain map, satisfaction gaps, KANO × JTBD matrix, user quotes, demand priority table. |
+| `demand_gap` | `reviews`, `keywords`, `products`, `web_documents`, `tiktok_videos` | Demand-theme pain map, satisfaction gaps, KANO × JTBD matrix, user quotes, demand priority table. |
 
 ## HTML Section Mapping
 
@@ -84,7 +84,7 @@ Module outputs should also expose report-ready blocks for the v2 HTML bundle:
 | `lifecycle_strategy` | `lifecycle-journey` | `lifecycle_strategy` | Timeline + stage table. |
 | `lifecycle_strategy` | `sku-table` | `lifecycle_strategy`, `supply_chain` | SKU execution table with source IDs. |
 | `lifecycle_strategy` | `bundle-strategy` | `lifecycle_strategy` | Bundle cards + AOV table. |
-| `demand_gap` | `appeals-map` | `demand_gap`, `voc` | `$APPEALS` chart/table. |
+| `demand_gap` | `appeals-map` | `demand_gap`, `voc` | Demand-theme chart/table. |
 | `demand_gap` | `gap-analysis` | `demand_gap` | Gap table or CSS radar substitute. |
 | `demand_gap` | `kano-jtbd` | `demand_gap` | KANO × JTBD matrix. |
 | `demand_gap` | `voice-theater` | `reviews` | Quote cards + review table. |

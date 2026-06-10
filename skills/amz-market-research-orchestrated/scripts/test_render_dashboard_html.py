@@ -254,7 +254,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn('class="chart-body chart-h-260"', market_html)
             self.assertIn('class="comp-col-product"', market_html)
             self.assertIn('class="section-header section-header-spaced"', market_html)
-            self.assertIn('data-width="100.0"', market_html)
+            self.assertIn('data-chart-source="marketRows"', market_html)
             self.assertNotIn("<col style=", market_html)
             self.assertNotIn('style="height:', market_html)
             self.assertNotIn("style=\"--w:", market_html)
@@ -846,7 +846,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("户外感应灯", names)
         self.assertIn("MCGOR 橱柜感应灯", html)
         self.assertIn("Govee RGB 灯带", html)
-        self.assertNotIn("B0CABINET01", html)
+        self.assertIn('data-allow-asin="sku-reference">B0CABINET01</span>', html)
         self.assertNotIn("参考竞品 MCGOR 参考竞品", html)
         self.assertNotIn("备用与替换核心配件", names)
         self.assertNotIn("信任说明卡", names)
@@ -988,6 +988,42 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn(".demand-brief-stack{display:grid", REPORT_CSS)
         self.assertNotIn(".demand-anchor-grid", REPORT_CSS)
         self.assertIn("table.sku th:nth-child(5),table.sku td:nth-child(5)", REPORT_CSS)
+        self.assertIn(".market-voc-sentiment-columns", REPORT_CSS)
+        self.assertIn(".market-voc-column{display:grid", REPORT_CSS)
+        self.assertIn(".market-voc-card.joy", REPORT_CSS)
+        self.assertIn(".market-voc-card.pain", REPORT_CSS)
+
+    def test_market_voc_splits_positive_left_and_negative_right(self):
+        reviews = []
+        for idx in range(8):
+            reviews.append(
+                {
+                    "rating": 5,
+                    "title": f"Great lighting {idx}",
+                    "text": "Great under cabinet light, easy to install, bright and motion sensor works well.",
+                    "themes": ["installation", "brightness"],
+                }
+            )
+            reviews.append(
+                {
+                    "rating": 2,
+                    "title": f"Poor battery {idx}",
+                    "text": "Battery stopped charging and adhesive fell off after a few days.",
+                    "themes": ["battery", "adhesive"],
+                }
+            )
+
+        html = renderer.render_voc({"reviews": reviews}, {})
+
+        self.assertIn("market-voc-sentiment-columns", html)
+        self.assertIn("正面好评", html)
+        self.assertIn("负面差评", html)
+        self.assertLess(html.find("正面好评"), html.find("负面差评"))
+        self.assertNotIn('class="quote-grid"', html)
+        positive_section = html.split("负面差评", 1)[0]
+        negative_section = html.split("负面差评", 1)[1].split("</section>", 1)[0]
+        self.assertEqual(positive_section.count("market-voc-card joy"), 6)
+        self.assertEqual(negative_section.count("market-voc-card pain"), 6)
 
     def test_demand_target_anchor_keeps_reference_section_clean(self):
         data_pack = {

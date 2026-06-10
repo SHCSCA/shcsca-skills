@@ -9,7 +9,7 @@ description: "Amazon / 电商用户心智断层与需求机会子 Skill。由 am
 
 本 Skill 是 `amz-market-research-orchestrated` 的内部 child module，不作为顶层入口单独触发。它只负责三报告中的“用户心智断层与需求机会报告”，不采集数据，不改写主控数据口径，只读取主控生成的 `normalized_data_pack.json`、`analysis_plan.json`、`report_brief.json` 和 `demand_gap_view.json`。
 
-允许做展示层二次聚合：`$APPEALS` 痛点图、满意度鸿沟、KANO × JTBD、用户原声分组、需求优先级。展示层聚合必须可回到主控数据，不得制造新事实。
+允许做展示层二次聚合：需求主题痛点图、满意度鸿沟、KANO × JTBD、用户原声分组、需求优先级。展示层聚合必须可回到主控数据，不得制造新事实。
 
 ## 输入
 
@@ -37,7 +37,7 @@ python skills/amz-market-research-orchestrated/child_skills/demand-gap-report/sc
 
 1. 研究对象概述
 2. 决策看板
-3. `$APPEALS` 痛点图
+3. 需求主题痛点图
 4. 满意度鸿沟
 5. `KANO × JTBD`
 6. 用户原声

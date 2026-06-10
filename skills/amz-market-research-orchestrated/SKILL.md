@@ -78,11 +78,16 @@ Subagent 只能承担可隔离的侧翼任务，例如采集证据审计、HTML 
 
 Fail-closed 恢复与停止规则：
 
+- 归一化必须先运行 `research_relevance_gate` 再进入 view model 或 HTML。客户报告只能读取 `effective_products`、`effective_keywords`、`effective_reviews`、`effective_suppliers`；原始 `products/keywords/reviews/suppliers` 只留审计和复盘。对于 `smart lighting`、`lighting`、`智能照明` 等照明研究，`owala`、`water bottle`、`bottle`、运动水杯、非照明家居装饰等污染品或污染词必须剔出有效池；`keyword_cn=未映射关键词` 或缺少照明语义的关键词不得参与市场规模、赛道、推荐结论和图表。
+- 模板完整和结论可信必须同时满足。数据不达标时采用“完整模板诊断模式”：保留所有章节、卡片、图表容器、表格槽位和交互，但对应槽位只显示中文业务诊断、失败原因和补采动作；不得删除章节、空图、显示英文技术错误，也不得用伪数据填充。
+- `categories` 必须从有效产品类目聚合生成，不能出现有效产品有类目但 `categories=0` 的矛盾。
+- 关键词必须按 `normalized lowercase keyword + source bucket` 去重；重复率超过门槛时 readiness 失败，不得继续输出完整市场判断。
 - `acceptance_ready=false` 时，必须先运行 `recover_data_readiness.py` 做定向补采恢复；恢复轮次耗尽后若只剩供应链报价深度/字段质量/价差问题，则进入 `partial_acceptance_sample`，继续输出市场、生命周期和需求报告，但禁用供应链毛利率结论；若仍有产品池、关键词、来源血缘或赛道拆分阻断，才停止客户版三报告并登记为 `non_acceptance_sample`。
 - critic 二次修正后仍 `pass=false` 时，不得声明交付完成；必须输出未解决问题和下一轮差量修正计划。
+- critic `grade=D`、`score<60`、readiness 核心门禁失败、数据污染命中或 HTML validator 失败时，最终 `pass` 必须为 `false`；`run_acceptance_proof.py` 必须聚合 readiness、critic 和 HTML validator，任一核心门禁失败则 overall pass=false。
 - 产品池、关键词、评论或网页证据不足时，不得用 AI 推断、模板样例或重复数据补齐。
 - 客户版 HTML 出现 `source_id`、provider、raw path、内部版本标记、`竞品记录` 等技术或占位字段时，必须停止交付并修正渲染层。
-- ASIN 只允许在“标杆竞品狙击拆解”“竞品表”“竞品参考毛利率测算”中通过白名单组件展示；其他区域仍需脱敏。
+- ASIN 只允许在“目标锚点”“标杆竞品狙击拆解”“竞品表”“竞品参考毛利率测算”“SKU 参考竞品”中通过白名单组件展示；其他区域仍需脱敏。
 - 英文原始评论只允许作为 VOC 短摘出现，并必须同时展示中文归纳、主题、情绪和行动建议。
 
 ## Step 0: 解析并补齐用户输入
@@ -308,7 +313,7 @@ reports/{task_id}/data/normalized/normalized_data_pack.json
 
 1. 市场深度调研：大盘结论、需求结构、竞品格局、VOC 洞察、标杆打法、机会定义、TikTok 内容信号、1688 供应链判断、风险与行动摘要。
 2. 产品全生命周期拓品战略：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要。
-3. 用户心智断层与需求机会：研究对象概述、决策看板、`$APPEALS` 痛点图、满意度鸿沟、`KANO × JTBD`、用户原声、需求优先级。
+3. 用户心智断层与需求机会：研究对象概述、决策看板、需求主题痛点图、满意度鸿沟、`KANO × JTBD`、用户原声、需求优先级。
 
 推荐额外写入：
 
@@ -387,6 +392,7 @@ HTML 主体必须使用真实结构化组件：
 - 客户版 HTML 禁止展示 `source_id`、`source_ids`、provider/tool、raw_path/path、Product ID、product_id 或“来源”字段；ASIN 仅允许在竞品狙击和供应链毛利率测算组件中以 `data-allow-asin` 作用域展示，其他位置出现 ASIN 必须视为泄露。
 - 能展示的数据要先转成 AI 深度分析后的结论、商业含义和建议动作；原始长表、数据血缘和完整来源细节只保留在 `data_pack.json`、`lineage.md`、`report.md`、`delivery_result.json` 中。
 - 评论/VOC 必须先做中文化映射：用户原声展示中文摘要、星级、情绪、主题和需求含义；可并列展示短英文评论摘录，但必须标记 `data-allow-english-review="short"`，完整英文原评、英文标题和抓取字段原值只留在审计文件。
+- 市场深度报告的 VOC 证据卡必须固定为左右分栏：左侧 `正面好评`、右侧 `负面差评`，每侧 6 槽，使用 `market-voc-sentiment-columns`、`market-voc-column positive`、`market-voc-column negative` 和 `market-voc-card joy/pain`。不得再用单一 `quote-grid` 把好评和差评混排。
 
 推荐生成顺序：
 

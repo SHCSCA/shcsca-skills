@@ -105,6 +105,20 @@ class CustomerSafetyTest(unittest.TestCase):
         self.assertIn('data-allow-asin="demand-target-anchor">B0TEST1234</span>', redacted)
         self.assertIn("正文其他位置 参考竞品 仍要脱敏", redacted)
 
+    def test_redact_customer_html_preserves_sku_reference_scoped_asin(self):
+        data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
+        html = """
+        <section id="sku-execution">
+          <span class="asin-token" data-allow-asin="sku-reference">B0TEST1234</span>
+        </section>
+        <p>正文其他位置 B0TEST1234 仍要脱敏。</p>
+        """
+
+        redacted = redact_customer_html(html, data_pack)
+
+        self.assertIn('data-allow-asin="sku-reference">B0TEST1234</span>', redacted)
+        self.assertIn("正文其他位置 参考竞品 仍要脱敏", redacted)
+
     def test_redact_customer_html_does_not_rewrite_structural_asin_tokens(self):
         data_pack = {"products": [{"asin": "B0TEST1234", "source_id": "src_001"}], "reviews": []}
         html = """

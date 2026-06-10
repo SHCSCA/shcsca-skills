@@ -21,6 +21,8 @@
         "大盘仪表盘 · Market Dashboard",
         "Top 竞品全景扫描",
         "VOC 体验深潜 · 痛点 × 爽点雷达",
+        "正面好评",
+        "负面差评",
         "标杆竞品狙击拆解",
         "新品狙击企划 · Product Definition",
         "Core Product Concept",
@@ -34,7 +36,9 @@
         "pricing-card": 3,
         "prompt-card": 3,
         "comp-deep-card": 3,
-        "supply-card": 4
+        "supply-card": 4,
+        "market-voc-card joy": 6,
+        "market-voc-card pain": 6
       },
       "minimum_class_counts": {
         "section-header": 9,
@@ -42,7 +46,10 @@
         "kpi-card": 4,
         "chart-container": 6,
         "comp-table": 1,
-        "voc-grid": 1
+        "voc-grid": 1,
+        "market-voc-sentiment-columns": 1,
+        "market-voc-column positive": 1,
+        "market-voc-column negative": 1
       },
       "required_customer_scopes": [
         "data-allow-asin=\"competitor-table\"",
@@ -115,7 +122,7 @@
         "Demand Gap Analysis",
         "目标ASIN锚点",
         "决策看板",
-        "市场痛点全景图（$APPEALS）",
+        "市场痛点全景图（需求主题）",
         "满意度鸿沟",
         "场景化机会矩阵",
         "KANO × JTBD",

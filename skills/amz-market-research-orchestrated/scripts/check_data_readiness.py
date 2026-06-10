@@ -65,6 +65,7 @@ BROAD_RESEARCH_TERMS = {
     "灯具",
     "led lighting",
 }
+MAX_EFFECTIVE_KEYWORD_DUPLICATE_RATIO = 0.02
 
 
 class ReadinessError(Exception):
@@ -109,6 +110,33 @@ def infer_depth(report_dir: Path, explicit_depth: str) -> str:
     return "standard"
 
 
+def authorized_keyword_minimum(report_dir: Path, default: int) -> tuple[int, dict[str, Any] | None]:
+    """Allow a run-specific, user-authorized keyword floor without changing defaults."""
+    brief = load_json(report_dir / "report_brief.json", {})
+    if not isinstance(brief, dict):
+        return default, None
+    data_scope = brief.get("data_scope") if isinstance(brief.get("data_scope"), dict) else {}
+    waiver = data_scope.get("keyword_sample_depth_waiver") if isinstance(data_scope, dict) else None
+    if not isinstance(waiver, dict):
+        waiver = brief.get("keyword_sample_depth_waiver")
+    data_inputs = brief.get("data_inputs") if isinstance(brief.get("data_inputs"), dict) else {}
+    if not isinstance(waiver, dict) and isinstance(data_inputs, dict):
+        waiver = data_inputs.get("keyword_sample_depth_waiver")
+    if not isinstance(waiver, dict):
+        return default, None
+    try:
+        authorized_minimum = int(waiver.get("authorized_min_effective_keywords"))
+    except (TypeError, ValueError):
+        return default, None
+    if authorized_minimum <= 0 or authorized_minimum >= default:
+        return default, None
+    if waiver.get("authorized_by_user") is not True:
+        return default, None
+    if not str(waiver.get("reason") or "").strip():
+        return default, None
+    return authorized_minimum, waiver
+
+
 def load_data_pack(report_dir: Path) -> tuple[dict[str, Any], str]:
     normalized = report_dir / "data" / "normalized" / "normalized_data_pack.json"
     raw = report_dir / "data" / "data_pack.json"
@@ -122,6 +150,15 @@ def load_data_pack(report_dir: Path) -> tuple[dict[str, Any], str]:
 def count(data_pack: dict[str, Any], key: str) -> int:
     value = data_pack.get(key)
     return len(value) if isinstance(value, list) else 0
+
+
+def effective_records(data_pack: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    effective_key = f"effective_{key}"
+    value = data_pack.get(effective_key)
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    value = data_pack.get(key)
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
 def gap(module: str, current: int, required: int, reason: str, next_step: str) -> dict[str, Any]:
@@ -201,7 +238,7 @@ def is_valid_segment(segment: str) -> bool:
 def valid_competitor_products(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     valid: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for product in relevant_products(data_pack.get("products") or []):
+    for product in relevant_products(effective_records(data_pack, "products")):
         if not isinstance(product, dict):
             continue
         asin = str(product.get("asin") or "").strip().upper()
@@ -281,7 +318,7 @@ def percentile(values: list[float], ratio: float) -> float | None:
 def valid_supplier_quotes(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     valid: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for supplier in data_pack.get("suppliers") or []:
+    for supplier in effective_records(data_pack, "suppliers"):
         if not isinstance(supplier, dict):
             continue
         price = to_float(
@@ -421,6 +458,33 @@ def same_search_supplier_bucket_gate(valid_quotes: list[dict[str, Any]], minimum
     return best
 
 
+def keyword_bucket_key(keyword: dict[str, Any]) -> str:
+    source_type = str(keyword.get("source_type") or "").strip().casefold()
+    asin = str(keyword.get("asin") or "").strip().casefold()
+    bucket = f"traffic:{asin or 'unknown'}" if source_type == "product_traffic_terms" or asin else "market"
+    text = " ".join(str(keyword.get("keyword") or "").strip().casefold().split())
+    return f"{bucket}|{text}"
+
+
+def keyword_duplicate_diagnostic(keywords: list[dict[str, Any]]) -> dict[str, Any]:
+    seen: set[str] = set()
+    duplicate_extra = 0
+    for keyword in keywords:
+        key = keyword_bucket_key(keyword)
+        if not key or key.endswith("|"):
+            continue
+        if key in seen:
+            duplicate_extra += 1
+        seen.add(key)
+    ratio = duplicate_extra / len(keywords) if keywords else 0.0
+    return {
+        "duplicate_extra": duplicate_extra,
+        "duplicate_ratio": round(ratio, 4),
+        "max_duplicate_ratio": MAX_EFFECTIVE_KEYWORD_DUPLICATE_RATIO,
+        "passed": ratio <= MAX_EFFECTIVE_KEYWORD_DUPLICATE_RATIO,
+    }
+
+
 def collector_commands(report_dir: Path) -> list[str]:
     report = str(report_dir)
     return [
@@ -440,6 +504,9 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     resolved_depth = infer_depth(report_dir, depth)
     standard_like = resolved_depth in {"standard", "deep"}
     required_keywords = MIN_STANDARD_KEYWORDS if standard_like else MIN_QUICK_KEYWORDS
+    keyword_waiver: dict[str, Any] | None = None
+    if standard_like:
+        required_keywords, keyword_waiver = authorized_keyword_minimum(report_dir, required_keywords)
     required_products = MIN_STANDARD_PRODUCTS if standard_like else MIN_QUICK_PRODUCTS
 
     raw_supplier_quotes = valid_supplier_quotes(data_pack)
@@ -447,6 +514,9 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     non_finished_filtered = len(raw_supplier_quotes) - len(supplier_quotes)
     competitor_products = valid_competitor_products(data_pack)
     competitor_segments = segment_counts(competitor_products)
+    effective_keywords = effective_records(data_pack, "keywords")
+    effective_reviews = effective_records(data_pack, "reviews")
+    keyword_duplicate_gate = keyword_duplicate_diagnostic(effective_keywords)
     supplier_quality_gate = supplier_quality(supplier_quotes)
     same_search_bucket_gate = same_search_supplier_bucket_gate(supplier_quotes)
     supplier_quality_gate["same_search_bucket_gate"] = same_search_bucket_gate
@@ -461,26 +531,35 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     competitor_minimum = MIN_DEEP_COMPETITORS if resolved_depth == "deep" else MIN_STANDARD_COMPETITORS if standard_like else MIN_QUICK_PRODUCTS
     broad_research = is_broad_research(report_dir, data_pack)
     top_segment_counts = sorted(competitor_segments.values(), reverse=True)
+    underfilled_segments = {
+        segment: count
+        for segment, count in competitor_segments.items()
+        if count < MIN_COMPETITORS_PER_PRIMARY_SEGMENT
+    }
     segment_gate_passed = (
         not broad_research
         or (
             len(competitor_segments) >= MIN_BROAD_MARKET_SEGMENTS
             and len(top_segment_counts) >= MIN_BROAD_MARKET_SEGMENTS
-            and all(count >= MIN_COMPETITORS_PER_PRIMARY_SEGMENT for count in top_segment_counts[:MIN_BROAD_MARKET_SEGMENTS])
+            and not underfilled_segments
         )
     )
     counts = {
         "sources": count(data_pack, "sources"),
-        "products": count(data_pack, "products"),
+        "raw_products": count(data_pack, "products"),
+        "products": len(effective_records(data_pack, "products")),
         "valid_competitors": len(competitor_products),
         "market_segments": len(competitor_segments),
-        "keywords": count(data_pack, "keywords"),
+        "raw_keywords": count(data_pack, "keywords"),
+        "keywords": len(effective_keywords),
         "categories": count(data_pack, "categories"),
-        "reviews": count(data_pack, "reviews"),
+        "raw_reviews": count(data_pack, "reviews"),
+        "reviews": len(effective_reviews),
         "tiktok_products": count(data_pack, "tiktok_products"),
         "tiktok_videos": count(data_pack, "tiktok_videos"),
         "tiktok_authors": count(data_pack, "tiktok_authors"),
-        "suppliers": count(data_pack, "suppliers"),
+        "raw_suppliers": count(data_pack, "suppliers"),
+        "suppliers": len(effective_records(data_pack, "suppliers")),
         "valid_supplier_quotes": len(supplier_quotes),
         "web_documents": count(data_pack, "web_documents"),
         "data_gaps": count(data_pack, "data_gaps"),
@@ -488,6 +567,27 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
 
     blocking_gaps: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
+    applied_waivers: list[dict[str, Any]] = []
+    if keyword_waiver:
+        applied_waivers.append(
+            {
+                "module": "keyword_sample_depth",
+                "default_required": MIN_STANDARD_KEYWORDS,
+                "authorized_required": required_keywords,
+                "authorized_by_user": True,
+                "reason": keyword_waiver.get("reason"),
+                "limitation": keyword_waiver.get("limitation", "低于默认关键词样本门槛，报告必须显式披露。"),
+            }
+        )
+        warnings.append(
+            warning(
+                "keyword_sample_depth_waiver",
+                counts["keywords"],
+                MIN_STANDARD_KEYWORDS,
+                "用户授权本次以低于默认 1000 条有效关键词门槛继续；报告结论需要保留样本限制说明。",
+                "不要把本次授权改写为默认合同；后续同类项目仍按 1000 条有效关键词门槛执行。",
+            )
+        )
 
     if counts["sources"] < 1:
         blocking_gaps.append(
@@ -537,6 +637,16 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 required_keywords,
                 "关键词样本不足，标准版/深度版不能支撑需求结构和机会判断。",
                 "运行 collect_sorftime_keywords.py 补到 1200 条采集目标，归一化后至少保留 1000 条。",
+            )
+        )
+    if not keyword_duplicate_gate["passed"]:
+        blocking_gaps.append(
+            gap(
+                "keyword_duplicate_ratio",
+                int(keyword_duplicate_gate["duplicate_extra"]),
+                0,
+                "有效关键词池仍存在重复记录，不能把重复流量词计入需求规模或机会排序。",
+                "重新运行 normalize_data_pack.py，按 normalized lowercase keyword + source bucket 去重；若重复来自采集层，需要修正采集分页合并逻辑。",
             )
         )
 
@@ -643,17 +753,21 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "counts": counts,
         "supplier_quote_gate": supplier_gate,
         "supplier_quality_gate": supplier_quality_gate,
+        "keyword_duplicate_gate": keyword_duplicate_gate,
+        "applied_waivers": applied_waivers,
         "competitor_gate": {
             "minimum_total": competitor_minimum,
             "valid_total": len(competitor_products),
             "minimum_per_primary_segment": MIN_COMPETITORS_PER_PRIMARY_SEGMENT if broad_research else 0,
             "segments": competitor_segments,
-            "passed": len(competitor_products) >= competitor_minimum,
+            "underfilled_segments": underfilled_segments,
+            "passed": len(competitor_products) >= competitor_minimum and (not broad_research or not underfilled_segments),
         },
         "segment_gate": {
             "broad_research": broad_research,
             "required_segments": MIN_BROAD_MARKET_SEGMENTS if broad_research else 0,
             "segments": competitor_segments,
+            "underfilled_segments": underfilled_segments,
             "passed": segment_gate_passed,
         },
         "collector_commands": collector_commands(report_dir),

@@ -66,12 +66,157 @@ KEYWORD_CN_RULES = [
     ("lighting", "照明"),
 ]
 
+EFFECTIVE_ENTITY_KEYS = [
+    "effective_products",
+    "effective_keywords",
+    "effective_reviews",
+    "effective_suppliers",
+]
+
 TITLE_SEGMENT_RULES = [
     ("橱柜感应灯", ["under cabinet", "cabinet light", "motion sensor", "puck light"]),
     ("RGB 灯带", ["rgbic", "rgb led strip", "led strip", "strip lights", "light strip"]),
     ("智能灯泡", ["smart bulb", "a19", "light bulb"]),
     ("户外感应灯", ["outdoor", "solar", "security light", "flood light", "wall sconce"]),
     ("氛围灯", ["ambient", "night light", "table lamp", "sunset"]),
+]
+
+LIGHTING_RESEARCH_TOKENS = {
+    "smart lighting",
+    "lighting",
+    "led lighting",
+    "智能照明",
+    "灯具",
+    "灯饰",
+}
+
+LIGHTING_PRODUCT_SIGNALS = [
+    "light",
+    "lighting",
+    "lamp",
+    "led",
+    "bulb",
+    "strip",
+    "cabinet",
+    "under cabinet",
+    "motion sensor",
+    "puck",
+    "closet",
+    "sconce",
+    "vanity",
+    "night light",
+    "ambient",
+    "rgb",
+    "rgbic",
+    "solar",
+    "outdoor light",
+    "security light",
+    "flood light",
+    "橱柜灯",
+    "感应灯",
+    "灯带",
+    "灯泡",
+    "壁灯",
+    "镜前灯",
+    "夜灯",
+    "氛围灯",
+    "户外灯",
+    "太阳能灯",
+    "智能照明",
+]
+
+LIGHTING_KEYWORD_SIGNALS = [
+    "smart light",
+    "smart lighting",
+    "led light",
+    "led lights",
+    "under cabinet",
+    "cabinet light",
+    "cabinet lights",
+    "motion sensor light",
+    "motion sensor lights",
+    "night light",
+    "rgb light",
+    "rgb lights",
+    "rgbic",
+    "led strip",
+    "strip lights",
+    "light strip",
+    "smart bulb",
+    "light bulb",
+    "outdoor light",
+    "outdoor lights",
+    "solar light",
+    "solar lights",
+    "wall sconce",
+    "vanity light",
+    "ambient light",
+    "橱柜灯",
+    "感应灯",
+    "灯带",
+    "灯泡",
+    "夜灯",
+    "氛围灯",
+    "户外灯",
+    "智能照明",
+]
+
+LIGHTING_NOISE_TOKENS = [
+    "owala",
+    "water bottle",
+    "bpa-free sports water bottle",
+    "sports water bottle",
+    "bottle",
+    "tumbler",
+    "hydro flask",
+    "hydroflask",
+    "stanley cup",
+    "protein",
+    "shake",
+    "beverage",
+    "energy drink",
+    "room decor",
+    "bedroom decor",
+    "bathroom decor",
+    "floor lamp",
+    "table lamp",
+    "camera",
+    "video doorbell",
+    "doorbell",
+    "shampoo",
+    "ventilador",
+    "worldcup",
+    "world cup",
+]
+
+LIGHTING_HARD_PRODUCT_NOISE = [
+    "owala",
+    "water bottle",
+    "bpa-free sports water bottle",
+    "sports water bottle",
+    "bottle",
+    "tumbler",
+    "hydro flask",
+    "hydroflask",
+    "stanley cup",
+    "protein",
+    "shake",
+    "beverage",
+    "energy drink",
+    "camera",
+    "video doorbell",
+    "doorbell",
+    "shampoo",
+    "ventilador",
+    "worldcup",
+    "world cup",
+]
+
+LIGHTING_CATEGORY_NOISE = [
+    "sports & outdoors",
+    "grocery",
+    "beauty",
+    "health",
 ]
 
 
@@ -380,6 +525,215 @@ def tokens(value: Any) -> set[str]:
         token
         for token in re.findall(r"[a-z0-9]+", normalized_key(value))
         if len(token) > 1 and token not in STOP_WORDS
+    }
+
+
+def contains_any(text: str, needles: list[str] | set[str]) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def is_lighting_research(seed_terms: list[str]) -> bool:
+    joined = " ".join(seed_terms).casefold()
+    return any(term in joined for term in LIGHTING_RESEARCH_TOKENS)
+
+
+def entity_search_text(entity: dict[str, Any], fields: list[str]) -> str:
+    return " ".join(normalized_key(entity.get(field)) for field in fields)
+
+
+def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[bool, str]:
+    text = entity_search_text(
+        product,
+        ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "subcategory", "positioning_cn"],
+    )
+    lighting_mode = is_lighting_research(seed_terms)
+    if lighting_mode:
+        has_signal = contains_any(text, LIGHTING_PRODUCT_SIGNALS)
+        if contains_any(text, LIGHTING_HARD_PRODUCT_NOISE):
+            return False, "non_lighting_noise_token"
+        if contains_any(text, LIGHTING_NOISE_TOKENS) and not has_signal:
+            return False, "non_lighting_noise_token"
+        category_noise = contains_any(text, LIGHTING_CATEGORY_NOISE)
+        if category_noise and not has_signal:
+            return False, "non_lighting_category"
+        if not has_signal:
+            return False, "missing_lighting_signal"
+        return True, "lighting_signal"
+
+    seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
+    product_tokens = tokens(text)
+    if not seed_tokens:
+        return True, "no_seed_keep_for_audit"
+    if seed_tokens & product_tokens:
+        return True, "seed_overlap"
+    return False, "missing_seed_overlap"
+
+
+def keyword_source_bucket(keyword: dict[str, Any]) -> str:
+    source_type = normalized_key(keyword.get("source_type"))
+    asin = normalized_key(keyword.get("asin"))
+    if source_type == "product_traffic_terms" or asin:
+        return f"traffic:{asin or 'unknown'}"
+    return "market"
+
+
+def keyword_relevance(keyword: dict[str, Any], seed_terms: list[str], valid_asins: set[str]) -> tuple[bool, str]:
+    text = normalized_key(keyword.get("keyword"))
+    if not text:
+        return False, "missing_keyword"
+    source_type = normalized_key(keyword.get("source_type"))
+    asin = normalized_key(keyword.get("asin")).upper()
+    if source_type == "product_traffic_terms" and asin and asin not in valid_asins:
+        return False, "traffic_asin_not_effective"
+    lighting_mode = is_lighting_research(seed_terms)
+    if lighting_mode and contains_any(text, LIGHTING_NOISE_TOKENS):
+        return False, "non_lighting_noise_token"
+    if lighting_mode:
+        if not contains_any(text, LIGHTING_KEYWORD_SIGNALS):
+            return False, "missing_lighting_keyword_signal"
+        if str(keyword.get("keyword_cn") or "").startswith("未映射关键词"):
+            return False, "keyword_cn_unmapped"
+        return True, "lighting_keyword_signal"
+    if not seed_terms:
+        return True, "no_seed_keep_for_audit"
+    if keyword.get("is_core_relevant") or keyword.get("relevance_cn") in {"高相关", "相邻相关"}:
+        return True, "relevance_bucket"
+    if keyword.get("relevance_cn") == "低相关":
+        return False, "low_relevance"
+    seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
+    if seed_tokens and seed_tokens & tokens(text):
+        return True, "seed_overlap"
+    return True, "generic_unlabeled_keep"
+
+
+def supplier_relevance(supplier: dict[str, Any], seed_terms: list[str]) -> tuple[bool, str]:
+    text = entity_search_text(supplier, ["title", "title_cn", "name", "product_name", "supplier_name", "seed_keyword", "search_term", "segment", "segment_cn"])
+    lighting_mode = is_lighting_research(seed_terms)
+    if lighting_mode and contains_any(text, LIGHTING_NOISE_TOKENS):
+        return False, "non_lighting_noise_token"
+    if lighting_mode:
+        if not contains_any(text, LIGHTING_PRODUCT_SIGNALS):
+            return False, "missing_lighting_supplier_signal"
+        return True, "lighting_supplier_signal"
+    return True, "generic_supplier"
+
+
+def dedupe_effective_keywords(keywords: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    seen: set[str] = set()
+    effective: list[dict[str, Any]] = []
+    duplicate_extra = 0
+    for keyword in keywords:
+        key = f"{keyword_source_bucket(keyword)}|{normalized_key(keyword.get('keyword'))}"
+        if key in seen:
+            duplicate_extra += 1
+            continue
+        seen.add(key)
+        effective.append(keyword)
+    return effective, duplicate_extra
+
+
+def build_categories_from_products(products: list[dict[str, Any]], existing: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if existing:
+        return existing
+    counts: dict[str, dict[str, Any]] = {}
+    for product in products:
+        category = normalize_text(product.get("category") or product.get("category_cn"))
+        if not category:
+            continue
+        item = counts.setdefault(category, {"name": category, "category": category, "product_count": 0, "source_ids": []})
+        item["product_count"] += 1
+        for source_id in source_ids(product):
+            if source_id not in item["source_ids"]:
+                item["source_ids"].append(source_id)
+    return sorted(counts.values(), key=lambda item: item["product_count"], reverse=True)
+
+
+def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[str]) -> None:
+    effective_products: list[dict[str, Any]] = []
+    removed_products: list[dict[str, Any]] = []
+    for product in data_pack.get("products") or []:
+        passed, reason = product_relevance(product, seed_terms)
+        product["research_relevance"] = {"passed": passed, "reason": reason}
+        if passed:
+            effective_products.append(product)
+        else:
+            removed_products.append(
+                {
+                    "asin": product.get("asin"),
+                    "brand": product.get("brand"),
+                    "title": normalize_text(product.get("title") or product.get("title_cn"))[:160],
+                    "reason": reason,
+                }
+            )
+
+    valid_asins = {normalized_key(product.get("asin")).upper() for product in effective_products if product.get("asin")}
+    candidate_keywords: list[dict[str, Any]] = []
+    removed_keywords: list[dict[str, Any]] = []
+    for keyword in data_pack.get("keywords") or []:
+        passed, reason = keyword_relevance(keyword, seed_terms, valid_asins)
+        keyword["research_relevance"] = {"passed": passed, "reason": reason}
+        if passed:
+            candidate_keywords.append(keyword)
+        else:
+            removed_keywords.append(
+                {
+                    "keyword": keyword.get("keyword"),
+                    "keyword_cn": keyword.get("keyword_cn"),
+                    "source_type": keyword.get("source_type"),
+                    "reason": reason,
+                }
+            )
+    effective_keywords, keyword_duplicate_extra = dedupe_effective_keywords(candidate_keywords)
+
+    lighting_mode = is_lighting_research(seed_terms)
+    effective_reviews = [
+        review
+        for review in data_pack.get("reviews") or []
+        if not lighting_mode or not valid_asins or not review.get("asin") or normalized_key(review.get("asin")).upper() in valid_asins
+    ]
+
+    effective_suppliers: list[dict[str, Any]] = []
+    removed_suppliers: list[dict[str, Any]] = []
+    for supplier in data_pack.get("suppliers") or []:
+        passed, reason = supplier_relevance(supplier, seed_terms)
+        supplier["research_relevance"] = {"passed": passed, "reason": reason}
+        if passed:
+            effective_suppliers.append(supplier)
+        else:
+            removed_suppliers.append(
+                {
+                    "title": normalize_text(supplier.get("title") or supplier.get("title_cn") or supplier.get("name"))[:160],
+                    "supplier_name": supplier.get("supplier_name") or supplier.get("store_name"),
+                    "reason": reason,
+                }
+            )
+
+    data_pack["effective_products"] = effective_products
+    data_pack["effective_keywords"] = effective_keywords
+    data_pack["effective_reviews"] = effective_reviews
+    data_pack["effective_suppliers"] = effective_suppliers
+    data_pack["categories"] = build_categories_from_products(effective_products, data_pack.get("categories") or [])
+    data_pack["research_relevance"] = {
+        "mode": "lighting" if lighting_mode else "generic",
+        "seed_terms": seed_terms,
+        "effective_counts": {
+            "products": len(effective_products),
+            "keywords": len(effective_keywords),
+            "reviews": len(effective_reviews),
+            "suppliers": len(effective_suppliers),
+        },
+        "removed_counts": {
+            "products": len(removed_products),
+            "keywords": len(removed_keywords) + keyword_duplicate_extra,
+            "reviews": max(0, len(data_pack.get("reviews") or []) - len(effective_reviews)),
+            "suppliers": len(removed_suppliers),
+        },
+        "keyword_duplicate_extra": keyword_duplicate_extra,
+        "removed_examples": {
+            "products": removed_products[:20],
+            "keywords": removed_keywords[:30],
+            "suppliers": removed_suppliers[:20],
+        },
     }
 
 
@@ -735,8 +1089,14 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     data_pack["tiktok_authors"] = dedupe(data_pack.get("tiktok_authors") or [], tiktok_author_dedupe_key, source_index)
     data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)
     data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], web_document_dedupe_key, source_index)
+    apply_research_relevance_gate(data_pack, seed_terms)
 
     after_counts = {key: len(data_pack.get(key) or []) for key in ENTITY_KEYS}
+    effective_counts = (data_pack.get("research_relevance") or {}).get("effective_counts") or {}
+    decision_counts = {
+        "keywords": int(effective_counts.get("keywords", after_counts.get("keywords", 0))),
+        "reviews": int(effective_counts.get("reviews", after_counts.get("reviews", 0))),
+    }
     data_gaps_recovered_removed = remove_recovered_data_gaps(data_pack, after_counts)
     cross_validated = {
         key: sum(1 for item in data_pack.get(key, []) if (item.get("validation") or {}).get("cross_validated"))
@@ -747,6 +1107,8 @@ def normalize(report_dir: Path) -> dict[str, Any]:
         "normalized_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "before_counts": before_counts,
         "after_counts": after_counts,
+        "effective_counts": effective_counts,
+        "research_relevance": data_pack.get("research_relevance") or {},
         "removed_counts": {key: before_counts[key] - after_counts[key] for key in ENTITY_KEYS},
         "cross_validated_counts": cross_validated,
         "rules": [
@@ -761,28 +1123,29 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "web_documents deduped by canonical URL with query and fragment removed",
             "suppliers deduped by canonical URL, product_id, or title+store",
             "English keyword/title fields copied into audit-friendly display fields; relevance is inferred from research_object/seed keyword overlap",
+            "customer reports use effective_* records that pass research_relevance_gate; raw records remain only for audit lineage",
         ],
     }
-    if after_counts.get("keywords", 0) < 1000:
+    if decision_counts.get("keywords", 0) < 1000:
         upsert_gap(
             data_pack,
             "keyword_sample_depth",
-            f"标准/深度版关键词样本不足 1000，当前 {after_counts.get('keywords', 0)}。",
+            f"标准/深度版有效关键词样本不足 1000，当前 {decision_counts.get('keywords', 0)}。",
             "需求结构、关键词机会和内容选题只能做方向判断，不能做完整优先级排序。",
             "继续分页采集 category_keywords 与 keyword_extends，直到归一化后关键词样本 >=1000。",
         )
-    if after_counts.get("reviews", 0) < 80:
+    if decision_counts.get("reviews", 0) < 80:
         upsert_gap(
             data_pack,
             "review_sample_depth",
-            f"评论样本不足建议门槛 80，当前 {after_counts.get('reviews', 0)}。",
+            f"有效评论样本不足建议门槛 80，当前 {decision_counts.get('reviews', 0)}。",
             "VOC、APPEALS、KANO/JTBD 和用户原声只能作为初步线索，不能写成精确市场占比。",
             "对核心 ASIN 补采 Positive/Neutral/Negative 评论，优先达到 80 条，深度版建议 200 条以上。",
         )
     data_gap_duplicates_removed = dedupe_data_gaps(data_pack)
     data_pack["normalization"]["data_gaps_recovered_removed"] = data_gaps_recovered_removed
     data_pack["normalization"]["data_gaps_duplicates_removed"] = data_gap_duplicates_removed
-    apply_quality_caps(data_pack, after_counts, cross_validated)
+    apply_quality_caps(data_pack, {**after_counts, **decision_counts}, cross_validated)
     data_pack["cleaning_summary"] = data_pack["normalization"]
 
     write_json(data_path, data_pack)

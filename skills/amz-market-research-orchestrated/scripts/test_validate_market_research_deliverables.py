@@ -126,6 +126,7 @@ def child_html(style, title, sections, extra_terms=""):
 <div class="container header-badge subtitle header-meta header-meta-item label value section-title section-desc kpi-label kpi-value kpi-sub kpi-trend up hot success warning lavender card chart-grid chart-title chart-subtitle chart-body product-name product-brand price-tag rating-stars badge voc-card-title voc-item voc-content conclusion-title conclusion-grid conclusion-item conclusion-item-title conclusion-item-text"></div>
 <div id="priceChart"></div><div id="bubbleChart"></div><div id="growthChart"></div><div id="featureChart"></div><div id="radarChart"></div><div id="marginChart"></div>
 <table class="comp-table"><tr><th>ASIN</th><th>产品</th></tr><tr><td><span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></td><td>数据</td></tr></table>
+<div class="market-voc-sentiment-columns"><section class="market-voc-column positive"><div class="market-voc-column-head"><span>Positive Reviews</span><h3>正面好评</h3></div><article class="market-voc-card joy">J1</article><article class="market-voc-card joy">J2</article><article class="market-voc-card joy">J3</article><article class="market-voc-card joy">J4</article><article class="market-voc-card joy">J5</article><article class="market-voc-card joy">J6</article></section><section class="market-voc-column negative"><div class="market-voc-column-head"><span>Negative Reviews</span><h3>负面差评</h3></div><article class="market-voc-card pain">P1</article><article class="market-voc-card pain">P2</article><article class="market-voc-card pain">P3</article><article class="market-voc-card pain">P4</article><article class="market-voc-card pain">P5</article><article class="market-voc-card pain">P6</article></section></div>
 <div class="voc-grid"><article class="pain-card"><div class="voc-rank pain-rank">P1</div><div class="voc-title">痛点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill pain-fill"></div></div></article><article class="joy-card"><div class="voc-rank joy-rank">J1</div><div class="voc-title">爽点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill joy-fill"></div></div></article></div>
 <div class="comp-deep-grid"><div class="comp-deep-card"><div class="comp-deep-header"><div class="comp-deep-name"><span class="asin-token" data-allow-asin="benchmark-sniper">B0ABCDEF12</span> 标杆</div><div class="comp-deep-price">$89</div></div><div class="comp-deep-body"><div class="comp-deep-section"><div class="comp-deep-section-title">逻辑</div><div class="comp-deep-text">文本</div><div class="comp-tag-list"><span class="comp-tag red">痛点</span><span class="comp-tag green">机会</span></div></div></div></div><div class="comp-deep-card"><div class="comp-deep-header"><div class="comp-deep-name">标杆二</div><div class="comp-deep-price">$99</div></div><div class="comp-deep-body"><div class="comp-deep-section"><div class="comp-deep-section-title">逻辑</div><div class="comp-deep-text">文本</div></div></div></div></div>
 <div class="strategy-hero"><div class="strategy-hero-label">Core Product Concept</div><div class="strategy-slogan">不只是产品，是<span>方案</span></div><div class="strategy-desc">定义</div></div>
@@ -163,7 +164,7 @@ def child_html(style, title, sections, extra_terms=""):
             for _ in range(6)
         )
         demand_scaffold = f"""
-<div class="fixed-template-copy">Demand Gap Analysis 目标ASIN锚点 决策看板 市场痛点全景图（$APPEALS） 满意度鸿沟 场景化机会矩阵 KANO × JTBD 真实原声剧场 用户原声 需求优先级 正面反馈 负面反馈</div>
+<div class="fixed-template-copy">Demand Gap Analysis 目标ASIN锚点 决策看板 市场痛点全景图（需求主题） 满意度鸿沟 场景化机会矩阵 KANO × JTBD 真实原声剧场 用户原声 需求优先级 正面反馈 负面反馈</div>
 <div class="hero sec card focus kano-grid chart-interpretation chart eyebrow k kpi kpi-grid lead muted ok quote-cn quote-origin sub v warn wrap"></div>
 <div class="demand-brief-stack"><div class="chart-interpretation">参考竞品ASIN <span class="asin-token" data-allow-asin="demand-target-anchor">B0TEST1234</span></div></div>
 <div hidden data-chart-source="appealsRows"><span data-label="痛点" data-value="5"></span></div><div id="appealsRose" class="chart demand-chart"></div>
@@ -274,14 +275,19 @@ def make_valid_report(root):
     write_json(root / "data" / "normalized" / "normalized_data_pack.json", data_pack)
     readiness_counts = {
         "sources": 2,
+        "raw_products": 30,
         "products": 30,
         "valid_competitors": 30,
         "market_segments": 3,
+        "raw_keywords": 1000,
         "keywords": 1000,
         "categories": 1,
+        "raw_reviews": 1,
         "reviews": 1,
         "tiktok_products": 1,
         "tiktok_videos": 1,
+        "tiktok_authors": 0,
+        "raw_suppliers": 50,
         "suppliers": 50,
         "valid_supplier_quotes": 50,
         "web_documents": 1,
@@ -318,12 +324,14 @@ def make_valid_report(root):
         "valid_total": 30,
         "minimum_per_primary_segment": 0,
         "segments": {"智能陪伴玩具": 10, "语音互动玩具": 10, "儿童礼品玩具": 10},
+        "underfilled_segments": {},
         "passed": True,
     }
     segment_gate = {
         "broad_research": False,
         "required_segments": 0,
         "segments": {"智能陪伴玩具": 10, "语音互动玩具": 10, "儿童礼品玩具": 10},
+        "underfilled_segments": {},
         "passed": True,
     }
     readiness = {
@@ -496,7 +504,7 @@ def make_valid_report(root):
             [
                 ("target-anchor", "目标ASIN锚点"),
                 ("decision-board", "决策看板"),
-                ("appeals-map", "市场痛点全景图（$APPEALS）"),
+                ("appeals-map", "市场痛点全景图（需求主题）"),
                 ("gap-analysis", "满意度鸿沟"),
                 ("kano-jtbd", "KANO × JTBD"),
                 ("voice-theater", "用户原声"),
@@ -525,7 +533,7 @@ def make_valid_report(root):
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
             "data_readiness": delivery_readiness,
-            "asin_display_scope": ["competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor"],
+            "asin_display_scope": ["competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor", "sku_reference"],
             "critic_review": {
                 "path": "analysis/critic_review.json",
                 "refinement_plan": "analysis/refinement_plan.json",

@@ -123,14 +123,14 @@ Required section density:
 
 - 目标ASIN锚点
 - 决策看板
-- 市场痛点全景图（$APPEALS）
+- 市场痛点全景图（需求主题）
 - 满意度鸿沟
 - KANO x JTBD
 - 用户原声
 - 需求优先级
 - Research object overview.
 - Decision board.
-- `$APPEALS` pain map.
+- Demand-theme pain map.
 - Satisfaction gap.
 - KANO x JTBD classification.
 - User voice theater.
@@ -143,6 +143,7 @@ Required components:
 - Dark or high-contrast report header when used by the template family.
 - `kpi-grid`, `chart`, `chart-interpretation`.
 - `quote-cn`, localized VOC cards, warning and opportunity callouts.
+- Market VOC evidence must use `market-voc-sentiment-columns` with left `正面好评` and right `负面差评`; class signatures must include `market-voc-column positive`, `market-voc-column negative`, `market-voc-card joy`, and `market-voc-card pain`; each side must render exactly 6 cards and must not fall back to a single mixed `quote-grid`.
 - `demand-sentiment-columns` with left `正面反馈` and right `负面反馈`; the two column class signatures must be `demand-sentiment-column positive` and `demand-sentiment-column negative`; each side must render exactly 6 cards.
 - Demand evidence cards must follow the 143645 R3 evidence-card language: white cards, thin borders, red/green sentiment accents, Chinese insight, short English excerpt when available, evidence strength, unmet point, and action opportunity.
 - User voice details must be kept in a collapsed `evidence-drawer` so the main evidence theater remains dense and readable.

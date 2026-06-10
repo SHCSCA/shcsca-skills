@@ -103,7 +103,7 @@ Required visible sections:
 
 1. 目标ASIN锚点
 2. 决策看板
-3. `$APPEALS` 痛点图
+3. 需求主题痛点图
 4. 满意度鸿沟
 5. `KANO × JTBD`
 6. 用户原声（正面反馈 6 槽 + 负面反馈 6 槽，可展示短英文评论摘录）
@@ -122,9 +122,10 @@ Required client-analysis terms: `KANO`, `JTBD`, `心智断层`, `负面触发点
 
 - Every major module must lead with conclusion, evidence strength, business meaning, and suggested action.
 - Market report must preserve competitor, demand, TikTok, 1688, web, and risk evidence as client-readable insight tables.
+- Market VOC evidence must render as a fixed two-column theater: left `正面好评` and right `负面差评`, with exactly 6 `market-voc-card` slots per side. The class contract is `market-voc-sentiment-columns`, `market-voc-column positive`, `market-voc-column negative`, `market-voc-card joy`, and `market-voc-card pain`. A legacy one-grid `quote-grid` layout is not acceptable for the market VOC evidence block.
 - Keyword content must summarize demand structure and intent clusters; raw reverse-traffic details stay in audit artifacts.
 - Lifecycle report must turn market evidence into SKU, bundle, supply-chain, and roadmap decisions rather than repeating the market scan.
-- Demand-gap report must turn reviews/VOC into Chinese `$APPEALS`, Gap Analysis, KANO, JTBD, representative voice summaries, and priority actions.
+- Demand-gap report must turn reviews/VOC into Chinese demand themes, Gap Analysis, KANO, JTBD, representative voice summaries, and priority actions.
 - User voice cards must keep the fixed template structure: left column `正面反馈` with exactly 6 cards, right column `负面反馈` with exactly 6 cards, plus a collapsed evidence-detail drawer. Cards may show star rating, sentiment, short English review excerpt, Chinese insight, theme, evidence strength, unmet point, and action implication. Full raw English reviews, English review titles, and scraped comment text remain audit-only.
 - Market pricing strategy must render exactly 3 pricing cards and exactly 3 AI image prompt cards, with stable `#pricing` and `#prompt` anchors. Lifecycle SKU strategy must render the five fixed SKU slots: 基础款、升级款、套装款、配件款、复购耗材. Template slots must not disappear when data is thin; data insufficiency is handled by readiness diagnostics, blocked delivery, or explicit audit files, not by deleting layout.
 - Missing lifecycle or demand-gap analysis JSON may be filled from Data Pack defaults, but the limitation must remain visible in `data_gaps` or `analysis_plan.limitations`.

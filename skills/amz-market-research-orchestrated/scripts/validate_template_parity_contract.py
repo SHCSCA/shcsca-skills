@@ -111,7 +111,7 @@ BASELINES = {
         "required_sections": [
             "目标ASIN锚点",
             "决策看板",
-            "市场痛点全景图（$APPEALS）",
+            "市场痛点全景图（需求主题）",
             "满意度鸿沟",
             "KANO",
             "JTBD",

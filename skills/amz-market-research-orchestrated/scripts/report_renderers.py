@@ -39,7 +39,7 @@ def build_report_documents(
     quality = data_pack.get("quality") or {}
     categories = data_pack.get("categories") or []
     category = categories[0] if categories else {}
-    keyword_pool = [kw for kw in data_pack.get("keywords", []) if kw.get("monthly_search_volume")]
+    keyword_pool = [kw for kw in call(fns, "effective_keywords", data_pack) if kw.get("monthly_search_volume")]
     core_keyword_pool = [
         kw
         for kw in keyword_pool
@@ -50,7 +50,7 @@ def build_report_documents(
     products = call(
         fns,
         "relevant_products",
-        sorted(data_pack.get("products") or [], key=lambda product: call(fns, "as_float", call(fns, "product_sales", product), 0), reverse=True),
+        sorted(call(fns, "effective_products", data_pack), key=lambda product: call(fns, "as_float", call(fns, "product_sales", product), 0), reverse=True),
     )
     competitor_table, competitor_cards, competitor_products = call(fns, "render_competitors", data_pack)
     fallback_source = call(fns, "primary_source_id", data_pack)
@@ -100,12 +100,12 @@ def build_report_documents(
         "{{MARKET_REPORT_TITLE}}": f"{object_value} · 市场深度调研报告",
         "{{REPORT_SUBTITLE}}": "客户版 AI 深度分析 · 大盘判断、需求结构、竞品格局、内容信号、供应链判断与行动建议",
         "{{KPI_CARDS}}": "".join(market_kpis),
-        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{call(fns, 'esc', decision)}；置信等级：{call(fns, 'confidence_level', data_pack, analysis_plan)}。当前数据覆盖 {len(data_pack.get('products', []))} 个竞品、{len(data_pack.get('keywords', []))} 个关键词、{len(data_pack.get('reviews', []))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(data_pack.get('suppliers', []))} 条供应端记录。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
+        "{{EXECUTIVE_INSIGHT_WITH_SOURCE_IDS}}": f"核心判断：{call(fns, 'esc', decision)}；置信等级：{call(fns, 'confidence_level', data_pack, analysis_plan)}。当前有效数据覆盖 {len(call(fns, 'effective_products', data_pack))} 个竞品、{len(call(fns, 'effective_keywords', data_pack))} 个关键词、{len(call(fns, 'effective_reviews', data_pack))} 条评论、{len(data_pack.get('tiktok_videos', []))} 条内容视频、{len(call(fns, 'effective_suppliers', data_pack))} 条供应端记录。报告只呈现可执行分析，内部审计链路保留在 Markdown 与 JSON 文件中。",
         "{{MARKET_DASHBOARD}}": call(fns, "render_market", data_pack, market_size),
         "{{KEYWORD_TABLE_AND_INTENT_CARDS}}": call(fns, "render_keywords", data_pack),
         "{{COMPETITOR_TABLE}}": competitor_table,
         "{{COMPETITOR_SEGMENT_CARDS}}": competitor_cards,
-        "{{COMPETITOR_DEEP_DIVES}}": call(fns, "render_product_deep_dives", competitor_products, data_pack.get("keywords") or []),
+        "{{COMPETITOR_DEEP_DIVES}}": call(fns, "render_product_deep_dives", competitor_products, call(fns, "effective_keywords", data_pack)),
         "{{VOC_CARDS_AND_TABLE}}": call(fns, "render_voc", data_pack, voc),
         "{{TIKTOK_VALIDATION}}": call(fns, "render_tiktok", data_pack),
         "{{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}": call(fns, "render_supply", data_pack, profitability),
@@ -133,7 +133,7 @@ def build_report_documents(
         "{{RISK_MATRIX}}": call(fns, "render_lifecycle_risks", fallback_source),
         "{{MARKET_INTELLIGENCE}}": call(fns, "render_lifecycle_market_intel", data_pack, analysis_plan, fallback_source),
         "{{LIFECYCLE_LINEAGE}}": call(fns, "render_lineage", data_pack),
-        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · amz-market-research-orchestrated 生成 · lifecycle-strategy-report-v2",
+        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · 产品全生命周期拓品战略报告 · Client Use Only",
     }
     demand_anchor_product = products[0] if products else {}
     demand_anchor_value = call(
@@ -164,14 +164,14 @@ def build_report_documents(
         "{{VOICE_THEATER}}": call(fns, "render_voice_theater", data_pack, fallback_source),
         "{{PRIORITY_TABLE}}": call(fns, "render_priority_table", data_pack, demand_gap, fallback_source),
         "{{DEMAND_LINEAGE}}": call(fns, "render_lineage", data_pack),
-        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · amz-market-research-orchestrated 生成 · demand-gap-report-v2",
+        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · 用户心智断层与需求机会报告 · Client Use Only",
     }
     index_replacements = {
         **common,
         "{{INDEX_CARDS}}": call(fns, "render_index_cards", str(object_value), str(decision), data_pack),
         "{{DATA_COVERAGE}}": call(fns, "render_client_data_coverage", data_pack, analysis_plan, str(decision)),
         "{{DATA_GAPS}}": call(fns, "render_data_gaps", data_pack, analysis_plan),
-        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · amz-market-research-orchestrated 生成 · three-report-index-v2",
+        "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · 三合一市场研究报告 · Client Use Only",
     }
     compat_index_replacements = {
         **index_replacements,

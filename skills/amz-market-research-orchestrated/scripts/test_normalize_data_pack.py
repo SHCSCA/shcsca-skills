@@ -249,6 +249,66 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertEqual(data_pack["quality"]["original_overall_score"], 0.92)
             self.assertTrue(any(gap.get("module") == "review_sample_depth" for gap in data_pack["data_gaps"] if isinstance(gap, dict)))
 
+    def test_smart_lighting_relevance_gate_removes_owala_and_generates_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "report_brief.json", {"research_object": {"value": "smart lighting"}})
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [{"source_id": "src_a", "provider": "sorftime", "tool": "product_search", "fetched_at": "now", "confidence": 0.8}],
+                    "research_object": {"type": "keyword", "value": "smart lighting"},
+                    "products": [
+                        {
+                            "asin": "B0LIGHT001",
+                            "title": "Rechargeable Under Cabinet Lights Motion Sensor LED Light",
+                            "brand": "MCGOR",
+                            "category": "Tools & Home Improvement > Lighting",
+                            "segment_cn": "橱柜感应灯",
+                            "source_id": "src_a",
+                            "provider": "sorftime",
+                        },
+                        {
+                            "asin": "B0OWALA001",
+                            "title": "Owala FreeSip Insulated Stainless Steel Water Bottle",
+                            "brand": "Owala",
+                            "category": "Sports & Outdoors",
+                            "segment_cn": "户外感应灯",
+                            "source_id": "src_a",
+                            "provider": "sorftime",
+                        },
+                    ],
+                    "keywords": [
+                        {"keyword": "under cabinet lighting", "monthly_search_volume": 1000, "source_id": "src_a", "provider": "sorftime"},
+                        {"keyword": "Under Cabinet Lighting", "monthly_search_volume": 900, "source_id": "src_a", "provider": "sorftime"},
+                        {"keyword": "water bottle", "monthly_search_volume": 50000, "keyword_cn": "水瓶", "source_id": "src_a", "provider": "sorftime"},
+                    ],
+                    "categories": [],
+                    "reviews": [
+                        {"asin": "B0LIGHT001", "rating": 5, "text": "Great under cabinet light", "source_id": "src_a", "provider": "sorftime"},
+                        {"asin": "B0OWALA001", "rating": 5, "text": "Great water bottle", "source_id": "src_a", "provider": "sorftime"},
+                    ],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            self.assertEqual([product["asin"] for product in data_pack["effective_products"]], ["B0LIGHT001"])
+            self.assertEqual([review["asin"] for review in data_pack["effective_reviews"]], ["B0LIGHT001"])
+            self.assertEqual([kw["keyword"].casefold() for kw in data_pack["effective_keywords"]], ["under cabinet lighting"])
+            self.assertEqual(data_pack["research_relevance"]["removed_counts"]["products"], 1)
+            self.assertEqual(data_pack["research_relevance"]["removed_counts"]["keywords"], 1)
+            self.assertTrue(data_pack["categories"])
+            self.assertEqual(data_pack["categories"][0]["product_count"], 1)
+
     def test_dedupes_repeated_data_gaps_by_module_and_message(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)

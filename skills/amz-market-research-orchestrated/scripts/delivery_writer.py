@@ -95,6 +95,15 @@ def write_lineage_markdown(data_pack: dict[str, Any], path: Path) -> None:
 
 def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, child_skills: dict[str, str]) -> None:
     brief = data_pack.get("brief") or {}
+    existing_path = report_dir / "report_brief.json"
+    existing: dict[str, Any] = {}
+    if existing_path.exists():
+        try:
+            loaded = json.loads(existing_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except json.JSONDecodeError:
+            existing = {}
     report_brief = {
         "task_id": data_pack.get("task_id") or analysis_plan.get("task_id"),
         "research_object": brief.get("research_object") or data_pack.get("research_object") or {},
@@ -111,7 +120,17 @@ def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_pla
             "analysis_plan": "analysis/analysis_plan.json",
         },
     }
-    (report_dir / "report_brief.json").write_text(json.dumps(report_brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    for key in ("created_at", "task_purpose", "market_scope", "data_scope", "output_scope", "constraints", "keyword_sample_depth_waiver"):
+        if key in existing and key not in report_brief:
+            report_brief[key] = existing[key]
+    if existing.get("keyword_sample_depth_waiver"):
+        report_brief.setdefault("data_scope", {})
+        if isinstance(report_brief["data_scope"], dict):
+            report_brief["data_scope"].setdefault("keyword_sample_depth_waiver", existing["keyword_sample_depth_waiver"])
+    existing_data_inputs = existing.get("data_inputs") if isinstance(existing.get("data_inputs"), dict) else {}
+    if isinstance(existing_data_inputs, dict) and existing_data_inputs.get("keyword_sample_depth_waiver"):
+        report_brief["data_inputs"]["keyword_sample_depth_waiver"] = existing_data_inputs["keyword_sample_depth_waiver"]
+    existing_path.write_text(json.dumps(report_brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def write_delivery_result(report_dir: Path, delivery: dict[str, Any], child_skills: dict[str, str]) -> None:

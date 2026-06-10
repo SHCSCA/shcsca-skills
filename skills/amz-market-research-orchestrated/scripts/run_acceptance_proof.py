@@ -152,10 +152,13 @@ def run_proof(
     can_trust_delivery = render_passed or validate_passed
     delivery = load_json(report_dir / "output" / "delivery_result.json", {}) if can_trust_delivery else {}
     critic = load_json(report_dir / "analysis" / "critic_review.json", {}) if can_trust_delivery else {}
+    step_pass = all(step["pass"] for step in steps if not (step["name"] == "readiness" and can_render))
+    readiness_pass = readiness.get("acceptance_ready") is True
+    critic_pass = critic.get("pass") is True if can_trust_delivery else False
     proof = {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
-        "overall_pass": all(step["pass"] for step in steps if not (step["name"] == "readiness" and can_render)),
+        "overall_pass": bool(step_pass and readiness_pass and critic_pass),
         "sample_class": readiness.get("sample_class"),
         "decision": delivery.get("decision"),
         "readiness": readiness,

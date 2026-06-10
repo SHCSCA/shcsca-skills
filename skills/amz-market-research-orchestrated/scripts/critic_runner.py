@@ -27,7 +27,7 @@ def as_float(value: Any, default: float = 0.0) -> float:
 
 def strip_allowed_customer_exceptions(html_doc: str) -> str:
     html_doc = re.sub(
-        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
+        r"<span\b(?=[^>]*\bdata-allow-asin=[\"'](?:benchmark-sniper|profit-model|competitor-table|demand-target-anchor|sku-reference)[\"'])[^>]*>\s*B0[A-Z0-9]{8}\s*</span>",
         "竞品ASIN",
         html_doc,
         flags=re.IGNORECASE,
@@ -54,6 +54,8 @@ def evidence_profile(data_pack: dict[str, Any], analysis_plan: dict[str, Any], d
         "non_keyword_cross_validated": non_keyword_cross,
         "review_depth": "low" if review_count < 80 else "medium" if review_count < 200 else "high",
         "cross_validation": "low" if non_keyword_cross <= 0 else "medium" if non_keyword_cross < 5 else "high",
+        "readiness_acceptance": (delivery.get("data_readiness") or {}).get("acceptance_ready"),
+        "readiness_blocking_gaps": len((delivery.get("data_readiness") or {}).get("blocking_gaps") or []),
     }
 
 
@@ -137,6 +139,19 @@ def build_critic_review(
                 "data_pack.data_gaps",
                 "存在数据缺口时质量评分不应保持极高分。",
                 "surface_limitations=data_gaps",
+            )
+        )
+    if profile["readiness_acceptance"] is False or profile["readiness_blocking_gaps"] > 0:
+        findings.append(
+            finding(
+                "F-readiness-gate",
+                "data_gate",
+                "blocking",
+                "market_depth",
+                "data_readiness.acceptance_ready",
+                "data/normalized/data_readiness_report.json",
+                "数据门禁未通过时，critic 不能接受完整客户报告交付。",
+                "render_full_template_diagnostic; block_acceptance_until_readiness_passes",
             )
         )
 
@@ -223,6 +238,20 @@ def build_critic_review(
     previous_findings = previous_review.get("findings", []) if previous_review else []
     resolved = [item["id"] for item in previous_findings if item.get("severity") == "blocking" and not blocking]
     critic_score = max(0, min(100, int(score * 100) - len(blocking) * 15 - (len(findings) - len(blocking)) * 5))
+    if critic_score < 60:
+        findings.append(
+            finding(
+                "F-low-critic-score",
+                "quality_gate",
+                "blocking",
+                "market_depth",
+                "critic.score",
+                "quality.overall_score",
+                "critic 评分低于 60 或等级为 D，不能标记为通过。",
+                "keep_decision_watch; render_diagnostic_until_quality_recovers",
+            )
+        )
+        blocking = [item for item in findings if item["severity"] == "blocking"]
     return {
         "pass": not blocking,
         "round_id": round_id,

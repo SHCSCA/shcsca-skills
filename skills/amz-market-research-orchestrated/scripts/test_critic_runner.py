@@ -122,6 +122,26 @@ class CriticRunnerTest(unittest.TestCase):
         self.assertTrue(review["pass"])
         self.assertNotIn("F-customer-html-leak", review["remaining_findings"])
 
+    def test_critic_fails_grade_d_even_without_other_blockers(self):
+        data_pack = {
+            "task_id": "low_score_case",
+            "reviews": [{"rating": 5, "text": "Enough review row"} for _ in range(90)],
+            "data_gaps": [],
+            "quality": {"overall_score": 0.55, "grade": "D"},
+            "normalization": {"cross_validated_counts": {"keywords": 1000, "products": 30, "reviews": 90}},
+        }
+
+        review = critic_runner.build_critic_review(
+            data_pack,
+            {"limitations": []},
+            {"status": "complete", "decision": "Watch", "data_readiness": {"acceptance_ready": True, "blocking_gaps": []}},
+            "Watch",
+        )
+
+        self.assertFalse(review["pass"])
+        self.assertEqual(review["grade"], "D")
+        self.assertIn("F-low-critic-score", review["remaining_findings"])
+
 
 if __name__ == "__main__":
     unittest.main()
