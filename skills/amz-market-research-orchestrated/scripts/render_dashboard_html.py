@@ -1853,6 +1853,37 @@ def generate_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str
     }
 
 
+def cosmo_customer_source_label(source_type: Any) -> str:
+    label = clean(source_type)
+    mapping = {
+        "effective_products": "竞品",
+        "effective_keywords": "关键词",
+        "effective_reviews": "评论",
+        "effective_suppliers": "供应链",
+        "tiktok_signals": "TikTok",
+        "web_documents": "网页资料",
+        "analysis_plan": "分析画像",
+    }
+    return mapping.get(label, "业务证据")
+
+
+def cosmo_evidence_sources_html(item: dict[str, Any]) -> str:
+    counts: Counter[str] = Counter()
+    for evidence in item.get("source_evidence") or []:
+        label = cosmo_customer_source_label(evidence.get("source_type"))
+        counts[label] += 1
+    if not counts:
+        return (
+            "<div class=\"cosmo-evidence-sources\"><b>证据来源</b>"
+            "<span>需补充客户可验证证据</span></div>"
+        )
+    chips = "".join(
+        f"<span>{esc(label)}<em>{esc(count)}</em></span>"
+        for label, count in counts.most_common(4)
+    )
+    return f"<div class=\"cosmo-evidence-sources\"><b>证据来源</b>{chips}</div>"
+
+
 def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> str:
     payload = generate_cosmo_alexa_tags(data_pack, analysis_plan)
     summary = payload.get("coverage_summary") or {}
@@ -1901,6 +1932,7 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
             + "".join(f"<span>{esc(term)}</span>" for term in terms)
             + "</div></div>"
             + f"<div class=\"cosmo-evidence-strip\"><span>证据强度</span><b>{esc(item.get('evidence_count'))}</b><em>{esc(item.get('coverage_status'))}</em></div>"
+            + cosmo_evidence_sources_html(item)
             + f"<p class=\"cosmo-business-meaning\"><b>业务解释：</b>{esc(item.get('business_meaning'))}</p>"
             + f"<div class=\"cosmo-action-direction\"><span>动作方向</span><b>{esc(action_direction)}</b></div>"
             + "</article>"

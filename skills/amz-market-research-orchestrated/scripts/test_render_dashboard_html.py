@@ -323,6 +323,40 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('data-dimension="用户标签"', html)
         self.assertNotIn('class="cosmo-relation-code">功能·用途</div>', html)
 
+    def test_cosmo_renderer_shows_customer_safe_evidence_sources_per_relation(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "ground blind", "keyword_cn": "地面隐蔽棚"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "Easy to set up and keeps me concealed during deer hunting.",
+                    "theme_cn": "安装与隐蔽",
+                }
+            ],
+            "suppliers": [
+                {
+                    "title": "跨境户外270度单向透视迷彩打猎狩猎帐篷",
+                    "price_rmb": 168,
+                    "seed_keyword": "狩猎盲棚",
+                }
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertIn('class="cosmo-evidence-sources"', html)
+        self.assertIn("证据来源", html)
+        self.assertIn("竞品", html)
+        self.assertIn("关键词", html)
+        self.assertIn("评论", html)
+        for forbidden in ["source_id", "provider", "raw_path", "effective_products", "effective_reviews"]:
+            self.assertNotIn(forbidden, html)
+
     def test_cosmo_renderer_groups_product_and_user_labels_into_separate_lanes(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
@@ -2188,6 +2222,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             ".cosmo-block-label",
             ".cosmo-action-direction",
             ".cosmo-evidence-strip em",
+            ".cosmo-evidence-sources",
         ]:
             self.assertIn(selector, REPORT_CSS)
         self.assertRegex(REPORT_CSS, r"\.cosmo-card-meta-grid\{[^}]*grid-template-columns:repeat\(2")
