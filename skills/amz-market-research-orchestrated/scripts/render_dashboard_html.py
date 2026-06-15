@@ -1100,6 +1100,9 @@ def normalize_cosmo_term(value: Any) -> str:
     text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", text, flags=re.I)
     text = re.sub(r"\s+", " ", text).strip(" ·-:：,，")
     text = COSMO_ENGLISH_TERM_TRANSLATIONS.get(text.casefold(), text)
+    if re.search(r"[\u4e00-\u9fff]", text):
+        text = re.sub(r"^(高价|中价|低价|通用|热销|畅销|基础|升级|套装|普通|高端)+", "", text)
+        text = text.strip(" ·-:：,，")
     if text.startswith("未映射关键词") or text.startswith("污染关键词"):
         return ""
     if re.search(r"[A-Za-z]{3,}", text) and not re.search(r"[\u4e00-\u9fff]", text):
@@ -1119,6 +1122,32 @@ def add_unique_cosmo_candidate(candidates: list[str], value: Any) -> None:
         return
     if term not in candidates:
         candidates.append(term)
+
+
+def cosmo_term_variant_family_key(term: str) -> str:
+    text = normalize_cosmo_term(term)
+    cjk = "".join(re.findall(r"[\u4e00-\u9fff]+", text))
+    if len(cjk) < 4:
+        return ""
+    return cjk[-2:]
+
+
+def cosmo_term_semantic_family_key(term: str) -> str:
+    text = normalize_cosmo_term(term)
+    if not re.search(r"[\u4e00-\u9fff]", text):
+        return ""
+    semantic_groups = {
+        "安装搭建": ["安装", "搭建", "设置", "展开"],
+        "质量耐用": ["耐用", "质量", "材质", "结实", "牢固"],
+        "空间尺寸": ["空间", "尺寸", "容纳", "多人"],
+        "隐蔽遮蔽": ["隐蔽", "遮蔽", "隐藏"],
+        "便携收纳": ["便携", "收纳", "携带"],
+        "防护防水": ["防水", "抗风", "耐候"],
+    }
+    for group, cues in semantic_groups.items():
+        if any(cue in text for cue in cues):
+            return group
+    return ""
 
 
 def cosmo_profile_terms(analysis_plan: dict[str, Any], relation_type: str) -> list[str]:
@@ -1193,8 +1222,22 @@ def supported_cosmo_profile_terms(records: list[dict[str, Any]], terms: list[str
 
 def merge_cosmo_terms(primary_terms: list[str], secondary_terms: list[str], limit: int = 5) -> list[str]:
     merged: list[str] = []
+    family_counts: Counter[str] = Counter()
+    semantic_counts: Counter[str] = Counter()
     for term in [*primary_terms, *secondary_terms]:
-        add_unique_cosmo_candidate(merged, term)
+        normalized = normalize_cosmo_term(term)
+        semantic_key = cosmo_term_semantic_family_key(normalized)
+        if semantic_key and semantic_counts[semantic_key] >= 1:
+            continue
+        family_key = cosmo_term_variant_family_key(normalized)
+        if family_key and family_counts[family_key] >= 2:
+            continue
+        before = len(merged)
+        add_unique_cosmo_candidate(merged, normalized)
+        if len(merged) > before and family_key:
+            family_counts[family_key] += 1
+        if len(merged) > before and semantic_key:
+            semantic_counts[semantic_key] += 1
         if len(merged) >= limit:
             break
     return merged

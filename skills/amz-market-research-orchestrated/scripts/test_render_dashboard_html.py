@@ -902,6 +902,80 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         overused = {term: count for term, count in term_relation_counts.items() if count > 2}
         self.assertEqual(overused, {})
 
+    def test_cosmo_relation_terms_collapse_near_duplicate_product_type_variants(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BLIND001",
+                    "title": "See Through Pop Up Ground Blind for Deer Hunting",
+                    "title_cn": "透视弹出式地面盲棚",
+                    "brand": "FieldOne",
+                    "segment_cn": "高价透视地面盲棚",
+                    "category": "Hunting Blinds",
+                    "price": 119.99,
+                    "rating": 4.6,
+                    "reviews_count": 300,
+                    "monthly_sales": 900,
+                },
+                {
+                    "asin": "B0BLIND002",
+                    "title": "Universal Hunting Ground Blind with Carry Bag",
+                    "title_cn": "通用狩猎地面盲棚",
+                    "brand": "FieldTwo",
+                    "segment_cn": "透视地面盲棚",
+                    "category": "Hunting Blinds",
+                    "price": 89.99,
+                    "rating": 4.4,
+                    "reviews_count": 180,
+                    "monthly_sales": 650,
+                },
+            ],
+            "keywords": [
+                {"keyword": "see through ground blind", "keyword_cn": "透视地面盲棚"},
+                {"keyword": "pop up hunting blind", "keyword_cn": "弹出式狩猎盲棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "Easy to set up and keeps me concealed.", "theme_cn": "安装与隐蔽"},
+                {"rating": 2, "text": "The material is not durable.", "theme_cn": "质量与耐用"},
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+
+        for relation_type in ["USED_AS", "IS_A"]:
+            terms = by_relation[relation_type]["terms"]
+            normalized_roots = [
+                term
+                for term in terms
+                if "地面盲棚" in term or "狩猎盲棚" in term
+            ]
+            self.assertLessEqual(len(normalized_roots), 2, terms)
+            self.assertNotIn("高价透视地面盲棚", terms)
+            self.assertNotIn("通用狩猎地面盲棚", terms)
+
+    def test_cosmo_relation_terms_collapse_duplicate_action_intents(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "easy setup hunting blind", "keyword_cn": "易安装狩猎盲棚"},
+                {"keyword": "quick pop up ground blind", "keyword_cn": "快速搭建地面盲棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "It is easy to set up and install.", "theme_cn": "安装更简单"},
+                {"rating": 4, "text": "Setup was fast and the blind is durable.", "theme_cn": "搭建效率"},
+                {"rating": 2, "text": "The fabric is not durable enough.", "theme_cn": "质量与耐用"},
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        xwant = next(item for item in payload["relations"] if item["relation_type"] == "xWANT")
+        install_terms = [term for term in xwant["terms"] if "安装" in term or "搭建" in term]
+
+        self.assertEqual(len(install_terms), 1, xwant["terms"])
+
     def test_report_readiness_view_downgrades_partial_supply_claims(self):
         readiness = {
             "acceptance_ready": False,
