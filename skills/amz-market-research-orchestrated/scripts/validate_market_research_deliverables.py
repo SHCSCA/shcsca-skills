@@ -281,6 +281,7 @@ TEMPLATE_STRUCTURE_PATTERNS = {
         ("风险矩阵", r"<div\b[^>]*class=['\"][^'\"]*\brisk-grid\b"),
     ],
     "demand-gap-report-v2": [
+        ("统一报告头", r"<header\b[^>]*class=['\"][^'\"]*\breport-header\b"),
         ("APPEALS 图表", r"<div\b[^>]*id=['\"]appealsRose['\"][^>]*class=['\"][^'\"]*\bdemand-chart\b"),
         ("需求鸿沟图表", r"<div\b[^>]*id=['\"]gapRadar['\"][^>]*class=['\"][^'\"]*\bdemand-chart\b"),
         ("KANO/JTBD 矩阵", r"<div\b[^>]*class=['\"][^'\"]*\bkano-grid\b"),
@@ -305,6 +306,9 @@ CUSTOMER_HTML_BANNED_PLACEHOLDERS = [
     "清洗后数据",
     "清洗后的竞品",
     "清洗后的结论",
+    "证据采集诊断",
+    "审计文件未提供",
+    "需要更多原声验证",
 ]
 MARKET_DEPTH_BANNED_PLACEHOLDERS = CUSTOMER_HTML_BANNED_PLACEHOLDERS
 
@@ -1361,6 +1365,29 @@ def validate_supply_html_readiness_alignment(report_dir: Path) -> None:
         and customer_visible_quality_passed is True
     )
     if not supply_passed:
+        if readiness.get("supply_conclusion_blocked") is not True:
+            return
+        blocked_contradictions = [
+            "门禁通过",
+            "供应链可控度",
+            "P1 首发 SKU",
+            "可控供应链",
+            "首发可控 SKU",
+            "供应链可控度较高",
+            "50+ 可打样",
+            "50+ 条成品报价可进入打样复核",
+            "毛利率可测算",
+        ]
+        for key in ["market_depth", "lifecycle_strategy"]:
+            report_path = report_dir / CHILD_REPORTS[key]["path"]
+            if not report_path.exists():
+                continue
+            report_html = report_path.read_text(encoding="utf-8")
+            for phrase in blocked_contradictions:
+                require(
+                    phrase not in report_html,
+                    f"{CHILD_REPORTS[key]['path']} blocked supply readiness contradicts customer HTML: {phrase}",
+                )
         return
     market_path = report_dir / CHILD_REPORTS["market_depth"]["path"]
     market_html = market_path.read_text(encoding="utf-8")

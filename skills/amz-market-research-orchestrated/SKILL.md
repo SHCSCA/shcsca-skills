@@ -84,7 +84,7 @@ Fail-closed 恢复与停止规则：
 - 关键词必须按 `normalized lowercase keyword + source bucket` 去重；重复率超过门槛时 readiness 失败，不得继续输出完整市场判断。
 - `acceptance_ready=false` 时，必须先运行 `recover_data_readiness.py` 做定向补采恢复；恢复轮次耗尽后若只剩供应链报价深度/字段质量/价差问题，则进入 `partial_acceptance_sample`，继续输出市场、生命周期和需求报告，但禁用供应链毛利率结论；若仍有产品池、关键词、来源血缘或赛道拆分阻断，才停止客户版三报告并登记为 `non_acceptance_sample`。
 - critic 二次修正后仍 `pass=false` 时，不得声明交付完成；必须输出未解决问题和下一轮差量修正计划。
-- critic `grade=D`、`score<60`、readiness 核心门禁失败、数据污染命中或 HTML validator 失败时，最终 `pass` 必须为 `false`；`run_acceptance_proof.py` 必须聚合 readiness、critic 和 HTML validator，任一核心门禁失败则 overall pass=false。
+- critic `grade=D`、`score<60`、readiness 核心门禁失败、数据污染命中或 HTML validator 失败时，最终 `pass` 必须为 `false`；`run_acceptance_proof.py` 必须聚合 readiness、critic 和 HTML validator。完整交付以 `full_acceptance_pass=true` 为准；若只剩被允许的局部阻断且 `partial_report_ready=true`，可输出 `delivery_mode=diagnostic_delivery`，但必须禁用对应结论并展示中文诊断。
 - 产品池、关键词、评论或网页证据不足时，不得用 AI 推断、模板样例或重复数据补齐。
 - 客户版 HTML 出现 `source_id`、provider、raw path、内部版本标记、`竞品记录` 等技术或占位字段时，必须停止交付并修正渲染层。
 - ASIN 只允许在“目标锚点”“标杆竞品狙击拆解”“竞品表”“竞品参考毛利率测算”“SKU 参考竞品”中通过白名单组件展示；其他区域仍需脱敏。
@@ -169,7 +169,7 @@ Fail-closed 恢复与停止规则：
 - TikTok 验证：跑 `collect_sorftime_tiktok_signals.py`，内部按 Sorftime schema 调用 `tiktok_similar_product(searchName,page,site)`、`tiktok_product_detail(productId,site)`、`tiktok_product_trend(productId,site)`、`tiktok_product_video(productId,page,site)`、`tiktok_product_video_author(productId,site)`。
 - 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime 官方文档调用 `ali1688_similar_product(searchName,page)`，并记录每页实际返回字段；1688 官方 16 字段覆盖率写入 `documented_field_coverage`，`Url/url` 只作为 `URL` 别名处理。若 MCP 实际响应缺少 `Title` / `URL`，必须阻断供应链毛利率结论并写入诊断。
 - 竞品池补采：跑 `collect_sorftime_products.py`，内部优先按 Amazon schema 调用 `product_search`，必要时回退到 `keyword_search_results`，不得复用 TikTok 或 1688 参数结构。
-- Amazon 竞品主图：`collect_sorftime_products.py` 必须统计 `image_url_coverage`。若有效竞品池图片覆盖不足，必须写入 `data_gaps.type=competitor_image_coverage` 并继续用 `collect_sorftime_product_enrichment.py` 对核心 ASIN 调用 `product_detail` 补采图片字段；竞品全景扫描、竞品表、标杆竞品狙击拆解、生命周期 SKU 卡和 SKU 表只能展示 Amazon 竞品主图或 ASIN 详情图，不能使用 1688 货源图冒充 Amazon 竞品图。生命周期候选池应把参考竞品图写入 `reference_image_url`；若 Sorftime 没返回图片，保留 SKU 槽位并显示数据诊断，不造图、不借用供应端图片。
+- Amazon 竞品主图：`collect_sorftime_products.py` 必须统计 `image_url_coverage`。若有效竞品池图片覆盖不足，必须写入 `data_gaps.type=competitor_image_coverage` 并继续用 `collect_sorftime_product_enrichment.py` 对核心 ASIN 调用 `product_detail` 补采图片字段；竞品全景扫描、竞品表、标杆竞品狙击拆解、生命周期 SKU 卡和 SKU 表只能展示 Amazon 竞品主图或 ASIN 详情图，不能使用 1688 货源图冒充 Amazon 竞品图。所有远程竞品图必须带本地静态 `report.js` 加载失败兜底，远程媒体被阻断或超时时显示中文图片诊断，不允许客户页出现浏览器破图。生命周期候选池应把参考竞品图写入 `reference_image_url`；若 Sorftime 没返回图片，保留 SKU 槽位并显示数据诊断，不造图、不借用供应端图片。
 - Amazon 竞品增强：跑 `collect_sorftime_product_enrichment.py`，对已入池 ASIN 调用 `product_detail`、`product_trend`、`product_variations`、`product_traffic_terms`、`competitor_product_keywords`。可用维度必须写回 Data Pack；返回空的维度必须进入 `data_gaps`，不能写成已验证事实。若某个维度对首个 ASIN 返回 0 行，必须换其他已入池 ASIN 继续复测；多 ASIN 仍为空时才写成当前 Sorftime 维度缺口。
 - MCP 字段审计：当用户质疑官方字段与实际结果不一致，或采集字段缺失时，跑 `audit_sorftime_mcp_contracts.py`，保存 Amazon / TikTok / 1688 的 schema、实际参数、返回行数和实际字段集合。`tools/list` 只能证明入参 schema；出参字段覆盖率必须来自真实 `tools/call` 抽样。Amazon / TikTok 没有官方固定 16 字段清单时，以本 skill 的标准化维度覆盖率审计；1688 按官方 16 字段审计。
 
@@ -303,7 +303,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 - 噪声分层：核心关键词、相邻泛流量、ASIN 反查流量词必须分开展示，不能把泛词流量当成品类机会。
 - 幂等 baseline：首次归一化写入 `data/normalized/normalization_baseline.json`，后续反复渲染不得冲掉原始样本数和去重收益。
 - 样本门槛：标准版和深度版归一化后关键词不得少于 1000 条；不足时继续分页采集或在 `data_gaps` 标注为未达交付标准。
-- 准备度门槛：`data/normalized/data_readiness_report.json.acceptance_ready` 必须为 `true` 才能进入三报告渲染；`non_acceptance_sample` 只能作为历史/演示样本保留，不能用于交付宣称。
+- 准备度门槛：`data/normalized/data_readiness_report.json.acceptance_ready=true` 代表完整交付；`partial_report_ready=true` 代表诊断交付，只允许在固定模板中展示可验证模块和中文阻断原因，不得输出被阻断的毛利率、供应链可控或首发可打样结论；`non_acceptance_sample` 只能作为历史/演示样本保留，不能用于交付宣称。
 - 状态一致性：最终交付必须让 `data_readiness_report.json`、`delivery_result.json.data_readiness`、`report-data.json.readiness` 三处一致；critic 通过不能覆盖 readiness 失败。
 
 标准化结果保存到：

@@ -1399,6 +1399,13 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 for expected_term in expected_terms:
                     self.assertIn(expected_term, child_html, f"{filename} must keep the standard diagnostic template slot {expected_term}")
 
+    def test_demand_template_uses_shared_report_header_structure(self):
+        template = (renderer.SKILL_DIR / "assets" / "demand-gap-template.html").read_text(encoding="utf-8")
+
+        self.assertRegex(template, r'<header\b[^>]*class="[^"]*\breport-header\b')
+        self.assertIn("{{DEMAND_REPORT_TITLE}}", template)
+        self.assertNotIn('<section class="hero">', template)
+
     def test_renderer_writes_partial_report_when_only_1688_quotes_are_under_50(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1432,7 +1439,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             )
             self.assertIn("供应链测算未达门槛", combined_html)
             self.assertIn("诊断交付", combined_html)
-            for forbidden in ["证据充分", "供应链可控度较高", "50+ 条成品报价可进入打样复核", "毛利率可测算"]:
+            for forbidden in ["证据充分", "供应链可控度较高", "门禁通过", "可控供应链", "首发可控 SKU", "50+ 条成品报价可进入打样复核", "毛利率可测算"]:
                 self.assertNotIn(forbidden, combined_html)
 
     def test_lifecycle_sku_table_defaults_to_top_window_and_folds_full_pool(self):
@@ -1898,6 +1905,19 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('class="comp-image-strip"', cards_html)
         self.assertNotIn("src=\"\"", table_html + cards_html + deep_html)
 
+    def test_competitor_images_have_customer_visible_load_failure_fallback(self):
+        products = competitor_rows(30)
+        products[-1]["image_url"] = "https://m.media-amazon.com/images/I/example-a.jpg"
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+        combined = table_html + cards_html + deep_html
+
+        self.assertIn('onerror="this.hidden=true;this.nextElementSibling.hidden=false;"', combined)
+        self.assertIn('class="image-load-fallback"', combined)
+        self.assertIn("图片加载失败", combined)
+        self.assertNotIn("broken image", combined.lower())
+
     def test_competitor_modules_do_not_render_broken_images_when_image_urls_missing(self):
         table_html, cards_html, filtered = renderer.render_competitors({"products": competitor_rows(30)})
         deep_html = renderer.render_product_deep_dives(filtered, [])
@@ -1925,6 +1945,20 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
         self.assertIn('src="https://m.media-amazon.com/images/I/detail-image.jpg"', table_html + cards_html + deep_html)
         self.assertIn('class="comp-product-thumb"', table_html)
+
+    def test_lifecycle_reference_images_have_load_failure_fallback(self):
+        html = renderer.sku_reference_image_html(
+            {
+                "reference_image_url": "https://m.media-amazon.com/images/I/lifecycle.jpg",
+                "reference_competitor": "B0REF12345 · 标杆竞品",
+                "name": "主品验证款",
+            }
+        )
+
+        self.assertIn('class="sku-reference-thumb"', html)
+        self.assertIn('onerror="this.hidden=true;this.nextElementSibling.hidden=false;"', html)
+        self.assertIn('class="image-load-fallback"', html)
+        self.assertIn("图片加载失败", html)
 
     def test_competitor_modules_reject_1688_supplier_images_as_amazon_competitor_images(self):
         products = competitor_rows(30)
@@ -2240,10 +2274,54 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
         html = renderer.render_strategy_dashboard(data_pack, {}, "src_001")
 
-        self.assertIn("供应链可控度", html)
+        self.assertIn("供应链复核状态", html)
         self.assertIn("供应链风险", html)
         self.assertNotIn("可自产 SKU", html)
         self.assertNotIn('<div class="kpi-value">0</div>', html)
+
+    def test_lifecycle_strategy_dashboard_respects_blocked_supply_readiness(self):
+        data_pack = {
+            "report_readiness": {
+                "acceptance_ready": False,
+                "partial_report_ready": True,
+                "supply_conclusion_blocked": True,
+                "supplier_quote_gate": {"passed": False, "actual": 9, "required": 50},
+            },
+            "report_readiness_view": renderer.report_readiness_view(
+                {
+                    "acceptance_ready": False,
+                    "partial_report_ready": True,
+                    "supply_conclusion_blocked": True,
+                    "supplier_quote_gate": {"passed": False, "actual": 9, "required": 50},
+                },
+                {},
+                "Watch",
+            ),
+            "products": [
+                {
+                    "asin": "B0HUNT0001",
+                    "title": "See Through Pop Up Hunting Blind",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                    "price": 87.98,
+                    "estimated_monthly_sales": 349,
+                    "rating": 4.5,
+                    "review_count": 1087,
+                }
+            ],
+            "suppliers": [],
+        }
+
+        html = renderer.render_strategy_dashboard(data_pack, {}, "src_blocked")
+
+        self.assertIn("供应链测算状态", html)
+        self.assertIn("供应链测算未达门槛", html)
+        self.assertIn("P1 候选 SKU", html)
+        self.assertNotIn("供应链可控度", html)
+        self.assertNotIn("P1 首发 SKU", html)
+        self.assertNotIn("门禁通过", html)
+        self.assertNotIn("可控供应链", html)
+        self.assertNotIn("首发可控 SKU", html)
 
     def test_lifecycle_evidence_tables_are_collapsed_drawers(self):
         html = renderer.render_lifecycle_journey({}, "src_001")
@@ -2505,6 +2583,35 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         negative_section = html.split("负面反馈", 1)[1].split("</div></div>", 1)[0]
         self.assertEqual(positive_section.count("demand-evidence-card joy"), 6)
         self.assertEqual(negative_section.count("demand-evidence-card pain"), 6)
+
+    def test_demand_voice_theater_diagnostic_slots_use_customer_business_copy(self):
+        html = renderer.render_voice_theater(
+            {
+                "reviews": [
+                    {
+                        "rating": 5,
+                        "title": "Good blind",
+                        "text": "Easy to set up and the see through hunting blind works well.",
+                        "themes": ["setup", "visibility"],
+                    },
+                    {
+                        "rating": 2,
+                        "title": "Noisy zipper",
+                        "text": "The zipper is noisy and the blind fabric needs stronger stitching.",
+                        "themes": ["noise", "durability"],
+                    },
+                ]
+            },
+            "src_001",
+        )
+
+        self.assertEqual(html.count("demand-evidence-card joy"), 6)
+        self.assertEqual(html.count("demand-evidence-card pain"), 6)
+        self.assertNotIn("证据采集诊断", html)
+        self.assertNotIn("审计文件未提供", html)
+        self.assertNotIn("需要更多原声验证", html)
+        self.assertIn("评论证据槽位", html)
+        self.assertIn("继续采集同赛道评论原声", html)
 
     def test_demand_voice_theater_prioritizes_product_relevant_reviews(self):
         data_pack = {

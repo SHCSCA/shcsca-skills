@@ -107,7 +107,7 @@ python skills/amz-market-research-orchestrated/scripts/test_validate_market_rese
 python skills/amz-market-research-orchestrated/scripts/test_run_acceptance_proof.py
 ```
 
-These tests build temporary report directories and verify that Sorftime keyword/review collection parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, customer copy and customer safety redaction stay intact, critic refinement records failed and passing rounds, the three child skills exist under the orchestrated skill, the renderer writes the portable static site bundle plus a compatibility entry, shared CSS/JS assets are local, `report.js` behaviors execute against a minimal DOM, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, customer HTML leaks, and incomplete report sections.
+These tests build temporary report directories and verify that Sorftime keyword/review collection parsing works, normalization is stable, global keywords stay separate from ASIN traffic terms, canonical URL/title/store dedupe works, customer copy and customer safety redaction stay intact, critic refinement records failed and passing rounds, the three child skills exist under the orchestrated skill, the renderer writes the portable static site bundle plus a compatibility entry, shared CSS/JS assets are local, `report.js` behaviors execute against a minimal DOM including image-load fallback, and the validator accepts valid artifacts while rejecting broken lineage, missing delivery files, missing static assets, Markdown-wrapped HTML, low keyword sample depth, missing child reports, broken child links, non-portable bundle links, customer HTML leaks, and incomplete report sections.
 
 The shared site assets intentionally borrow the local downloaded report templates as visual baselines: `downloadpage/143101` for market depth, `downloadpage/143511` for lifecycle strategy, and `downloadpage/143645` for demand gap. The generator extracts reusable CSS/JS patterns into local `report.css` and `report.js`; it does not ship `_next` chunks, CDN URLs, iframe shells, or hard-coded sample report data.
 
@@ -285,7 +285,7 @@ output/html_reports/assets/report-data.json
 
 The renderer also updates `output/delivery_result.json.html_reports`, `html_bundle_dir`, `child_skills`, `site_assets`, `interactive_features`, and `cleaning_summary`. Optional `analysis/lifecycle_strategy.json` and `analysis/demand_gap.json` enrich the second and third reports; when missing, the renderer derives directional blocks from the Data Pack and the limitations should remain visible in `data_gaps` or `analysis_plan.limitations`.
 
-Customer HTML is Chinese-facing by default. Raw English reviews and English review titles remain in `data_pack.json` for audit, while HTML uses Chinese summaries, themes, sentiment labels, and suggested actions.
+Customer HTML is Chinese-facing by default. Raw English reviews and English review titles remain in `data_pack.json` for audit, while HTML uses Chinese summaries, themes, sentiment labels, and suggested actions. Amazon competitor images may be rendered when Sorftime returns Amazon image URLs; every image tag must include customer-visible load fallback so local `file://` reports do not show broken-image icons when remote media is blocked or slow. Supplier-side 1688 images must never be used as Amazon competitor images.
 
 Local sample classifications are tracked in `references/sample-coverage-matrix.md`. Use that matrix to distinguish accepted samples, negative readiness samples, and unit-test demo samples.
 
@@ -304,7 +304,11 @@ output/acceptance_proof.json
 output/acceptance_proof.md
 ```
 
-Use this as the preferred proof command when deciding whether a local sample is an `acceptance_sample`. Negative samples should return non-zero and still write proof output explaining the failed step.
+Use this as the preferred proof command when deciding whether a local sample is a complete or diagnostic delivery. The proof separates:
+
+- `full_acceptance_pass=true`: readiness, renderer, validator, critic, and optional reference visual checks passed with `acceptance_ready=true`.
+- `diagnostic_delivery_pass=true`: readiness still has a supported partial blocker such as supplier quote relevance, but `partial_report_ready=true`, the renderer suppresses blocked conclusions, and validator/critic/reference visual checks pass.
+- `delivery_mode=blocked`: core readiness, validator, critic, or template checks failed. Blocked samples return non-zero and still write proof output explaining the failed step.
 
 ## prototypes
 

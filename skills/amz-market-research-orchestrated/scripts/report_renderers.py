@@ -162,7 +162,7 @@ def build_report_documents(
         "{{SKU_EXECUTION_TABLE}}": call(fns, "render_sku_execution_table", skus, fallback_source),
         "{{BUNDLE_STRATEGY}}": call(fns, "render_bundle_strategy", skus, fallback_source),
         "{{IMPLEMENTATION_ROADMAP}}": call(fns, "render_lifecycle_roadmap", skus, fallback_source),
-        "{{RISK_MATRIX}}": call(fns, "render_lifecycle_risks", fallback_source),
+        "{{RISK_MATRIX}}": call(fns, "render_lifecycle_risks", data_pack, fallback_source),
         "{{MARKET_INTELLIGENCE}}": call(fns, "render_lifecycle_market_intel", data_pack, analysis_plan, fallback_source),
         "{{LIFECYCLE_LINEAGE}}": call(fns, "render_lineage", data_pack),
         "{{REPORT_FOOTER}}": f"{call(fns, 'esc', object_value)} · 产品全生命周期拓品战略报告 · Client Use Only",

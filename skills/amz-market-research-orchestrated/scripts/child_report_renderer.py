@@ -82,7 +82,7 @@ def render_child_report(report_dir: Path, module_dir: Path, view_file: str, outp
     if report_key:
         try:
             from customer_safety import redact_customer_html
-            from render_dashboard_html import renderer_callbacks
+            from render_dashboard_html import renderer_callbacks, report_readiness_view
             from report_renderers import build_report_documents
 
             data_pack = load_json_default(report_dir / "data" / "normalized" / "normalized_data_pack.json", {})
@@ -97,6 +97,10 @@ def render_child_report(report_dir: Path, module_dir: Path, view_file: str, outp
             demand_gap = load_json_default(report_dir / "analysis" / "demand_gap.json", {})
             delivery = load_json_default(report_dir / "output" / "delivery_result.json", {})
             decision = str(delivery.get("decision") or "Watch")
+            readiness = load_json_default(report_dir / "data" / "normalized" / "data_readiness_report.json", {})
+            if isinstance(readiness, dict) and readiness:
+                data_pack["report_readiness"] = readiness
+                data_pack["report_readiness_view"] = report_readiness_view(readiness, data_pack.get("quality") or {}, decision)
             docs, _ = build_report_documents(
                 data_pack,
                 analysis_plan,

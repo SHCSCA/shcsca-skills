@@ -59,6 +59,9 @@ def proof_markdown(proof: dict[str, Any]) -> str:
         f"- Report directory: `{proof['report_dir']}`",
         f"- Checked at: `{proof['checked_at']}`",
         f"- Overall pass: `{proof['overall_pass']}`",
+        f"- Delivery mode: `{proof.get('delivery_mode')}`",
+        f"- full_acceptance_pass: `{proof.get('full_acceptance_pass')}`",
+        f"- diagnostic_delivery_pass: `{proof.get('diagnostic_delivery_pass')}`",
         f"- Sample class: `{proof.get('sample_class')}`",
         f"- Decision: `{proof.get('decision')}`",
         "",
@@ -154,11 +157,23 @@ def run_proof(
     critic = load_json(report_dir / "analysis" / "critic_review.json", {}) if can_trust_delivery else {}
     step_pass = all(step["pass"] for step in steps if not (step["name"] == "readiness" and can_render))
     readiness_pass = readiness.get("acceptance_ready") is True
+    partial_report_pass = readiness.get("partial_report_ready") is True
     critic_pass = critic.get("pass") is True if can_trust_delivery else False
+    full_acceptance_pass = bool(step_pass and readiness_pass and critic_pass)
+    diagnostic_delivery_pass = bool(step_pass and not readiness_pass and partial_report_pass and critic_pass)
+    if full_acceptance_pass:
+        delivery_mode = "full_acceptance"
+    elif diagnostic_delivery_pass:
+        delivery_mode = "diagnostic_delivery"
+    else:
+        delivery_mode = "blocked"
     proof = {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
-        "overall_pass": bool(step_pass and readiness_pass and critic_pass),
+        "overall_pass": bool(full_acceptance_pass or diagnostic_delivery_pass),
+        "full_acceptance_pass": full_acceptance_pass,
+        "diagnostic_delivery_pass": diagnostic_delivery_pass,
+        "delivery_mode": delivery_mode,
         "sample_class": readiness.get("sample_class"),
         "decision": delivery.get("decision"),
         "readiness": readiness,
@@ -186,7 +201,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--download-root", type=Path, default=DEFAULT_DOWNLOAD_ROOT, help="Root containing the downloaded template folders.")
     args = parser.parse_args(argv)
     proof = run_proof(args.dir, args.depth, args.skip_render, args.reference_visual, args.download_root)
-    print(json.dumps({"overall_pass": proof["overall_pass"], "sample_class": proof.get("sample_class"), "proof": "output/acceptance_proof.json"}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "overall_pass": proof["overall_pass"],
+                "delivery_mode": proof.get("delivery_mode"),
+                "full_acceptance_pass": proof.get("full_acceptance_pass"),
+                "diagnostic_delivery_pass": proof.get("diagnostic_delivery_pass"),
+                "sample_class": proof.get("sample_class"),
+                "proof": "output/acceptance_proof.json",
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0 if proof["overall_pass"] else 1
 
 

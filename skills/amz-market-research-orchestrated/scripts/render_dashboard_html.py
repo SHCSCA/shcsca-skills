@@ -729,12 +729,26 @@ def product_image_url(product: dict[str, Any]) -> str:
     return ""
 
 
+def image_with_load_fallback_html(url: str, class_name: str, alt: str, fallback_label: str) -> str:
+    return (
+        "<span class=\"image-frame\">"
+        f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" "
+        "loading=\"lazy\" decoding=\"async\" "
+        "onerror=\"this.hidden=true;this.nextElementSibling.hidden=false;\">"
+        "<span class=\"image-load-fallback\" hidden "
+        "style=\"display:inline-flex;align-items:center;justify-content:center;min-width:72px;min-height:72px;"
+        "padding:8px;border:1px solid #d9dee8;background:#f7f9fc;color:#6f8198;font-size:12px;text-align:center;\">"
+        f"{esc(fallback_label)}加载失败</span>"
+        "</span>"
+    )
+
+
 def product_image_html(product: dict[str, Any], class_name: str, fallback_alt: str = "竞品图片") -> str:
     url = product_image_url(product)
     if not url:
         return ""
     alt = first(customer_product_position(product), product.get("title_cn"), product.get("title"), fallback_alt, default=fallback_alt)
-    return f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" loading=\"lazy\" decoding=\"async\">"
+    return image_with_load_fallback_html(url, class_name, alt, fallback_alt)
 
 
 def product_image_or_diagnostic_html(
@@ -773,7 +787,7 @@ def sku_reference_image_html(sku: dict[str, Any], class_name: str = "sku-referen
     if is_supplier_image_url(url) or not is_amazon_competitor_image_url(url):
         return ""
     alt = first(sku.get("reference_competitor"), sku.get("name"), "参考竞品图片", default="参考竞品图片")
-    return f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" loading=\"lazy\" decoding=\"async\">"
+    return image_with_load_fallback_html(url, class_name, alt, "参考竞品图片")
 
 
 def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]]:
@@ -3876,50 +3890,75 @@ def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallbac
 def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> str:
     skus = lifecycle_skus(data_pack, lifecycle, fallback_source)
     readiness = current_readiness_view(data_pack)
+    supply_blocked = readiness.get("supply_blocked") is True
     supplier_count = len(finished_supplier_records(effective_suppliers(data_pack)))
-    if readiness.get("supply_blocked"):
-        supply_control = "供应链待验证"
+    if supply_blocked:
+        supply_metric_label = "供应链测算状态"
+        p1_metric_label = "P1 候选 SKU"
+        supply_control = "供应链测算未达门槛"
         supply_risk = "供应链测算未达门槛，不能输出成本、毛利率或可打样结论"
         supply_style = "warning"
+        phase_subtext = "补齐供应链后再定首发"
+        p1_subtext = "供应链补采前仅为候选"
+        phase_row = "P1 候选验证 + 供应链补采优先"
+        strategy_conclusion = "当前生命周期 SKU 只能作为候选池阅读：目标赛道、参考竞品和页面承诺可以继续推演，但供应链测算未达门槛，不能把任何 SKU 写成可打样或可控结论。下一步必须先补齐严格相关成品报价，再恢复成本、毛利率和首发优先级判断。"
     elif supplier_count >= 50:
+        supply_metric_label = "供应链可控度"
+        p1_metric_label = "P1 首发 SKU"
         supply_control = "门禁通过"
         supply_risk = "严格相关供应端报价已通过数量和字段质量门禁，可进入实物复核"
         supply_style = "success"
+        phase_subtext = "可控供应链"
+        p1_subtext = "可先进入验证"
+        phase_row = "P1 可控供应链 + 信任与开箱触点优先"
+        strategy_conclusion = "以首发可控 SKU 为核心，围绕高优先级赛道做 Bundle 价格台阶验证；每个 SKU 必须绑定目标赛道、参考竞品、供应链风险和页面承诺，先验证转化与退货风险，再扩展长期复购触点。"
     elif supplier_count > 0:
+        supply_metric_label = "供应链复核状态"
+        p1_metric_label = "P1 候选 SKU"
         supply_control = "需复核"
         supply_risk = "供应链风险：中，需要继续补齐报价、质检、认证和包装验证"
         supply_style = "warning"
+        phase_subtext = "报价复核后再定首发"
+        p1_subtext = "先补质检与报价"
+        phase_row = "P1 候选验证 + 报价复核优先"
+        strategy_conclusion = "当前 SKU 池具备拓品方向参考价值，但供应链仍需复核报价、质检、认证和包装口径。先把候选 SKU 与成品报价一一绑定，再决定首发优先级和 Bundle 放量节奏。"
     else:
+        supply_metric_label = "供应链证据状态"
+        p1_metric_label = "P1 候选 SKU"
         supply_control = "需验证"
         supply_risk = "供应链风险：高，缺少可复核成品报价"
         supply_style = "warning"
+        phase_subtext = "先补供应链证据"
+        p1_subtext = "仅为方向候选"
+        phase_row = "P1 候选验证 + 供应链证据补齐"
+        strategy_conclusion = "当前生命周期策略只保留方向推演：缺少可复核成品报价时，不能输出首发、成本或可控供应结论。需要先补采供应链证据，再进入 SKU 打样判断。"
     type_counts = Counter(str(sku.get("type") or "").upper() for sku in skus)
     bundle_count = len([sku for sku in skus if str(sku.get("type")).upper() == "B" or "套装" in clean(sku.get("name"))])
     p1_count = len([sku for sku in skus if clean(sku.get("phase")).upper() == "P1"])
     high_priority = len([sku for sku in skus if as_float(sku.get("priority"), 0) >= 80])
     rows = [
         ["拓品 SKU 总数", len(skus), fallback_source],
-        ["供应链可控度", supply_control, fallback_source],
+        [supply_metric_label, supply_control, fallback_source],
         ["供应链风险", supply_risk, fallback_source],
         ["复购维护型 SKU", len([sku for sku in skus if str(sku.get("type")).upper() == "D"]), fallback_source],
         ["Bundle 增长抓手", "AOV 提升", fallback_source],
-        ["建议首发 Phase", "P1 可控供应链 + 信任与开箱触点优先", fallback_source],
+        ["建议首发 Phase", phase_row, fallback_source],
     ]
     return (
         "<div class=\"kpi-grid lifecycle-kpi-primary\">"
         + kpi_card("拓品 SKU 总数", len(skus), "覆盖生命周期触点", "success")
-        + kpi_card("供应链可控度", supply_control, supply_risk, supply_style)
+        + kpi_card(supply_metric_label, supply_control, supply_risk, supply_style)
         + kpi_card("复购引擎", "60-90 天", "清洁、替换、维护", "warning")
         + kpi_card("AOV 引擎", "Bundle", "组合包优先", "success")
-        + kpi_card("首发 Phase", "P1", "可控供应链", "")
+        + kpi_card("首发 Phase", "P1", phase_subtext, "warning" if supply_blocked else "")
         + "</div>"
         + "<div class=\"lifecycle-kpi-secondary\">"
-        + kpi_card("P1 首发 SKU", p1_count, "可先进入验证", "success")
+        + kpi_card(p1_metric_label, p1_count, p1_subtext, "warning" if supply_blocked else "success")
         + kpi_card("高优先级 SKU", high_priority, "优先级 ≥ 80", "warning")
         + kpi_card("套装/升级 SKU", bundle_count, "承担 AOV 提升", "")
         + kpi_card("策略类型覆盖", len([key for key, count in type_counts.items() if key and count]), "主品验证 / 场景升级 / 配件补位 / 维护复购", "")
         + "</div>"
-        + "<div class=\"insight-box\"><strong>战略结论：</strong>以首发可控 SKU 为核心，围绕高优先级赛道做 Bundle 价格台阶验证；每个 SKU 必须绑定目标赛道、参考竞品、供应链风险和页面承诺，先验证转化与退货风险，再扩展长期复购触点。</div>"
+        + f"<div class=\"insight-box\"><strong>战略结论：</strong>{esc(strategy_conclusion)}</div>"
         + lifecycle_evidence_drawer("战略仪表盘证据", ["指标", "结果", "source_id"], rows)
     )
 
@@ -4415,9 +4454,14 @@ def render_lifecycle_roadmap(skus: list[dict[str, Any]], fallback_source: str) -
     )
 
 
-def render_lifecycle_risks(fallback_source: str) -> str:
+def render_lifecycle_risks(data_pack: dict[str, Any], fallback_source: str) -> str:
+    readiness = current_readiness_view(data_pack)
+    if readiness.get("supply_blocked"):
+        supply_mitigation = "Phase 1 先补齐严格相关成品报价、质检和包装复核；供应链测算恢复前不输出可控或可打样结论"
+    else:
+        supply_mitigation = "Phase 1 优先可控供应链；外采至少 2 家备选"
     rows = [
-        ["供应链风险", "电子件/外采件质量不稳定", "Phase 1 优先可控供应链；外采至少 2 家备选", fallback_source],
+        ["供应链风险", "电子件/外采件质量不稳定", supply_mitigation, fallback_source],
         ["合规与信任风险", "涉及数据、安全、认证、售后承诺等信任门槛", "按品类核查法规与平台政策；关键承诺前置到页面", fallback_source],
         ["竞品跟进风险", "高溢价卖点被快速复制", "外观、IP、包装体验和评论证据形成组合壁垒", fallback_source],
     ]
@@ -4430,6 +4474,11 @@ def render_lifecycle_risks(fallback_source: str) -> str:
 
 def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict[str, Any], fallback_source: str) -> str:
     products = effective_products(data_pack)
+    readiness = current_readiness_view(data_pack)
+    if readiness.get("supply_blocked"):
+        launch_priority = "P1 候选 SKU 先补供应链证据；成本和毛利率恢复前不进入可打样判断。"
+    else:
+        launch_priority = "P1 可控供应链、低风险触点和 Bundle 组合优先。"
     rows = [
         ["Amazon 产品页面分析", f"{len(products)} 个目标竞品", "用竞品卖点、价格带和评论密度校准首批 SKU", fallback_source],
         ["TikTok 与社交媒体信号", f"{len(data_pack.get('tiktok_products') or [])} 个商品；{len(data_pack.get('tiktok_videos') or [])} 条视频", "筛出适合内容验证的场景型 Bundle", fallback_source],
@@ -4446,7 +4495,7 @@ def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict
     )
     return source_grid + lifecycle_evidence_drawer("市场数据验证", ["数据域", "覆盖", "建议动作", "source_id"], rows) + conclusion_block(
         [
-            ("首发优先级", "P1 可控供应链、低风险触点和 Bundle 组合优先。"),
+            ("首发优先级", launch_priority),
             ("生命周期", "用开箱、7 天、60-90 天复购触点组织 SKU。"),
             ("AOV", "通过新手套装、礼品套装和补给包形成价格台阶。"),
         ],
@@ -4745,18 +4794,21 @@ def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str
     negative_cards = [evidence_card(review, "pain", idx) for idx, review in enumerate(negative_reviews, 1)]
 
     def diagnostic_card(tone: str, label: str, idx: int) -> str:
+        direction = "正面卖点验证" if tone == "joy" else "负面痛点验证"
+        next_step = "继续采集同赛道评论原声，并优先补齐带星级、标题和正文的可引用评论。"
+        action = "原声数量达标后再生成可执行卖点" if tone == "joy" else "原声数量达标后再生成结构修复动作"
         return (
             f"<article class=\"demand-evidence-card {esc(tone)} diagnostic\">"
-            + f"<div class=\"evidence-card-head\"><span>{idx:02d} · {esc(label)}</span><b>证据采集诊断</b></div>"
-            + "<p class=\"review-excerpt-en\">英文评论短摘：审计文件未提供达到固定展示门槛的原文。</p>"
-            + "<p class=\"quote-cn\"><strong>中文洞察：</strong>该槽位保留为标准模板结构，系统应继续采集评论并在审计文件说明原因。</p>"
+            + f"<div class=\"evidence-card-head\"><span>{idx:02d} · {esc(label)}</span><b>评论证据槽位</b></div>"
+            + f"<p class=\"review-excerpt-en\"><strong>英文评论短摘：</strong>{esc(next_step)}</p>"
+            + f"<p class=\"quote-cn\"><strong>中文洞察：</strong>当前{esc(label)}原声数量不足以生成稳定结论；该卡位只用于提示下一轮采集方向，不写成产品承诺。</p>"
             + "<dl class=\"demand-evidence-meta\">"
             + "<div><dt>需求强度</dt><dd>数据缺口</dd></div>"
-            + "<div><dt>主题</dt><dd>评论证据</dd></div>"
-            + "<div><dt>竞品未满足点</dt><dd>需要更多原声验证</dd></div>"
-            + "<div><dt>可落地产品机会</dt><dd>完成评论证据后再生成机会</dd></div>"
+            + f"<div><dt>主题</dt><dd>{esc(direction)}</dd></div>"
+            + "<div><dt>竞品未满足点</dt><dd>评论原声覆盖不足，不能稳定判断竞品缺口</dd></div>"
+            + f"<div><dt>可落地产品机会</dt><dd>{esc(action)}</dd></div>"
             + "</dl>"
-            + "<div class=\"quote-origin\">证据锚点：评论采集诊断</div>"
+            + "<div class=\"quote-origin\">证据锚点：下一轮评论采集</div>"
             + "</article>"
         )
 
@@ -4765,7 +4817,7 @@ def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str
     while len(negative_cards) < 6:
         negative_cards.append(diagnostic_card("pain", "负面反馈", len(negative_cards) + 1))
     if not rows:
-        rows = [["-", "-", "评论采集诊断", "审计文件记录原文", "评论证据未达到固定展示门槛，需求判断保持 Watch。", "数据缺口", "增加评论抓取轮次", "完成评论证据后再生成需求机会"]]
+        rows = [["-", "-", "评论证据槽位", "继续采集同赛道评论原声", "评论证据未达到固定展示门槛，需求判断保持 Watch。", "数据缺口", "增加评论抓取轮次", "原声数量达标后再生成需求机会"]]
     evidence_table = table(["评论记录", "星级", "情绪", "英文评论短摘", "中文洞察", "需求强度", "竞品未满足点", "可落地产品机会"], rows, "evidence-table sku")
     return (
         "<div class=\"demand-evidence-grid demand-sentiment-columns\">"

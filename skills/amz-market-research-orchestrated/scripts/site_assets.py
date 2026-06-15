@@ -124,6 +124,24 @@ REPORT_JS = """
     const n=Number(el.dataset.width||0);
     el.style.width=`${Math.max(0,Math.min(100,n))}%`;
   });
+  function showImageFallback(img){
+    const fallback=img&&img.nextElementSibling;
+    if(!fallback||!fallback.classList||!fallback.classList.contains('image-load-fallback'))return;
+    img.hidden=true;
+    fallback.hidden=false;
+  }
+  function checkImageFallbacks(){
+    document.querySelectorAll('.image-frame img').forEach(img=>{
+      if(img.hidden)return;
+      if(img.complete&&img.naturalWidth>0)return;
+      showImageFallback(img);
+    });
+  }
+  globalThis.__reportCheckImageFallbacks=checkImageFallbacks;
+  if(typeof window!=='undefined'&&window.addEventListener){
+    window.addEventListener('load',()=>setTimeout(checkImageFallbacks,1600));
+  }
+  setTimeout(checkImageFallbacks,2600);
   document.querySelectorAll('table').forEach((table,idx)=>{
     if(table.dataset.enhanced)return;
     table.dataset.enhanced='true';

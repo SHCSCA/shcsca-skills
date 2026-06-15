@@ -1125,6 +1125,56 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("supply chain HTML contradicts passing readiness", result.stderr + result.stdout)
 
+    def test_rejects_blocked_supply_readiness_with_lifecycle_passing_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "normalized" / "data_readiness_report.json",
+                {
+                    "acceptance_ready": False,
+                    "partial_report_ready": True,
+                    "supply_conclusion_blocked": True,
+                    "supplier_quote_gate": {"passed": False, "actual": 9, "required": 50},
+                    "supplier_quality_gate": {"customer_visible_passed": False},
+                },
+            )
+            write_text(
+                report_dir / "output" / "html_reports" / "market-depth-report.html",
+                "<html><body><section>供应链测算未达门槛</section></body></html>",
+            )
+            write_text(
+                report_dir / "output" / "html_reports" / "lifecycle-strategy-report.html",
+                "<html><body><section>供应链可控度 门禁通过 P1 可控供应链 首发可控 SKU</section></body></html>",
+            )
+
+            with self.assertRaisesRegex(validator.ValidationError, "blocked supply readiness"):
+                validator.validate_supply_html_readiness_alignment(report_dir)
+
+    def test_rejects_blocked_supply_readiness_with_lifecycle_misleading_metric_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "normalized" / "data_readiness_report.json",
+                {
+                    "acceptance_ready": False,
+                    "partial_report_ready": True,
+                    "supply_conclusion_blocked": True,
+                    "supplier_quote_gate": {"passed": False, "actual": 9, "required": 50},
+                    "supplier_quality_gate": {"customer_visible_passed": False},
+                },
+            )
+            write_text(
+                report_dir / "output" / "html_reports" / "market-depth-report.html",
+                "<html><body><section>供应链测算未达门槛</section></body></html>",
+            )
+            write_text(
+                report_dir / "output" / "html_reports" / "lifecycle-strategy-report.html",
+                "<html><body><section>供应链可控度：供应链测算未达门槛。P1 首发 SKU：供应链补采前仅为候选。</section></body></html>",
+            )
+
+            with self.assertRaisesRegex(validator.ValidationError, "blocked supply readiness"):
+                validator.validate_supply_html_readiness_alignment(report_dir)
+
     def test_rejects_normalized_data_pack_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1320,6 +1370,22 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
         self.assertIn("missing canonical template structure", str(ctx.exception))
 
+    def test_demand_template_parity_requires_shared_report_header_structure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_doc = (report_dir / "output/html_reports/demand-gap-report.html").read_text(encoding="utf-8")
+            html_doc = html_doc.replace('class="report-header"', 'class="legacy-heading"', 1)
+
+            with self.assertRaises(validator.ValidationError) as ctx:
+                validator.validate_template_dom_class_parity(
+                    "output/html_reports/demand-gap-report.html",
+                    html_doc,
+                    "demand-gap-report-v2",
+                )
+
+            self.assertIn("missing canonical template structure", str(ctx.exception))
+
     def test_rejects_customer_html_leaking_technical_identifiers(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1352,7 +1418,18 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertIn("customer HTML leaks technical identifier", result.stderr + result.stdout)
 
     def test_rejects_customer_html_placeholder_wording(self):
-        for placeholder in ["样本", "待补", "暂无有效数据", "未分层", "清洗数据", "清洗后数据", "清洗后的竞品"]:
+        for placeholder in [
+            "样本",
+            "待补",
+            "暂无有效数据",
+            "未分层",
+            "清洗数据",
+            "清洗后数据",
+            "清洗后的竞品",
+            "证据采集诊断",
+            "审计文件未提供",
+            "需要更多原声验证",
+        ]:
             with self.subTest(placeholder=placeholder):
                 with tempfile.TemporaryDirectory() as tmp:
                     report_dir = Path(tmp)

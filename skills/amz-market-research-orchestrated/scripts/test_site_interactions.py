@@ -65,6 +65,7 @@ class Element {
   setAttribute(key, value) { this.attributes[key] = String(value); if (key === 'aria-selected') this.ariaSelected = String(value); }
   matches(selector) {
     if (selector === 'table') return this.tag === 'table';
+    if (selector === 'img') return this.tag === 'img';
     if (selector === 'th') return this.tag === 'th';
     if (selector === 'tbody tr') return this.tag === 'tr' && this.parentNode && this.parentNode.tag === 'tbody';
     if (selector === '[data-tabs]') return this.dataset.tabs !== undefined;
@@ -123,6 +124,13 @@ panelB.dataset.tabPanel = 'b';
 
 const chart = root.appendChild(new Element('div', 'mini-chart'));
 const bar = chart.appendChild(new Element('div', 'bar-row'));
+const imageFrame = root.appendChild(new Element('span', 'image-frame'));
+const image = imageFrame.appendChild(new Element('img', 'comp-product-thumb'));
+image.complete = false;
+image.naturalWidth = 0;
+const imageFallback = imageFrame.appendChild(new Element('span', 'image-load-fallback', '图片加载失败'));
+imageFallback.hidden = true;
+image.nextElementSibling = imageFallback;
 
 global.document = {
   querySelector(selector) {
@@ -134,10 +142,13 @@ global.document = {
     if (selector === 'table') return [table];
     if (selector === '[data-tabs]') return [tabs];
     if (selector === '.mini-chart .bar-row') return [bar];
+    if (selector === '.image-frame img') return [image];
     return root.querySelectorAll(selector);
   },
   createElement(tag) { return new Element(tag); }
 };
+
+global.window = { addEventListener() {} };
 
 eval(reportJs);
 
@@ -150,6 +161,7 @@ tabB.dispatch('click');
 bar.dispatch('mouseenter');
 const hovered = bar.classList.contains('is-linked');
 bar.dispatch('mouseleave');
+globalThis.__reportCheckImageFallbacks();
 
 const result = {
   navOpen: nav.classList.contains('is-open'),
@@ -157,7 +169,8 @@ const result = {
   appleFiltered: tbody.rows.find(row => row.cells[0].textContent === 'apple').classList.contains('is-filtered-out'),
   sortedFirstRow: tbody.rows[0].cells[0].textContent,
   tabBSelected: tabB.attributes['aria-selected'] === 'true' && panelA.hidden === true && panelB.hidden === false,
-  chartHover: hovered && !bar.classList.contains('is-linked')
+  chartHover: hovered && !bar.classList.contains('is-linked'),
+  imageFallback: image.hidden === true && imageFallback.hidden === false
 };
 
 console.log(JSON.stringify(result));
@@ -181,6 +194,7 @@ class SiteInteractionsTest(unittest.TestCase):
         self.assertEqual(payload["sortedFirstRow"], "apple")
         self.assertTrue(payload["tabBSelected"])
         self.assertTrue(payload["chartHover"])
+        self.assertTrue(payload["imageFallback"])
 
 
 if __name__ == "__main__":
