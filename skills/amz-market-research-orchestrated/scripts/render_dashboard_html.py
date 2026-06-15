@@ -4574,10 +4574,10 @@ def render_voice_theater(data_pack: dict[str, Any], fallback_source: str) -> str
     evidence_table = table(["评论记录", "星级", "情绪", "英文评论短摘", "中文洞察", "需求强度", "竞品未满足点", "可落地产品机会"], rows, "evidence-table sku")
     return (
         "<div class=\"demand-evidence-grid demand-sentiment-columns\">"
-        + "<section class=\"demand-sentiment-column positive\"><div class=\"demand-column-head\"><span>Positive</span><h3>正面反馈</h3><p>左侧只呈现可转化为卖点、主图和五点表达的高星证据。</p></div>"
+        + "<section class=\"demand-sentiment-column positive\"><div class=\"demand-column-head\"><span>高星证据</span><h3>正面反馈</h3><p>左侧只呈现可转化为卖点、主图和五点表达的高星证据。</p></div>"
         + "".join(positive_cards)
         + "</section>"
-        + "<section class=\"demand-sentiment-column negative\"><div class=\"demand-column-head\"><span>Negative</span><h3>负面反馈</h3><p>右侧只呈现必须转成结构修复、页面承诺和售后方案的低星证据。</p></div>"
+        + "<section class=\"demand-sentiment-column negative\"><div class=\"demand-column-head\"><span>低星证据</span><h3>负面反馈</h3><p>右侧只呈现必须转成结构修复、页面承诺和售后方案的低星证据。</p></div>"
         + "".join(negative_cards)
         + "</section></div>"
         + details("用户原声证据明细表", evidence_table, False)

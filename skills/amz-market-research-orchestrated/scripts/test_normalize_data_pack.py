@@ -117,6 +117,48 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertNotEqual(product.get("positioning_cn"), "户外感应灯")
             self.assertNotIn("customer_title_cn", product)
 
+    def test_review_summary_does_not_reuse_toy_gift_copy_for_non_toy_reviews(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "asin",
+                        "value": "B0BR4QYGS7",
+                        "category": "Hunting Blinds",
+                        "seed_keywords": ["hunting blind", "see through ground blind"],
+                    },
+                    "products": [],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [
+                        {
+                            "asin": "B0BR4QYGS7",
+                            "rating": 5,
+                            "title": "Great size for an adult plus two kids",
+                            "text": "Awesome see-through blind for turkey hunting. Great size for an adult plus two kids. Lightweight and easy to set up.",
+                        }
+                    ],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            summary = data_pack["reviews"][0]["summary_cn"]
+            self.assertNotIn("开箱、陪伴和礼品场景", summary)
+            self.assertNotIn("儿童陪伴", summary)
+            self.assertTrue(any(token in summary for token in ["轻便", "安装", "使用满意度", "场景匹配"]))
+
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)

@@ -30,6 +30,10 @@ POWER_CONTEXT_TERMS = [
     "容量",
 ]
 
+STALE_REVIEW_SUMMARY_PHRASES = [
+    "正向反馈集中在开箱、陪伴和礼品场景",
+]
+
 THEME_ALIASES_CN = {
     "ease_of_use": "易用性",
     "easy_to_use": "易用性",
@@ -77,6 +81,8 @@ def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
     for key in ("summary_cn", "text_cn", "quote_cn", "review_cn"):
         value = clean(review.get(key))
         if value:
+            if any(phrase in value for phrase in STALE_REVIEW_SUMMARY_PHRASES):
+                break
             if rating >= 4 and any(phrase in value for phrase in negative_summary_phrases):
                 break
             return truncate(value, limit)

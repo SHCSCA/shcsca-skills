@@ -1630,8 +1630,16 @@ def review_summary_cn(review: dict[str, Any]) -> str:
         phrases.append("材质做工和耐用性需要加强")
     if any(term in text for term in ["refund", "return", "warranty", "support", "service"]):
         phrases.append("售后承诺需要前置说明")
-    if any(term in text for term in ["love", "cute", "fun", "gift", "kids", "daughter", "son"]):
-        phrases.append("正向反馈集中在开箱、陪伴和礼品场景")
+    if re.search(r"\blight\s*weight\b|\blightweight\b", text):
+        phrases.append("轻便和携带体验获得正向反馈")
+    if any(term in text for term in ["easy", "install", "setup", "set up", "assemble"]):
+        phrases.append("安装和上手体验获得正向反馈")
+    if any(term in text for term in ["love", "great", "works well", "perfect", "recommend", "awesome", "excellent"]):
+        phrases.append("整体使用满意度形成正向反馈")
+    if any(term in text for term in ["gift", "kids", "daughter", "son", "family"]):
+        phrases.append("家庭或多人使用场景获得正向反馈")
+    if any(term in text for term in ["cute", "fun", "interactive", "play"]):
+        phrases.append("趣味性和互动体验获得正向反馈")
 
     if not phrases:
         rating = as_number(review.get("rating"))

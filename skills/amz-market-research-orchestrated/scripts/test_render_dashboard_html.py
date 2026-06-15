@@ -2154,6 +2154,26 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertEqual(positive_section.count("market-voc-card joy"), 6)
         self.assertEqual(negative_section.count("market-voc-card pain"), 6)
 
+    def test_market_voc_recomputes_known_stale_toy_summary_for_other_categories(self):
+        html = renderer.render_voc(
+            {
+                "reviews": [
+                    {
+                        "rating": 5,
+                        "title": "Great size for an adult plus two kids",
+                        "text": "Awesome see-through blind for turkey hunting. Great size for an adult plus two kids. Lightweight and easy to set up.",
+                        "summary_cn": "正向反馈集中在开箱、陪伴和礼品场景",
+                        "themes": ["size_finish_design", "ease_of_use"],
+                    }
+                ]
+            },
+            {},
+        )
+
+        self.assertNotIn("开箱、陪伴和礼品场景", html)
+        self.assertNotIn("儿童陪伴", html)
+        self.assertTrue("轻便" in html or "安装" in html or "使用满意度" in html)
+
     def test_demand_target_anchor_keeps_reference_section_clean(self):
         data_pack = {
             "products": [
@@ -2257,6 +2277,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("demand-sentiment-columns", html)
         self.assertIn("正面反馈", html)
         self.assertIn("负面反馈", html)
+        self.assertIn("高星证据", html)
+        self.assertIn("低星证据", html)
+        self.assertNotIn(">Positive<", html)
+        self.assertNotIn(">Negative<", html)
         self.assertIn("用户原声证据明细表", html)
         self.assertIn("evidence-drawer", html)
         self.assertNotIn("需补齐证据", html)
