@@ -1226,7 +1226,13 @@ def compact_cosmo_product_type(term: str) -> str:
     return text if len(text) <= 12 else ""
 
 
-def add_generic_relation_terms(candidates: list[str], relation_type: str, text: str, raw_term: str) -> None:
+def add_generic_relation_terms(
+    candidates: list[str],
+    relation_type: str,
+    text: str,
+    raw_term: str,
+    child_product_context: bool = False,
+) -> None:
     lower = text.casefold()
     if relation_type in {"USED_AS", "IS_A"}:
         compact = compact_cosmo_product_type(raw_term) or compact_cosmo_product_type(text)
@@ -1254,12 +1260,15 @@ def add_generic_relation_terms(candidates: list[str], relation_type: str, text: 
             if any(cosmo_cue_matches(text, lower, cue) for cue in cues):
                 add_unique_cosmo_candidate(candidates, label)
     if relation_type in {"USED_FOR_AUD", "USED_BY", "xIs_A"}:
+        child_audience_label = "儿童使用场景" if child_product_context else "家庭安全关注场景"
+        child_user_label = "父母购买者" if child_product_context else "家庭照护者"
+        child_identity_label = "儿童礼品决策者" if child_product_context else "家庭安全决策者"
         user_label_sets = {
             "USED_FOR_AUD": [
                 ("宠物家庭", ["pet", "宠物", "猫", "狗"]),
                 ("猫咪家庭", ["cat", "猫咪", "猫"]),
                 ("家庭使用场景", ["home", "家庭", "家用"]),
-                ("儿童使用场景", ["kids", "children", "儿童"]),
+                (child_audience_label, ["kids", "children", "儿童"]),
                 ("户外人群", ["outdoor", "户外"]),
                 ("专业使用场景", ["professional", "专业"]),
             ],
@@ -1267,7 +1276,7 @@ def add_generic_relation_terms(candidates: list[str], relation_type: str, text: 
                 ("宠物主人", ["pet", "宠物", "猫", "狗"]),
                 ("养猫用户", ["cat", "猫咪", "猫"]),
                 ("家庭用户", ["home", "家庭", "家用"]),
-                ("父母购买者", ["kids", "children", "儿童"]),
+                (child_user_label, ["kids", "children", "儿童"]),
                 ("户外使用者", ["outdoor", "户外"]),
                 ("专业用户", ["professional", "专业"]),
             ],
@@ -1275,7 +1284,7 @@ def add_generic_relation_terms(candidates: list[str], relation_type: str, text: 
                 ("养宠家庭", ["pet", "宠物", "猫", "狗"]),
                 ("猫咪照护者", ["cat", "猫咪", "猫"]),
                 ("家庭采购者", ["home", "家庭", "家用"]),
-                ("儿童礼品决策者", ["kids", "children", "儿童"]),
+                (child_identity_label, ["kids", "children", "儿童"]),
                 ("户外运动用户", ["outdoor", "户外"]),
                 ("专业买家", ["professional", "专业"]),
             ],
@@ -1352,6 +1361,31 @@ def is_audio_cosmo_context(text: str) -> bool:
     )
 
 
+def is_child_product_cosmo_context(text: str) -> bool:
+    lower = clean(text).casefold()
+    return any(
+        cue in lower
+        for cue in [
+            "kids toy",
+            "children toy",
+            "baby toy",
+            "plush toy",
+            "stuffed animal",
+            "interactive toy",
+            "companion toy",
+            "toy for kids",
+            "toy gift",
+            "儿童玩具",
+            "儿童礼品",
+            "毛绒玩具",
+            "智能陪伴玩具",
+            "陪伴玩具",
+            "亲子玩具",
+            "礼品玩具",
+        ]
+    )
+
+
 def cosmo_domain_context(record: dict[str, Any], detector) -> bool:
     context_text = clean(record.get("research_context"))
     record_text = clean(record.get("text"))
@@ -1366,6 +1400,7 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
     lower = text.casefold()
     hunting_context = cosmo_domain_context(record, is_hunting_cosmo_context)
     audio_context = cosmo_domain_context(record, is_audio_cosmo_context)
+    child_product_context = is_child_product_cosmo_context(clean(record.get("research_context"))) or is_child_product_cosmo_context(text)
     raw_term = normalize_cosmo_term(record.get("term"))
     candidates: list[str] = []
 
@@ -1469,7 +1504,7 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
         add_when("材质更耐用", "durable", "quality", "sturdy", "耐用", "质量", "材质")
         add_when("空间更充足", "roomy", "space", "spacious", "空间", "尺寸")
 
-    add_generic_relation_terms(candidates, relation_type, text, raw_term)
+    add_generic_relation_terms(candidates, relation_type, text, raw_term, child_product_context)
 
     if candidates:
         return candidates

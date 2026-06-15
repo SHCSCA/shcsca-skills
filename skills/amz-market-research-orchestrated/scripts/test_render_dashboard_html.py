@@ -730,6 +730,43 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         for forbidden in ["火鸡狩猎", "鹿猎场景", "户外狩猎活动", "狩猎体验", "户外音乐"]:
             self.assertNotIn(forbidden, all_terms)
 
+    def test_cosmo_renderer_treats_kids_mentions_as_family_safety_for_non_toy_products(self):
+        data_pack = {
+            "research_object": {"value": "under cabinet motion sensor light"},
+            "products": [
+                {
+                    "asin": "B0LIGHT0002",
+                    "title": "Rechargeable Under Cabinet Motion Sensor Light for Kitchen Stairs",
+                    "title_cn": "无线充电橱柜感应灯 楼梯厨房夜间照明",
+                    "brand": "LightBrand",
+                    "segment_cn": "橱柜感应灯",
+                    "category": "Under Cabinet Lights",
+                    "price": 19.99,
+                    "rating": 4.5,
+                    "review_count": 1200,
+                    "estimated_monthly_sales": 900,
+                }
+            ],
+            "keywords": [
+                {"keyword": "under cabinet motion sensor light", "keyword_cn": "橱柜感应灯", "intent_cn": "厨房照明"}
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "I use these lights on the stairs at night so kids and family can walk safely.",
+                    "theme_cn": "夜间安全",
+                    "summary_cn": "用户认可夜间照明和家庭安全感。",
+                }
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+
+        self.assertIn("家庭使用场景", all_terms)
+        for forbidden in ["儿童使用场景", "父母购买者", "儿童礼品决策者"]:
+            self.assertNotIn(forbidden, all_terms)
+
     def test_cosmo_renderer_localizes_and_deduplicates_profile_terms_for_customer_html(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
