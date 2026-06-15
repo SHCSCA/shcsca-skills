@@ -298,12 +298,21 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             "cosmo-top-list",
             "cosmo-gap-panel",
             "cosmo-action-board",
+            "cosmo-card-meta-grid",
+            "cosmo-term-block",
+            "cosmo-action-direction",
             "15 标签矩阵",
             "高置信标签排行",
             "产品标签 / 用户标签缺口",
             "Listing / QA / 广告动作",
+            "标签对象",
+            "证据强度",
+            "动作方向",
         ]:
             self.assertIn(required, html)
+        self.assertGreaterEqual(html.count('class="cosmo-card-meta-grid"'), 15)
+        self.assertGreaterEqual(html.count('class="cosmo-term-block"'), 15)
+        self.assertGreaterEqual(html.count('class="cosmo-action-direction"'), 15)
         self.assertNotIn(">USED_FOR_FUNC<", html)
         self.assertNotIn(">USED_IN_BODY<", html)
         self.assertIn('class="cosmo-relation-kind">产品意图</span>', html)
@@ -2095,6 +2104,20 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn(".market-voc-card.joy", REPORT_CSS)
         self.assertIn(".market-voc-card.pain", REPORT_CSS)
 
+    def test_report_css_styles_cosmo_reference_template_slots(self):
+        from site_assets import REPORT_CSS
+
+        for selector in [
+            ".cosmo-card-meta-grid",
+            ".cosmo-term-block",
+            ".cosmo-block-label",
+            ".cosmo-action-direction",
+            ".cosmo-evidence-strip em",
+        ]:
+            self.assertIn(selector, REPORT_CSS)
+        self.assertRegex(REPORT_CSS, r"\.cosmo-card-meta-grid\{[^}]*grid-template-columns:repeat\(2")
+        self.assertRegex(REPORT_CSS, r"\.cosmo-action-direction\{[^}]*border-top:")
+
     def test_market_voc_splits_positive_left_and_negative_right(self):
         reviews = []
         for idx in range(8):
@@ -2120,6 +2143,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("market-voc-sentiment-columns", html)
         self.assertIn("正面好评", html)
         self.assertIn("负面差评", html)
+        self.assertIn("高星证据", html)
+        self.assertIn("低星证据", html)
+        self.assertNotIn("Positive Reviews", html)
+        self.assertNotIn("Negative Reviews", html)
         self.assertLess(html.find("正面好评"), html.find("负面差评"))
         self.assertNotIn('class="quote-grid"', html)
         positive_section = html.split("负面差评", 1)[0]

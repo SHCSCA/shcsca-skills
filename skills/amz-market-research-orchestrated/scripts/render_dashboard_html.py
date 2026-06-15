@@ -1778,6 +1778,15 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
             hint = cosmo_low_coverage_hint(item.get("label_cn"))
             if hint not in terms:
                 terms.append(hint)
+        action_direction = " / ".join(
+            part
+            for part in [
+                clean(item.get("listing_label")),
+                clean(item.get("qa_label")),
+                clean(item.get("ad_label")),
+            ]
+            if part
+        ) or "补证后再进入页面承诺"
         return (
             "<article class=\"cosmo-tag-card cosmo-matrix-cell\" "
             + f"data-cosmo-relation=\"{esc(item.get('slot_id'))}\" data-confidence=\"{esc(item.get('confidence'))}\" data-dimension=\"{esc(item.get('dimension'))}\">"
@@ -1790,11 +1799,17 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
             + "</div>"
             + f"<span class=\"cosmo-confidence-pill\">{esc(item.get('confidence'))}置信</span></div>"
             + f"<p class=\"cosmo-relation-meta\">{esc(item.get('dimension'))} · {esc(item.get('coverage_status'))}</p>"
+            + "<dl class=\"cosmo-card-meta-grid\">"
+            + f"<div><dt>标签对象</dt><dd>{esc(marker)}标签</dd></div>"
+            + f"<div><dt>证据强度</dt><dd>{esc(item.get('confidence'))} · {esc(item.get('evidence_count'))} 条</dd></div>"
+            + "</dl>"
+            + "<div class=\"cosmo-term-block\"><div class=\"cosmo-block-label\">核心标签</div>"
             + "<div class=\"cosmo-tag-terms\">"
             + "".join(f"<span>{esc(term)}</span>" for term in terms)
-            + "</div>"
-            + f"<div class=\"cosmo-evidence-strip\"><span>证据</span><b>{esc(item.get('evidence_count'))}</b></div>"
+            + "</div></div>"
+            + f"<div class=\"cosmo-evidence-strip\"><span>证据强度</span><b>{esc(item.get('evidence_count'))}</b><em>{esc(item.get('coverage_status'))}</em></div>"
             + f"<p class=\"cosmo-business-meaning\"><b>业务解释：</b>{esc(item.get('business_meaning'))}</p>"
+            + f"<div class=\"cosmo-action-direction\"><span>动作方向</span><b>{esc(action_direction)}</b></div>"
             + "</article>"
         )
 
@@ -2462,10 +2477,10 @@ def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
     )
     quote_grid = (
         "<div class=\"market-voc-sentiment-columns\">"
-        + "<section class=\"market-voc-column positive\"><div class=\"market-voc-column-head\"><span>Positive Reviews</span><h3>正面好评</h3><p>左侧只放可转化为主图、五点、A+ 和广告落地页的高星证据。</p></div>"
+        + "<section class=\"market-voc-column positive\"><div class=\"market-voc-column-head\"><span>高星证据</span><h3>正面好评</h3><p>左侧只放可转化为主图、五点、A+ 和广告落地页的高星证据。</p></div>"
         + "".join(positive_cards)
         + "</section>"
-        + "<section class=\"market-voc-column negative\"><div class=\"market-voc-column-head\"><span>Negative Reviews</span><h3>负面差评</h3><p>右侧只放必须转成产品修复、页面承诺或售后动作的低星证据。</p></div>"
+        + "<section class=\"market-voc-column negative\"><div class=\"market-voc-column-head\"><span>低星证据</span><h3>负面差评</h3><p>右侧只放必须转成产品修复、页面承诺或售后动作的低星证据。</p></div>"
         + "".join(negative_cards)
         + "</section></div>"
     )

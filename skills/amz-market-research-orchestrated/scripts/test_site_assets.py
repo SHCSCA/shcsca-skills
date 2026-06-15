@@ -166,8 +166,11 @@ class SiteAssetsTest(unittest.TestCase):
         self.assertIn(".cosmo-matrix-cell[data-dimension=\"产品标签\"]", REPORT_CSS)
         self.assertNotIn("min-height:214px", REPORT_CSS)
         self.assertNotIn("cosmo-matrix-cell{border:1px solid rgba(26,39,68,.12);background:#fbfcfd;padding:12px;min-height:168px;display:grid;grid-template-rows:auto auto auto auto;align-content:start;gap:7px;overflow:hidden", REPORT_CSS)
-        self.assertIn(".cosmo-matrix-cell{border:1px solid rgba(26,39,68,.12);background:#fbfcfd;padding:12px;min-height:188px;display:grid", REPORT_CSS)
-        self.assertIn(".cosmo-matrix-cell{border:1px solid rgba(26,39,68,.12);background:#fbfcfd;padding:12px;min-height:188px;display:grid;grid-template-rows:auto auto auto auto 1fr;align-content:start;gap:7px;overflow:visible", REPORT_CSS)
+        self.assertIn(".cosmo-matrix-cell{border:1px solid rgba(26,39,68,.12);background:#fbfcfd;padding:12px;min-height:248px;display:grid", REPORT_CSS)
+        self.assertIn(".cosmo-matrix-cell{border:1px solid rgba(26,39,68,.12);background:#fbfcfd;padding:12px;min-height:248px;display:grid;grid-template-rows:auto;align-content:start;gap:8px;overflow:visible", REPORT_CSS)
+        self.assertIn(".cosmo-card-meta-grid", REPORT_CSS)
+        self.assertIn(".cosmo-term-block", REPORT_CSS)
+        self.assertIn(".cosmo-action-direction", REPORT_CSS)
         self.assertIn(".cosmo-business-meaning{margin:0!important", REPORT_CSS)
         self.assertIn(".comp-image-diagnostic-card", REPORT_CSS)
 
