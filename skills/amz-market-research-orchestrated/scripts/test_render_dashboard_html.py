@@ -323,6 +323,31 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('data-dimension="用户标签"', html)
         self.assertNotIn('class="cosmo-relation-code">功能·用途</div>', html)
 
+    def test_cosmo_renderer_adds_reference_style_summary_kpi_strip(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎盲棚"},
+                {"keyword": "ground blind", "keyword_cn": "地面盲棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "Easy to set up and keeps me concealed.", "theme_cn": "安装与隐蔽"},
+                {"rating": 2, "text": "The fabric is not durable enough.", "theme_cn": "质量与耐用"},
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertIn('class="cosmo-summary-strip"', html)
+        self.assertEqual(html.count('class="cosmo-summary-item'), 4)
+        for label in ["产品标签覆盖", "用户标签覆盖", "高置信关系", "低覆盖关系"]:
+            self.assertIn(label, html)
+        self.assertRegex(html, r"<b>\d+/6</b>")
+        self.assertRegex(html, r"<b>\d+/9</b>")
+        self.assertLess(html.index('class="cosmo-summary-strip"'), html.index('class="cosmo-layout"'))
+
     def test_cosmo_renderer_shows_customer_safe_evidence_sources_per_relation(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
@@ -2292,6 +2317,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         from site_assets import REPORT_CSS
 
         for selector in [
+            ".cosmo-summary-strip",
+            ".cosmo-summary-item",
+            ".cosmo-summary-item.product",
+            ".cosmo-summary-item.user",
             ".cosmo-card-meta-grid",
             ".cosmo-term-block",
             ".cosmo-block-label",
@@ -2300,6 +2329,8 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             ".cosmo-evidence-sources",
         ]:
             self.assertIn(selector, REPORT_CSS)
+        self.assertRegex(REPORT_CSS, r"\.cosmo-summary-strip\{[^}]*grid-template-columns:repeat\(4")
+        self.assertRegex(REPORT_CSS, r"\.cosmo-summary-item b\{[^}]*font-size:")
         self.assertRegex(REPORT_CSS, r"\.cosmo-card-meta-grid\{[^}]*grid-template-columns:repeat\(2")
         self.assertRegex(REPORT_CSS, r"\.cosmo-action-direction\{[^}]*border-top:")
 

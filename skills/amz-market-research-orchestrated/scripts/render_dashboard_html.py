@@ -2043,6 +2043,20 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
     )
     product_count = len([item for item in relations if item.get("dimension") == "产品标签" and item.get("evidence_count", 0) > 0])
     user_count = len([item for item in relations if item.get("dimension") == "用户标签" and item.get("evidence_count", 0) > 0])
+    high_count = len([item for item in relations if item.get("confidence") == "高"])
+    low_count = len([item for item in relations if item.get("confidence") == "低"])
+    summary_strip = (
+        "<div class=\"cosmo-summary-strip\">"
+        + "<div class=\"cosmo-summary-item product\"><span>产品标签覆盖</span>"
+        + f"<b>{esc(product_count)}/6</b><em>标题、类目、卖点承诺</em></div>"
+        + "<div class=\"cosmo-summary-item user\"><span>用户标签覆盖</span>"
+        + f"<b>{esc(user_count)}/9</b><em>人群、场景、QA 和广告</em></div>"
+        + "<div class=\"cosmo-summary-item strong\"><span>高置信关系</span>"
+        + f"<b>{esc(high_count)}</b><em>可进入页面和广告动作</em></div>"
+        + "<div class=\"cosmo-summary-item weak\"><span>低覆盖关系</span>"
+        + f"<b>{esc(low_count)}</b><em>只保留诊断，不写成承诺</em></div>"
+        + "</div>"
+    )
     gap_text = (
         f"产品标签已覆盖 {product_count} 类，用户标签已覆盖 {user_count} 类。"
         "若用户标签少于产品标签，下一轮应优先补充适用人群、使用场景、季节/地点和 QA 问答。"
@@ -2052,6 +2066,7 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
         + "<div class=\"kpi-grid\">"
         + "".join(cards)
         + "</div>"
+        + summary_strip
         + "<div class=\"cosmo-layout\">"
         + "<section class=\"cosmo-panel cosmo-matrix\"><div class=\"cosmo-panel-title\">15 标签矩阵</div>"
         + matrix_lanes
