@@ -986,6 +986,7 @@ COSMO_ENGLISH_TERM_TRANSLATIONS = {
 
 def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+    research_context = cosmo_research_context_text(data_pack)
     for product in effective_products(data_pack):
         label = customer_product_position(product)
         text = " ".join(
@@ -996,6 +997,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "term": label,
                 "text": f"{label} {text}",
+                "research_context": research_context,
                 "source_type": "effective_products",
                 "source_id": source_ids_for(product, ""),
                 "field": "title/segment",
@@ -1011,6 +1013,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "term": label,
                 "text": f"{label} {text}",
+                "research_context": research_context,
                 "source_type": "effective_keywords",
                 "source_id": source_ids_for(keyword, ""),
                 "field": "keyword",
@@ -1024,6 +1027,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "term": themes or summary,
                 "text": f"{themes} {summary} {text}",
+                "research_context": research_context,
                 "source_type": "effective_reviews",
                 "source_id": source_ids_for(review, ""),
                 "field": "review",
@@ -1036,6 +1040,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "term": label,
                 "text": f"{label} {text}",
+                "research_context": research_context,
                 "source_type": "tiktok_signals",
                 "source_id": source_ids_for(item, ""),
                 "field": "content_signal",
@@ -1050,6 +1055,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "term": label,
                 "text": f"{label} {text}",
+                "research_context": research_context,
                 "source_type": "effective_suppliers",
                 "source_id": source_ids_for(supplier, ""),
                 "field": "supplier_title",
@@ -1058,12 +1064,31 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     return [record for record in records if clean(record.get("term")) or clean(record.get("text"))]
 
 
+def cosmo_research_context_text(data_pack: dict[str, Any]) -> str:
+    parts: list[str] = []
+    research_object = data_pack.get("research_object")
+    if isinstance(research_object, dict):
+        parts.append(clean(research_object.get("value")))
+        parts.extend(clean(item) for item in research_object.get("seed_keywords") or [])
+    else:
+        parts.append(clean(research_object))
+    for product in effective_products(data_pack)[:20]:
+        parts.extend(
+            clean(product.get(key))
+            for key in ("title", "title_cn", "category", "category_cn", "segment", "segment_cn", "positioning_cn")
+        )
+    for category in data_pack.get("categories") or []:
+        if isinstance(category, dict):
+            parts.extend(clean(category.get(key)) for key in ("name", "name_cn", "category", "category_cn"))
+    return " ".join(part for part in parts if part)
+
+
 def normalize_cosmo_term(value: Any) -> str:
     text = clean(value)
     text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", text, flags=re.I)
     text = re.sub(r"\s+", " ", text).strip(" ·-:：,，")
     text = COSMO_ENGLISH_TERM_TRANSLATIONS.get(text.casefold(), text)
-    if text.startswith("未映射关键词"):
+    if text.startswith("未映射关键词") or text.startswith("污染关键词"):
         return ""
     if re.search(r"[A-Za-z]{3,}", text) and not re.search(r"[\u4e00-\u9fff]", text):
         return ""
@@ -1306,11 +1331,41 @@ def is_hunting_cosmo_context(text: str) -> bool:
     )
 
 
+def is_audio_cosmo_context(text: str) -> bool:
+    lower = clean(text).casefold()
+    return any(
+        cue in lower
+        for cue in [
+            "speaker",
+            "bluetooth speaker",
+            "wireless speaker",
+            "portable speaker",
+            "soundbox",
+            "music",
+            "audio",
+            "音箱",
+            "蓝牙音箱",
+            "播放",
+            "音乐",
+            "音频",
+        ]
+    )
+
+
+def cosmo_domain_context(record: dict[str, Any], detector) -> bool:
+    context_text = clean(record.get("research_context"))
+    record_text = clean(record.get("text"))
+    if context_text:
+        return detector(context_text) and detector(record_text)
+    return detector(record_text)
+
+
 def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension: str) -> list[str]:
     source_type = clean(record.get("source_type"))
     text = clean(record.get("text"))
     lower = text.casefold()
-    hunting_context = is_hunting_cosmo_context(text)
+    hunting_context = cosmo_domain_context(record, is_hunting_cosmo_context)
+    audio_context = cosmo_domain_context(record, is_audio_cosmo_context)
     raw_term = normalize_cosmo_term(record.get("term"))
     candidates: list[str] = []
 
@@ -1359,7 +1414,8 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
             add_when("观察猎物", "deer", "turkey", "watch", "观察", "狩猎")
             add_when("快速搭建临时掩体", "pop up", "setup", "弹出", "搭建")
         add_when("户外使用", "outdoor", "户外")
-        add_when("户外播放", "speaker", "music", "音箱", "播放")
+        if audio_context:
+            add_when("户外播放", "speaker", "music", "音箱", "播放")
         add_when("防水使用", "waterproof", "防水")
     elif relation_type == "USED_AS":
         if hunting_context:
@@ -1397,8 +1453,10 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
             add_when("狩猎体验", "hunting", "deer", "turkey", "狩猎")
             add_when("户外隐蔽装备", "outdoor", "conceal", "户外", "隐蔽")
             add_when("便携搭建", "portable", "easy to set up", "便携", "安装")
-        else:
+        elif audio_context:
             add_when("户外音乐", "speaker", "music", "音箱", "播放")
+            add_when("便携户外使用", "portable", "outdoor", "便携", "户外")
+        else:
             add_when("便携户外使用", "portable", "outdoor", "便携", "户外")
     elif relation_type == "xIs_A":
         if hunting_context:

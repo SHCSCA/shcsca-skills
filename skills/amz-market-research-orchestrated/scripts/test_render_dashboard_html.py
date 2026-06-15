@@ -692,6 +692,44 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         for forbidden in ["宠物饮水机", "狩猎盲棚", "LED灯带", "蓝牙音箱", "塔式狩猎盲棚", "水杯保冷", "隐蔽观察"]:
             self.assertNotIn(forbidden, all_terms)
 
+    def test_cosmo_renderer_blocks_cross_category_event_and_interest_pollution(self):
+        data_pack = {
+            "research_object": {"value": "under cabinet motion sensor light"},
+            "products": [
+                {
+                    "asin": "B0LIGHT0001",
+                    "title": "Rechargeable Under Cabinet Motion Sensor Light for Kitchen Closet",
+                    "title_cn": "无线充电橱柜感应灯 厨房衣柜使用",
+                    "brand": "LightBrand",
+                    "segment_cn": "橱柜感应灯",
+                    "category": "Under Cabinet Lights",
+                    "price": 19.99,
+                    "rating": 4.5,
+                    "review_count": 1200,
+                    "estimated_monthly_sales": 900,
+                }
+            ],
+            "keywords": [
+                {"keyword": "under cabinet motion sensor light", "keyword_cn": "橱柜感应灯", "intent_cn": "厨房照明"},
+                {"keyword": "outdoor speaker turkey hunting noise", "keyword_cn": "污染关键词：户外音箱火鸡狩猎"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "Easy to install under the cabinet and the motion sensor works well at night.",
+                    "theme_cn": "安装与感应",
+                    "summary_cn": "用户认可安装便利和夜间感应触发。",
+                }
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+
+        self.assertIn("橱柜感应灯", all_terms)
+        for forbidden in ["火鸡狩猎", "鹿猎场景", "户外狩猎活动", "狩猎体验", "户外音乐"]:
+            self.assertNotIn(forbidden, all_terms)
+
     def test_cosmo_renderer_localizes_and_deduplicates_profile_terms_for_customer_html(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
