@@ -147,13 +147,43 @@ def asin_value(product: dict[str, Any]) -> str:
     return str(product.get("asin") or product.get("ASIN") or product.get("产品ASIN码") or "").strip()
 
 
+def numeric_value(value: Any) -> float:
+    parsed = to_number(value)
+    try:
+        if parsed in (None, ""):
+            return 0.0
+        return float(parsed)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def product_priority_key(product: dict[str, Any]) -> tuple[float, float, float]:
+    sales = numeric_value(
+        first(
+            product,
+            "estimated_monthly_sales",
+            "monthly_sales",
+            "sales",
+            "sales_30d",
+            "月销量",
+            "近30天销量",
+        )
+    )
+    reviews = numeric_value(first(product, "review_count", "reviews", "ReviewCount", "评论数"))
+    rating = numeric_value(first(product, "rating", "score", "Score", "评分", "星级"))
+    return (sales, reviews, rating)
+
+
 def select_asins(data_pack: dict[str, Any], max_products: int) -> list[str]:
     seen: set[str] = set()
     asins: list[str] = []
     for product_list in (data_pack.get("effective_products") or [], data_pack.get("products") or []):
-        for product in product_list:
-            if not isinstance(product, dict):
-                continue
+        ranked_products = sorted(
+            [product for product in product_list if isinstance(product, dict)],
+            key=product_priority_key,
+            reverse=True,
+        )
+        for product in ranked_products:
             asin = asin_value(product)
             if asin and asin not in seen:
                 seen.add(asin)

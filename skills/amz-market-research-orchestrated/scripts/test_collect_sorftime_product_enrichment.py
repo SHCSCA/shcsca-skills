@@ -37,6 +37,20 @@ class CollectSorftimeProductEnrichmentTest(unittest.TestCase):
 
         self.assertEqual(collector.select_asins(data_pack, max_products=3), ["B0VALID02", "B0VALID01", "B0NOISE01"])
 
+    def test_select_asins_orders_effective_products_by_report_sales_priority(self):
+        data_pack = {
+            "products": [
+                {"asin": "B0RAW", "title": "Raw fallback product", "estimated_monthly_sales": 9999},
+            ],
+            "effective_products": [
+                {"asin": "B0LOW", "title": "Low sales blind", "estimated_monthly_sales": 10, "review_count": 50, "rating": 4.7},
+                {"asin": "B0HIGH", "title": "High sales blind", "estimated_monthly_sales": 900, "review_count": 20, "rating": 4.2},
+                {"asin": "B0MID", "title": "Mid sales blind", "monthly_sales": 300, "review_count": 200, "rating": 4.8},
+            ],
+        }
+
+        self.assertEqual(collector.select_asins(data_pack, max_products=3), ["B0HIGH", "B0MID", "B0LOW"])
+
     def test_empty_dimensions_replace_stale_gap_and_record_retry_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
