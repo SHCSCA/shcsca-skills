@@ -111,6 +111,19 @@ class CustomerCopyTest(unittest.TestCase):
             self.assertNotIn("product_detail", text)
             self.assertNotIn("ASIN", text)
 
+    def test_customer_assets_localize_review_collection_sentiment_types(self):
+        raw = "对核心 ASIN 补采 Positive/Neutral/Negative 评论，优先达到 80 条。"
+
+        safe = customer_safe_asset_text(raw)
+        view = client_safe_view_payload(raw)
+
+        for text in [safe, view]:
+            self.assertIn("正向/中性/负向评论", text)
+            self.assertNotIn("Positive", text)
+            self.assertNotIn("Neutral", text)
+            self.assertNotIn("Negative", text)
+            self.assertNotIn("ASIN", text)
+
 
 if __name__ == "__main__":
     unittest.main()

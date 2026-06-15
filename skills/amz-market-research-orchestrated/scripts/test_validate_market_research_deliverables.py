@@ -137,7 +137,7 @@ def child_html(style, title, sections, extra_terms=""):
 <div class="cosmo-layout"><section class="cosmo-panel cosmo-matrix"><div class="cosmo-panel-title">15 标签矩阵</div><div class="cosmo-matrix-lanes"><div class="cosmo-matrix-lane product-lane"><div class="cosmo-lane-title"><span>产品标签 · 产品被算法识别为什么</span><b>8 类</b></div><div class="cosmo-lane-grid">""" + cosmo_product_cards + """</div></div><div class="cosmo-matrix-lane user-lane"><div class="cosmo-lane-title"><span>用户标签 · 用户为什么搜索/购买</span><b>7 类</b></div><div class="cosmo-lane-grid">""" + cosmo_user_cards + """</div></div></div></section><section class="cosmo-panel cosmo-top-list"><div class="cosmo-panel-title">高置信标签排行</div><ol><li><span>功能·用途</span><strong>有效标签</strong><em>高 · 3 条证据</em></li></ol></section><section class="cosmo-panel cosmo-gap-panel"><div class="cosmo-panel-title">产品标签 / 用户标签缺口</div><p>缺口说明</p><ul><li><span>OK</span><strong>已覆盖</strong><em>继续验证</em></li></ul></section><section class="cosmo-panel cosmo-action-board"><div class="cosmo-panel-title">Listing / QA / 广告动作</div><div class="cosmo-action-grid"><article class="cosmo-action-card"><span>产品意图</span><h3>动作</h3><p>Listing：动作</p></article></div></section></div>
 <div class="card comp-image-strip-card"><div class="card-title">竞品图片诊断</div><p>图片维度未返回可展示 URL；已保留图片槽位，采集层返回真实图片字段后自动展示。</p></div>
 <table class="comp-table"><tr><th>ASIN</th><th>产品</th></tr><tr><td><span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></td><td>数据</td></tr></table>
-<div class="market-voc-sentiment-columns"><section class="market-voc-column positive"><div class="market-voc-column-head"><span>Positive Reviews</span><h3>正面好评</h3></div><article class="market-voc-card joy">J1</article><article class="market-voc-card joy">J2</article><article class="market-voc-card joy">J3</article><article class="market-voc-card joy">J4</article><article class="market-voc-card joy">J5</article><article class="market-voc-card joy">J6</article></section><section class="market-voc-column negative"><div class="market-voc-column-head"><span>Negative Reviews</span><h3>负面差评</h3></div><article class="market-voc-card pain">P1</article><article class="market-voc-card pain">P2</article><article class="market-voc-card pain">P3</article><article class="market-voc-card pain">P4</article><article class="market-voc-card pain">P5</article><article class="market-voc-card pain">P6</article></section></div>
+<div class="market-voc-sentiment-columns"><section class="market-voc-column positive"><div class="market-voc-column-head"><span>高星证据</span><h3>正面好评</h3></div><article class="market-voc-card joy">J1</article><article class="market-voc-card joy">J2</article><article class="market-voc-card joy">J3</article><article class="market-voc-card joy">J4</article><article class="market-voc-card joy">J5</article><article class="market-voc-card joy">J6</article></section><section class="market-voc-column negative"><div class="market-voc-column-head"><span>低星证据</span><h3>负面差评</h3></div><article class="market-voc-card pain">P1</article><article class="market-voc-card pain">P2</article><article class="market-voc-card pain">P3</article><article class="market-voc-card pain">P4</article><article class="market-voc-card pain">P5</article><article class="market-voc-card pain">P6</article></section></div>
 <div class="voc-grid"><article class="pain-card"><div class="voc-rank pain-rank">P1</div><div class="voc-title">痛点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill pain-fill"></div></div></article><article class="joy-card"><div class="voc-rank joy-rank">J1</div><div class="voc-title">爽点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill joy-fill"></div></div></article></div>
 <div class="comp-deep-grid"><div class="comp-deep-card"><div class="comp-deep-header"><div class="comp-deep-name"><span class="asin-token" data-allow-asin="benchmark-sniper">B0ABCDEF12</span> 标杆</div><div class="comp-deep-price">$89</div></div><div class="comp-deep-body"><div class="comp-deep-section"><div class="comp-deep-section-title">逻辑</div><div class="comp-deep-text">文本</div><div class="comp-tag-list"><span class="comp-tag red">痛点</span><span class="comp-tag green">机会</span></div></div></div></div><div class="comp-deep-card"><div class="comp-deep-header"><div class="comp-deep-name">标杆二</div><div class="comp-deep-price">$99</div></div><div class="comp-deep-body"><div class="comp-deep-section"><div class="comp-deep-section-title">逻辑</div><div class="comp-deep-text">文本</div></div></div></div></div>
 <div class="strategy-hero"><div class="strategy-hero-label">Core Product Concept</div><div class="strategy-slogan">不只是产品，是<span>方案</span></div><div class="strategy-desc">定义</div></div>
@@ -182,7 +182,7 @@ def child_html(style, title, sections, extra_terms=""):
 <div class="demand-brief-stack"><div class="chart-interpretation">参考竞品ASIN <span class="asin-token" data-allow-asin="demand-target-anchor">B0TEST1234</span></div></div>
 <div hidden data-chart-source="appealsRows"><span data-label="痛点" data-value="5"></span></div><div id="appealsRose" class="chart demand-chart"></div>
 <div hidden data-chart-source="gapRows"><span data-label="鸿沟" data-value="90"></span></div><div id="gapRadar" class="chart demand-chart"></div>
-<div class="demand-evidence-grid demand-sentiment-columns"><section class="demand-sentiment-column positive"><div class="demand-column-head"><span>Positive</span><h3>正面反馈</h3></div>{joy_cards}</section><section class="demand-sentiment-column negative"><div class="demand-column-head"><span>Negative</span><h3>负面反馈</h3></div>{pain_cards}</section></div>
+<div class="demand-evidence-grid demand-sentiment-columns"><section class="demand-sentiment-column positive"><div class="demand-column-head"><span>高星证据</span><h3>正面反馈</h3></div>{joy_cards}</section><section class="demand-sentiment-column negative"><div class="demand-column-head"><span>低星证据</span><h3>负面反馈</h3></div>{pain_cards}</section></div>
 <details class="evidence-drawer"><summary>用户原声证据明细表</summary><div class="drawer-body">评论证据明细</div></details>
 """
     section_html = "\n".join(
@@ -786,6 +786,33 @@ def make_valid_report(root):
 
 
 class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
+    def test_customer_html_rejects_visible_positive_negative_column_labels(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="voice-theater">'
+            '<div class="demand-evidence-grid demand-sentiment-columns">'
+            '<section class="demand-sentiment-column positive"><div class="demand-column-head"><span>Positive</span><h3>正面反馈</h3></div></section>'
+            '<section class="demand-sentiment-column negative"><div class="demand-column-head"><span>Negative</span><h3>负面反馈</h3></div></section>'
+            "</div>"
+            "<p>证据强度 高 数据覆盖 已记录 数据缺口 已记录 置信等级 中 建议动作 继续核验</p>"
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "Positive|Negative|英文"):
+            validator.validate_customer_html("output/html_reports/demand-gap-report.html", html_doc, data_pack)
+
+    def test_customer_html_rejects_stale_toy_review_summary_copy(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="voc">'
+            '<article class="market-voc-card joy"><p>正向反馈集中在开箱、陪伴和礼品场景</p></article>'
+            "<p>证据强度 高 数据覆盖 已记录 数据缺口 已记录 置信等级 中 建议动作 继续核验</p>"
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "开箱|陪伴|礼品场景"):
+            validator.validate_customer_html("output/html_reports/lifecycle-strategy-report.html", html_doc, data_pack)
+
     def test_customer_html_rejects_empty_or_non_http_image_src(self):
         data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
         broken_images = [

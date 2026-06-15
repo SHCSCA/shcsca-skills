@@ -334,6 +334,17 @@ CUSTOMER_HTML_BANNED_LITERALS = [
     "Type D",
 ]
 
+CUSTOMER_HTML_BANNED_VISIBLE_ENGLISH_LABELS = [
+    "Positive",
+    "Negative",
+    "Positive Reviews",
+    "Negative Reviews",
+]
+
+CUSTOMER_HTML_BANNED_STALE_COPY = [
+    "正向反馈集中在开箱、陪伴和礼品场景",
+]
+
 CUSTOMER_HTML_BANNED_PATTERNS = [
     re.compile(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", re.IGNORECASE),
     re.compile(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
@@ -984,7 +995,8 @@ def validate_no_raw_english_leaks(rel_path: str, text: str, data_pack: dict[str,
 
 def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, Any]) -> None:
     html_for_safety = strip_allowed_customer_exceptions(html_doc)
-    visible_text = normalized_visible_text(customer_visible_text(html_for_safety)).casefold()
+    visible_text_raw = normalized_visible_text(customer_visible_text(html_for_safety))
+    visible_text = visible_text_raw.casefold()
     internal_status_patterns = [
         r"\bcollection_in_progress\b",
         r"\bready_for_normalization\b",
@@ -996,6 +1008,11 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
         match = re.search(pattern, visible_text)
         if match is not None:
             raise ValidationError(f"{rel_path} customer HTML contains visible internal status: {match.group(0)}")
+    for label in CUSTOMER_HTML_BANNED_VISIBLE_ENGLISH_LABELS:
+        if re.search(rf"(?<![A-Za-z]){re.escape(label)}(?![A-Za-z])", visible_text_raw):
+            raise ValidationError(f"{rel_path} customer HTML contains visible English sentiment label: {label}")
+    for phrase in CUSTOMER_HTML_BANNED_STALE_COPY:
+        require(phrase not in visible_text_raw, f"{rel_path} customer HTML contains stale category copy: {phrase}")
     if re.search(r"class=['\"][^'\"]*\bkpi-value\b[^'\"]*['\"][^>]*>\s*-\s*</", html_for_safety, flags=re.I):
         raise ValidationError(f"{rel_path} customer HTML contains empty customer KPI")
 

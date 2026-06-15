@@ -57,6 +57,16 @@ STATUS_TEXT_REPLACEMENTS = [
     ("warning", "需复核"),
 ]
 
+CUSTOMER_TEXT_REPLACEMENTS = [
+    ("Positive/Neutral/Negative 评论", "正向/中性/负向评论"),
+    ("Positive / Neutral / Negative 评论", "正向/中性/负向评论"),
+    ("Positive Reviews", "高星评论证据"),
+    ("Negative Reviews", "低星评论证据"),
+    ("Positive", "正向评论"),
+    ("Neutral", "中性评论"),
+    ("Negative", "负向评论"),
+]
+
 TOOL_DIMENSION_LABELS = {
     "product_detail": "产品详情维度",
     "product_trend": "趋势维度",
@@ -243,6 +253,8 @@ def customer_safe_asset_text(value: Any) -> str:
     text = customer_safe_technical_failure_text(text)
     if "MCP returned Unauthorized" in text:
         text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
+    for old, new in CUSTOMER_TEXT_REPLACEMENTS:
+        text = text.replace(old, new)
     for old, new in CUSTOMER_LABEL_REPLACEMENTS:
         text = text.replace(old, new)
     for old, new in STATUS_TEXT_REPLACEMENTS:
@@ -287,10 +299,13 @@ def client_safe_view_payload(value: Any) -> Any:
     if isinstance(value, str):
         text = clean(value)
         text = customer_safe_technical_failure_text(text)
+        for old, new in CUSTOMER_TEXT_REPLACEMENTS:
+            text = text.replace(old, new)
         for old, new in CUSTOMER_LABEL_REPLACEMENTS:
             text = text.replace(old, new)
         for old, new in STATUS_TEXT_REPLACEMENTS:
             text = re.sub(rf"\b{re.escape(old)}\b", new, text)
+        text = text.replace("ASIN", "参考竞品")
         text = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", text)
         text = re.sub(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", "数据采集流程", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(?:src|sf)[_-][\w\u4e00-\u9fff-]+\b", "内部证据", text, flags=re.IGNORECASE)
