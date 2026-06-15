@@ -88,15 +88,38 @@ def content_rows(response: dict[str, Any]) -> list[dict[str, Any]]:
     for item in result.get("content") or []:
         if item.get("type") != "text":
             continue
+        text = item.get("text") or ""
         try:
-            parsed = json.loads(item.get("text") or "")
+            parsed = json.loads(text)
         except json.JSONDecodeError:
+            parsed_text = labeled_text_row(text)
+            if parsed_text:
+                rows.append(parsed_text)
             continue
         if isinstance(parsed, list):
             rows.extend(row for row in parsed if isinstance(row, dict))
         elif isinstance(parsed, dict):
             rows.append(parsed)
     return rows
+
+
+def labeled_text_row(text: str) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "：" in line:
+            key, value = line.split("：", 1)
+        elif ":" in line:
+            key, value = line.split(":", 1)
+        else:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            row[key] = value
+    return row
 
 
 def first(row: dict[str, Any], *keys: str) -> Any:
@@ -113,7 +136,11 @@ def to_number(value: Any) -> Any:
     try:
         return float(text) if "." in text else int(text)
     except ValueError:
-        return value
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if not match:
+            return value
+        number = match.group(0)
+        return float(number) if "." in number else int(number)
 
 
 def asin_value(product: dict[str, Any]) -> str:
@@ -123,15 +150,16 @@ def asin_value(product: dict[str, Any]) -> str:
 def select_asins(data_pack: dict[str, Any], max_products: int) -> list[str]:
     seen: set[str] = set()
     asins: list[str] = []
-    for product in data_pack.get("products") or []:
-        if not isinstance(product, dict):
-            continue
-        asin = asin_value(product)
-        if asin and asin not in seen:
-            seen.add(asin)
-            asins.append(asin)
-        if len(asins) >= max_products:
-            break
+    for product_list in (data_pack.get("effective_products") or [], data_pack.get("products") or []):
+        for product in product_list:
+            if not isinstance(product, dict):
+                continue
+            asin = asin_value(product)
+            if asin and asin not in seen:
+                seen.add(asin)
+                asins.append(asin)
+            if len(asins) >= max_products:
+                return asins
     return asins
 
 
@@ -181,6 +209,7 @@ def detail_patch(row: dict[str, Any]) -> dict[str, Any]:
         "detail_image_url": first(
             row,
             "图片",
+            "主图",
             "image",
             "Image",
             "image_url",

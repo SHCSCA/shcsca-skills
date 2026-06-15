@@ -17,7 +17,26 @@ def mcp_rows(rows):
     return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
 
 
+def mcp_text(text):
+    return {"result": {"content": [{"type": "text", "text": text}]}}
+
+
 class CollectSorftimeProductEnrichmentTest(unittest.TestCase):
+    def test_select_asins_prefers_effective_products_before_raw_noise(self):
+        data_pack = {
+            "products": [
+                {"asin": "B0NOISE01", "title": "Camo net accessory"},
+                {"asin": "B0NOISE02", "title": "Face paint"},
+                {"asin": "B0VALID01", "title": "Hunting Blind"},
+            ],
+            "effective_products": [
+                {"asin": "B0VALID02", "title": "See Through Hunting Blind"},
+                {"asin": "B0VALID01", "title": "Hunting Blind"},
+            ],
+        }
+
+        self.assertEqual(collector.select_asins(data_pack, max_products=3), ["B0VALID02", "B0VALID01", "B0NOISE01"])
+
     def test_empty_dimensions_replace_stale_gap_and_record_retry_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -146,6 +165,56 @@ class CollectSorftimeProductEnrichmentTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["image_url"], "https://m.media-amazon.com/images/I/hunting-blind.jpg")
             self.assertEqual(product["sorftime_enrichment"]["detail_image_url"], "https://m.media-amazon.com/images/I/hunting-blind.jpg")
+
+    def test_product_detail_labeled_text_promotes_main_image_for_customer_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "products": [{"asin": "B0BR4QYGS7", "title": "Hunting Blind", "brand": "FUNHORUN"}],
+                    "keywords": [],
+                    "data_gaps": [],
+                },
+            )
+
+            detail_text = (
+                "产品ASIN码：B0BR4QYGS7\r\n"
+                "标题：FUNHORUN Hunting Blind 270/360 Degree See Through Ground Blind\r\n"
+                "主图：https://images-na.ssl-images-amazon.com/images/I/81DM31XTN+L._AC_UL600_SR600,400_.jpg\r\n"
+                "价格：87.98\r\n"
+                "星级：4.50\r\n"
+                "评论数：1087\r\n"
+                "品牌：FUNHORUN\r\n"
+                "所属细分类目：Blinds（排名:4）\r\n"
+                "月销量：月销量：349\r\n"
+            )
+
+            def fake_call_tool(_url, name, _args):
+                if name == "product_detail":
+                    return mcp_text(detail_text)
+                if name == "product_trend":
+                    return mcp_rows([])
+                if name == "product_variations":
+                    return mcp_rows([])
+                if name == "product_traffic_terms":
+                    return mcp_rows([])
+                if name == "competitor_product_keywords":
+                    return mcp_rows([])
+                raise AssertionError(name)
+
+            with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
+                summary = collector.collect(report_dir, max_products=1, max_pages=1, site="US", sleep_seconds=0)
+
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            product = data_pack["products"][0]
+            self.assertGreater(summary["product_patches"], 0)
+            self.assertEqual(product["image_url"], "https://images-na.ssl-images-amazon.com/images/I/81DM31XTN+L._AC_UL600_SR600,400_.jpg")
+            self.assertEqual(product["sorftime_enrichment"]["detail_image_url"], product["image_url"])
+            self.assertEqual(product["sorftime_enrichment"]["detail_price"], 87.98)
+            self.assertEqual(product["sorftime_enrichment"]["detail_review_count"], 1087)
+            self.assertEqual(product["sorftime_enrichment"]["detail_monthly_sales"], 349)
 
 
 if __name__ == "__main__":
