@@ -737,6 +737,23 @@ def product_image_html(product: dict[str, Any], class_name: str, fallback_alt: s
     return f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" loading=\"lazy\" decoding=\"async\">"
 
 
+def product_image_or_diagnostic_html(
+    product: dict[str, Any],
+    image_class: str,
+    diagnostic_class: str,
+    fallback_alt: str = "竞品图片",
+) -> str:
+    image = product_image_html(product, image_class, fallback_alt)
+    if image:
+        return image
+    return (
+        f"<div class=\"{esc(diagnostic_class)}\" role=\"img\" aria-label=\"{esc(fallback_alt)}\">"
+        f"<span>{esc(fallback_alt)}未返回</span>"
+        "<em>采集层未返回 Amazon 可展示主图</em>"
+        "</div>"
+    )
+
+
 def sku_reference_image_html(sku: dict[str, Any], class_name: str = "sku-reference-thumb") -> str:
     url = clean(sku.get("reference_image_url"))
     if not url or not re.match(r"^https?://", url, flags=re.I):
@@ -805,7 +822,7 @@ def render_competitors(data_pack: dict[str, Any]) -> tuple[str, str, list[dict[s
             "<tr>"
             + f"<td><span class=\"asin-token\" data-allow-asin=\"competitor-table\">{esc(product.get('asin'))}</span></td>"
             + "<td><div class=\"comp-product-cell\">"
-            + product_image_html(product, "comp-product-thumb", "竞品图片")
+            + product_image_or_diagnostic_html(product, "comp-product-thumb", "comp-product-thumb-diagnostic", "竞品图片")
             + f"<div><div class=\"product-name\">{esc(row[1])}</div><div class=\"product-brand\">{esc(row[3])} · {esc(row[4])}</div></div>"
             + "</div></td>"
             + f"<td><span class=\"price-tag\">{esc(row[5])}</span></td>"
@@ -1851,7 +1868,7 @@ def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dic
             )
         cards.append(
             "<div class=\"comp-deep-card\">"
-            + product_image_html(product, "comp-deep-image", "标杆竞品图片")
+            + product_image_or_diagnostic_html(product, "comp-deep-image", "comp-deep-image-diagnostic", "标杆竞品图片")
             + "<div class=\"comp-deep-header\">"
             + f"<div class=\"comp-deep-name\">🎯 <span class=\"asin-token\" data-allow-asin=\"benchmark-sniper\">{esc(asin or '参考竞品')}</span> · {esc(first(product.get('brand'), customer_product_position(product)))}</div>"
             + f"<div class=\"comp-deep-price\">{esc(money(product_price(product)))} · 月销~{esc(num(product_sales(product)))} · {esc(first(product.get('rating'), '-'))}★</div>"
