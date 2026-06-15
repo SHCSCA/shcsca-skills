@@ -72,6 +72,32 @@ class CustomerCopyTest(unittest.TestCase):
         self.assertEqual(review_theme_labels({"themes": ["privacy"]}), ["隐私与信任"])
         self.assertEqual(review_theme_labels({}), ["其他体验问题"])
 
+    def test_drops_battery_theme_when_review_has_no_power_context(self):
+        review = {
+            "rating": 5,
+            "title": "Roomy blind",
+            "text": "Quick and easy setup. The hunting blind is roomy and has good visibility.",
+            "summary_cn": "续航或充电体验没有达到预期；正向反馈集中在开箱、陪伴和礼品场景",
+            "themes": ["battery_charging"],
+        }
+
+        labels = review_theme_labels(review)
+
+        self.assertNotIn("电池与充电", labels)
+        self.assertEqual(labels, ["其他体验问题"])
+
+    def test_keeps_battery_theme_when_review_mentions_power_context(self):
+        review = {
+            "rating": 2,
+            "title": "Battery issue",
+            "text": "Battery stopped charging after one night and the USB cable did not work.",
+            "themes": ["battery_charging"],
+        }
+
+        labels = review_theme_labels(review)
+
+        self.assertIn("电池与充电", labels)
+
     def test_customer_assets_translate_technical_no_rows_errors(self):
         raw = "Sorftime Amazon ASIN enrichment tools returned no rows for: product_detail, product_trend, product_variations after retrying 12 ASINs."
 

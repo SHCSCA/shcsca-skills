@@ -239,6 +239,25 @@ def effective_reviews(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     return effective_records(data_pack, "reviews")
 
 
+def customer_visible_reviews(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
+    reviews = effective_reviews(data_pack)
+    products = effective_products(data_pack)
+    product_asins = {
+        clean(first(product.get("asin"), product.get("product_asin"), product.get("parent_asin"), product.get("product_id"), default="")).upper()
+        for product in products
+        if isinstance(product, dict)
+    }
+    product_asins.discard("")
+    if not product_asins:
+        return reviews
+    visible = []
+    for review in reviews:
+        asin = clean(first(review.get("asin"), review.get("product_asin"), review.get("parent_asin"), review.get("product_id"), default="")).upper()
+        if not asin or asin in product_asins:
+            visible.append(review)
+    return visible
+
+
 def effective_suppliers(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     return effective_records(data_pack, "suppliers")
 
@@ -955,7 +974,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
                 "field": "keyword",
             }
         )
-    for review in effective_reviews(data_pack):
+    for review in customer_visible_reviews(data_pack):
         themes = " ".join(review_theme_labels(review))
         summary = customer_review_summary(review, 120)
         text = " ".join(clean(review.get(key)) for key in ("title", "text", "content", "body", "comment", "summary_cn"))
@@ -2260,7 +2279,7 @@ def render_supply_diagnostic(suppliers: list[dict[str, Any]], snapshot: dict[str
 
 
 def render_voc(data_pack: dict[str, Any], voc: dict[str, Any]) -> str:
-    reviews = effective_reviews(data_pack)
+    reviews = customer_visible_reviews(data_pack)
     theme_counts: Counter[str] = Counter()
     low_theme_counts: Counter[str] = Counter()
     star_counts: Counter[int] = Counter()
@@ -3058,7 +3077,7 @@ def confidence_level(data_pack: dict[str, Any], analysis_plan: dict[str, Any] | 
 def sample_coverage(data_pack: dict[str, Any]) -> str:
     keywords = len(effective_keywords(data_pack))
     products = len(effective_products(data_pack))
-    reviews = len(effective_reviews(data_pack))
+    reviews = len(customer_visible_reviews(data_pack))
     suppliers = len(effective_suppliers(data_pack))
     return f"关键词 {keywords}；竞品 {products}；评论 {reviews}；供应记录 {suppliers}"
 
@@ -3067,7 +3086,7 @@ def sample_coverage_tags(data_pack: dict[str, Any]) -> str:
     items = [
         (len(effective_keywords(data_pack)), "关键词"),
         (len(effective_products(data_pack)), "竞品"),
-        (len(effective_reviews(data_pack)), "评论"),
+        (len(customer_visible_reviews(data_pack)), "评论"),
         (len(effective_suppliers(data_pack)), "供应记录"),
     ]
     tags = "".join(f"<span class=\"metric-tag\"><b>{esc(value)}</b><span>{esc(label)}</span></span>" for value, label in items)
@@ -3642,7 +3661,7 @@ def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, An
 
 def render_personas(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> str:
     products = effective_products(data_pack)
-    reviews = effective_reviews(data_pack)
+    reviews = customer_visible_reviews(data_pack)
     prices = sorted(as_float(product.get("price"), 0) for product in products if as_float(product.get("price"), 0) > 0)
     if prices:
         low_price = prices[max(0, min(len(prices) - 1, len(prices) // 4))]
@@ -4171,7 +4190,7 @@ def render_lifecycle_market_intel(data_pack: dict[str, Any], analysis_plan: dict
 
 
 def appeal_rows(data_pack: dict[str, Any], fallback_source: str) -> list[list[Any]]:
-    reviews = effective_reviews(data_pack)
+    reviews = customer_visible_reviews(data_pack)
     rows: list[list[Any]] = []
     theme_counts: Counter[str] = Counter()
     for review in reviews:
@@ -4186,7 +4205,7 @@ def appeal_rows(data_pack: dict[str, Any], fallback_source: str) -> list[list[An
 def render_target_anchor(data_pack: dict[str, Any], object_value: Any, fallback_source: str) -> str:
     products = effective_products(data_pack)
     anchor = products[0] if products else {}
-    sample_summary = f"{len(products)} 个竞品；{len(effective_reviews(data_pack))} 条评论；{len(effective_keywords(data_pack))} 个关键词"
+    sample_summary = f"{len(products)} 个竞品；{len(customer_visible_reviews(data_pack))} 条评论；{len(effective_keywords(data_pack))} 个关键词"
     target_signal = customer_safe_signal_title(anchor, "按关键词与品类锚定") if anchor else "按关键词与品类锚定"
     anchor_rows = []
     for product in products[:5]:
@@ -4236,13 +4255,13 @@ def render_decision_board(data_pack: dict[str, Any], demand_gap: dict[str, Any],
     rows = [
         ["最大机会", max_opportunity, fallback_source],
         ["核心判断", decision, fallback_source],
-        ["证据密度", f"{len(effective_reviews(data_pack))} 条评论；{len(data_pack.get('sources') or [])} 类证据记录", fallback_source],
+        ["证据密度", f"{len(customer_visible_reviews(data_pack))} 条评论；{len(data_pack.get('sources') or [])} 类证据记录", fallback_source],
         ["数据覆盖", f"{len(products)} 个去重有效竞品；{len(effective_keywords(data_pack))} 个有效关键词；{len(data_gaps)} 个数据缺口", fallback_source],
     ]
     return (
         f"<div class=\"card focus\"><strong>最大机会：{esc(max_opportunity)}。</strong></div>"
         + "<div class=\"kpi-grid\">"
-        + f"<div class=\"kpi\"><div class=\"k\">评论记录数</div><div class=\"v\">{esc(len(effective_reviews(data_pack)))}</div></div>"
+        + f"<div class=\"kpi\"><div class=\"k\">评论记录数</div><div class=\"v\">{esc(len(customer_visible_reviews(data_pack)))}</div></div>"
         + f"<div class=\"kpi\"><div class=\"k\">核心判断</div><div class=\"v\" style=\"font-size:18px\">{esc(decision)}</div></div>"
         + f"<div class=\"kpi\"><div class=\"k\">数据覆盖</div><div class=\"v\">{esc(len(products))}</div></div>"
         + f"<div class=\"kpi\"><div class=\"k\">最高机会维度</div><div class=\"v\" style=\"font-size:18px\">{esc(max_opportunity)}</div></div>"
@@ -4403,7 +4422,7 @@ def review_product_relevance_score(review: dict[str, Any], products_by_asin: dic
 
 
 def sorted_relevant_reviews(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
-    reviews = effective_reviews(data_pack)
+    reviews = customer_visible_reviews(data_pack)
     products_by_asin = {
         clean(first(product.get("asin"), product.get("product_asin"), product.get("parent_asin"), product.get("product_id"), default="")).upper(): product
         for product in effective_products(data_pack)

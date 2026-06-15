@@ -102,7 +102,7 @@ def make_renderable_report(root):
             "categories": [{"node_id": "123", "name": "Plush Toys", "top100_estimated_monthly_units": 10000, "source_id": "src_001", "provider": "sorftime"}],
             "reviews": [
                 {
-                    "asin": "B0TEST1234",
+                    "asin": "B0P0000000",
                     "rating": 2,
                     "title": "privacy issue",
                     "text": "This toy stopped working after two days and the privacy policy is confusing.",
@@ -2197,6 +2197,83 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
         self.assertIn("under cabinet light adhesive", first_card)
         self.assertNotIn("Ring camera service", first_card[:700])
+
+    def test_market_voc_filters_reviews_outside_effective_product_pool(self):
+        data_pack = {
+            "products": [
+                {
+                    "asin": "B0BLIND001",
+                    "title": "Hunting Blind 270 Degree See Through Ground Blind",
+                    "title_cn": "透视地面盲棚",
+                    "segment_cn": "透视地面盲棚",
+                }
+            ],
+            "reviews": [
+                {
+                    "asin": "B0BLIND001",
+                    "rating": 5,
+                    "title": "Roomy blind",
+                    "text": "Quick and easy setup. The hunting blind is roomy and has good visibility.",
+                    "themes": ["battery_charging"],
+                },
+                {
+                    "asin": "B0FEEDER001",
+                    "rating": 1,
+                    "title": "Feeder battery failed",
+                    "text": "The deer feeder battery stopped charging and the timer failed.",
+                    "themes": ["battery_charging"],
+                },
+                {
+                    "asin": "B0CAMERA001",
+                    "rating": 2,
+                    "title": "Trail camera problem",
+                    "text": "The trail camera app subscription and video recording did not work.",
+                    "themes": ["battery_charging", "subscription"],
+                },
+            ],
+        }
+
+        html = renderer.render_voc(data_pack, {})
+
+        self.assertIn("Quick and easy setup", html)
+        self.assertNotIn("电池与充电", html)
+        self.assertNotIn("deer feeder", html.casefold())
+        self.assertNotIn("trail camera", html.casefold())
+        self.assertNotIn("subscription", html.casefold())
+
+    def test_demand_appeal_rows_filter_off_target_review_themes(self):
+        data_pack = {
+            "products": [
+                {
+                    "asin": "B0BLIND001",
+                    "title": "Hunting Blind 270 Degree See Through Ground Blind",
+                    "title_cn": "透视地面盲棚",
+                    "segment_cn": "透视地面盲棚",
+                }
+            ],
+            "reviews": [
+                {
+                    "asin": "B0BLIND001",
+                    "rating": 4,
+                    "title": "Good blind",
+                    "text": "The blind is easy to set up and visibility is good.",
+                    "themes": ["ease_of_use", "visibility"],
+                },
+                {
+                    "asin": "B0FEEDER001",
+                    "rating": 1,
+                    "title": "Feeder battery failed",
+                    "text": "The deer feeder battery stopped charging.",
+                    "themes": ["battery_charging"],
+                },
+            ],
+        }
+
+        rows = renderer.appeal_rows(data_pack, "src_001")
+        labels = [row[1] for row in rows]
+
+        self.assertIn("易用性", labels)
+        self.assertNotIn("电池与充电", labels)
 
 
 if __name__ == "__main__":

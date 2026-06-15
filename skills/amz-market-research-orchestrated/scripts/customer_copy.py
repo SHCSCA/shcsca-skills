@@ -11,6 +11,50 @@ from normalize_data_pack import THEME_CN
 
 GENERIC_PRODUCT_LABELS = {"未命名竞品", "竞品记录", "未知", "未分层", "核心竞品"}
 
+POWER_CONTEXT_TERMS = [
+    "battery",
+    "batteries",
+    "charge",
+    "charging",
+    "recharge",
+    "rechargeable",
+    "usb",
+    "power",
+    "cord",
+    "cable",
+    "solar",
+    "电池",
+    "续航",
+    "充电",
+    "掉电",
+    "容量",
+]
+
+THEME_ALIASES_CN = {
+    "ease_of_use": "易用性",
+    "easy_to_use": "易用性",
+    "visibility": "可视性",
+    "subscription": "价格与订阅",
+    "service": "售后与客服",
+}
+
+
+def review_has_power_context(review: dict[str, Any]) -> bool:
+    text = clean(
+        " ".join(
+            str(review.get(key) or "")
+            for key in ("title", "text", "content", "body", "comment")
+        )
+    ).casefold()
+    for term in POWER_CONTEXT_TERMS:
+        if re.search(r"[a-z0-9]", term):
+            if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text):
+                return True
+            continue
+        if term in text:
+            return True
+    return False
+
 
 def review_theme_labels(review: dict[str, Any]) -> list[str]:
     themes = review.get("themes_cn") or review.get("themes") or []
@@ -19,7 +63,10 @@ def review_theme_labels(review: dict[str, Any]) -> list[str]:
     labels = []
     for theme in themes:
         text = str(theme)
-        labels.append(THEME_CN.get(text.casefold(), text).replace("/", "与"))
+        label = THEME_ALIASES_CN.get(text.casefold(), THEME_CN.get(text.casefold(), text)).replace("/", "与")
+        if label == "电池与充电" and not review_has_power_context(review):
+            continue
+        labels.append(label)
     return labels or ["其他体验问题"]
 
 
