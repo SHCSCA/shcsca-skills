@@ -978,6 +978,30 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("COSMO", result.stderr + result.stdout)
 
+    def test_rejects_unlocalized_english_cosmo_terms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+            payload = json.loads(cosmo_path.read_text(encoding="utf-8"))
+            payload["relations"][0]["terms"] = ["ground blind", "地面盲棚"]
+            payload["relations"][0]["confidence"] = "高"
+            payload["relations"][0]["source_evidence"] = [
+                {
+                    "source_type": "effective_products",
+                    "source_id": "B0VALID0001",
+                    "field": "title",
+                    "excerpt": "ground blind 地面盲棚 隐蔽观察",
+                    "supported_terms": ["ground blind", "地面盲棚"],
+                }
+            ]
+            write_json(cosmo_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
     def test_customer_safety_context_is_cached_per_data_pack(self):
         data_pack = {
             "sources": [{"source_id": "src_001", "provider": "sorftime"}],

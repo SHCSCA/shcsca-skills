@@ -683,6 +683,59 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         for forbidden in ["宠物饮水机", "狩猎盲棚", "LED灯带", "蓝牙音箱", "塔式狩猎盲棚", "水杯保冷", "隐蔽观察"]:
             self.assertNotIn(forbidden, all_terms)
 
+    def test_cosmo_renderer_localizes_and_deduplicates_profile_terms_for_customer_html(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "See Through Pop Up Ground Blind for Deer Hunting",
+                    "title_cn": "透视弹出式地面盲棚 鹿猎使用",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                    "category": "Hunting Blinds",
+                }
+            ],
+            "keywords": [
+                {"keyword": "see through ground blind", "keyword_cn": "透视地面盲棚"},
+                {"keyword": "deer hunting blind", "keyword_cn": "鹿猎盲棚"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "The see through blind helps me stay concealed while watching deer.",
+                    "theme_cn": "隐蔽观察",
+                    "summary_cn": "用户认可透视观察和隐蔽效果。",
+                }
+            ],
+        }
+        analysis_plan = {
+            "report_label_profile": {
+                "cosmo_relation_terms": {
+                    "USED_FOR_FUNC": [
+                        "see through",
+                        "see-through",
+                        "ground blind",
+                        "透视地面盲棚",
+                        "隐蔽观察",
+                    ],
+                    "USED_AS": ["ground blind", "hunting blind", "透视地面盲棚", "弹出式地面盲棚"],
+                }
+            }
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, analysis_plan)
+        html = renderer.render_cosmo_alexa_tags(data_pack, analysis_plan)
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+
+        self.assertIn("透视地面盲棚", by_relation["USED_FOR_FUNC"]["terms"])
+        self.assertIn("隐蔽观察", by_relation["USED_FOR_FUNC"]["terms"])
+        self.assertEqual(len(by_relation["USED_FOR_FUNC"]["terms"]), len(set(by_relation["USED_FOR_FUNC"]["terms"])))
+        for forbidden in ["see through", "see-through", "ground blind", "hunting blind"]:
+            self.assertNotIn(f">{forbidden}<", html)
+            self.assertNotIn(forbidden, by_relation["USED_FOR_FUNC"]["terms"])
+        self.assertNotRegex(html, r"<span>[^<]*[a-zA-Z]{3,}[^<]*</span>")
+
     def test_cosmo_action_cards_are_relation_specific_not_template_repeats(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},

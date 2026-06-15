@@ -804,6 +804,11 @@ def normalized_visible_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def is_unlocalized_cosmo_term(value: Any) -> bool:
+    text = normalized_visible_text(value)
+    return bool(text and not contains_cjk(text) and re.search(r"[A-Za-z]{3,}", text))
+
+
 def cosmo_term_supported_by_evidence(term: Any, evidence_text: str) -> bool:
     normalized_term = normalized_visible_text(term)
     normalized_evidence = normalized_visible_text(evidence_text)
@@ -1127,6 +1132,15 @@ def validate_cosmo_alexa_tags(report_dir: Path) -> None:
         require(not raw_relation_code_re.search(str(item.get("display_relation") or "")), f"{rel_path} relations[{idx}].display_relation leaks raw relation code")
         require(isinstance(item.get("terms"), list), f"{rel_path} relations[{idx}].terms must be a list")
         require(isinstance(item.get("source_evidence"), list), f"{rel_path} relations[{idx}].source_evidence must be a list")
+        unlocalized_terms = [
+            normalized_visible_text(term)
+            for term in item.get("terms")
+            if is_unlocalized_cosmo_term(term)
+        ]
+        require(
+            not unlocalized_terms,
+            f"{rel_path} relations[{idx}] COSMO customer terms must be localized Chinese labels: {', '.join(unlocalized_terms[:5])}",
+        )
         if item.get("confidence") != "低" and item.get("terms"):
             evidence_text = cosmo_evidence_text(item.get("source_evidence"))
             unsupported_terms = [

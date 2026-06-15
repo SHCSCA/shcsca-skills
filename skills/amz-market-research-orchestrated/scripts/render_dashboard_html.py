@@ -958,6 +958,31 @@ COSMO_GENERIC_TAGS = {
     "其他",
 }
 
+COSMO_ENGLISH_TERM_TRANSLATIONS = {
+    "see through": "透视观察",
+    "see-through": "透视观察",
+    "see thru": "透视观察",
+    "ground blind": "地面盲棚",
+    "hunting blind": "狩猎盲棚",
+    "hunting blinds": "狩猎盲棚",
+    "deer blind": "鹿猎盲棚",
+    "deer hunting": "鹿猎场景",
+    "pop up": "弹出式结构",
+    "pop-up": "弹出式结构",
+    "camouflage": "迷彩隐蔽",
+    "camo": "迷彩隐蔽",
+    "lumbar support": "腰背支撑",
+    "office chair": "办公椅",
+    "ergonomic office chair": "人体工学办公椅",
+    "mesh back": "网布透气",
+    "breathable mesh": "网布透气",
+    "adjustable armrest": "扶手调节",
+    "bluetooth speaker": "蓝牙音箱",
+    "waterproof speaker": "防水音箱",
+    "cat water fountain": "猫咪饮水机",
+    "pet drinking fountain": "宠物自动饮水",
+}
+
 
 def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
@@ -1037,7 +1062,10 @@ def normalize_cosmo_term(value: Any) -> str:
     text = clean(value)
     text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", text, flags=re.I)
     text = re.sub(r"\s+", " ", text).strip(" ·-:：,，")
+    text = COSMO_ENGLISH_TERM_TRANSLATIONS.get(text.casefold(), text)
     if text.startswith("未映射关键词"):
+        return ""
+    if re.search(r"[A-Za-z]{3,}", text) and not re.search(r"[\u4e00-\u9fff]", text):
         return ""
     return truncate(text, 36)
 
