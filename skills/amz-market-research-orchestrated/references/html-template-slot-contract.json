@@ -1,11 +1,11 @@
 {
-  "version": "2026-06-09.fixed-template-slots.v1",
+  "version": "2026-06-12.standardized-template-slots.v2",
   "purpose": "Fixed customer HTML slot contract derived from the three downloaded reference templates. Data may change, but these layout slots, headings, anchors, controls, and chart containers must not disappear.",
   "reports": {
     "market_depth": {
       "output": "output/html_reports/market-depth-report.html",
       "reference_folder": "downloadpage/143101",
-      "required_sections": 9,
+      "required_sections": 10,
       "required_ids": [
         "priceChart",
         "bubbleChart",
@@ -19,6 +19,8 @@
       "required_text": [
         "Strategic Intelligence Report",
         "大盘仪表盘 · Market Dashboard",
+        "COSMO + Alexa 标签识别",
+        "15 类核心标签",
         "Top 竞品全景扫描",
         "VOC 体验深潜 · 痛点 × 爽点雷达",
         "正面好评",
@@ -32,6 +34,14 @@
         "供应链成本估算 · 1688大盘数据",
         "供应链核心结论"
       ],
+      "required_markers": [
+        "class=\"cosmo-layout\"",
+        "class=\"cosmo-panel cosmo-matrix\"",
+        "class=\"cosmo-panel cosmo-top-list\"",
+        "class=\"cosmo-panel cosmo-gap-panel\"",
+        "class=\"cosmo-panel cosmo-action-board\"",
+        "data-cosmo-relation=\""
+      ],
       "exact_class_counts": {
         "pricing-card": 3,
         "prompt-card": 3,
@@ -41,7 +51,7 @@
         "market-voc-card pain": 6
       },
       "minimum_class_counts": {
-        "section-header": 9,
+        "section-header": 10,
         "section-number": 7,
         "kpi-card": 4,
         "chart-container": 6,
@@ -50,6 +60,9 @@
         "market-voc-sentiment-columns": 1,
         "market-voc-column positive": 1,
         "market-voc-column negative": 1
+      },
+      "minimum_marker_counts": {
+        "data-cosmo-relation=\"": 15
       },
       "required_customer_scopes": [
         "data-allow-asin=\"competitor-table\"",
@@ -66,7 +79,8 @@
         "priorityChart",
         "aovChart",
         "skuTable",
-        "skuBody"
+        "skuBody",
+        "skuFullPool"
       ],
       "required_text": [
         "Lifecycle Strategy",
@@ -84,6 +98,11 @@
         "复购",
         "AOV",
         "LTV"
+      ],
+      "required_markers": [
+        "class=\"site-nav\"",
+        "class=\"sku-full-pool\"",
+        "data-supply=\"pending\""
       ],
       "exact_class_counts": {
         "persona-card": 3,
@@ -103,11 +122,18 @@
       },
       "required_component_groups": [
         "ecosystem-chart-grid",
+        "ecosystem-pool-summary",
         "sku-strategy-grid",
+        "sku-table-wrap",
+        "sku-full-pool",
         "roadmap-phase-grid",
         "roadmap-action-grid",
         "bundle-grid",
         "risk-grid"
+      ],
+      "visible_label_rules": [
+        "Customer-facing lifecycle filters and badges must use Chinese strategy labels generated from current evidence.",
+        "Raw Type A/B/C/D labels are allowed only as internal data-filter values and must not appear in customer HTML."
       ]
     },
     "demand_gap": {

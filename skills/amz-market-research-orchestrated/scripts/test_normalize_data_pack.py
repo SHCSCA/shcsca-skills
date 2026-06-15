@@ -58,8 +58,64 @@ class NormalizeDataPackTest(unittest.TestCase):
             product = data_pack["products"][0]
             self.assertEqual(product["source_ids"], ["src_search", "src_detail"])
             self.assertEqual(product["validation"]["evidence_source_count"], 2)
-            self.assertEqual(product["title_cn"], "未命名竞品")
-            self.assertNotIn("壁灯", product["title_cn"])
+            self.assertNotIn("title_cn", product)
+            self.assertNotIn("positioning_cn", product)
+
+    def test_relevance_gate_clears_stale_customer_labels_without_generating_category_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "asin",
+                        "value": "B0BR4QYGS7",
+                        "category": "Hunting Blinds",
+                        "seed_keywords": ["hunting blinds", "ground blind", "see through hunting blind"],
+                    },
+                    "products": [
+                        {
+                            "asin": "B0BR4QYGS7",
+                            "title": "FUNHORUN Hunting Blind 270/360 Degree See Through Ground Blind with Carrying Bag",
+                            "brand": "FUNHORUN",
+                            "category": "Sports & Outdoors",
+                            "subcategory": "Blinds",
+                            "positioning_cn": "户外感应灯",
+                        },
+                        {
+                            "asin": "B076VQ91JJ",
+                            "title": "TotalBoat Aluminum Boat Paint for Canoes, Hunting Blinds, and Trailers",
+                            "brand": "TotalBoat",
+                            "category": "Sports & Outdoors",
+                            "subcategory": "Painting Supplies",
+                            "positioning_cn": "户外感应灯",
+                        },
+                    ],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            effective_asins = {product.get("asin") for product in data_pack["effective_products"]}
+            self.assertIn("B0BR4QYGS7", effective_asins)
+            self.assertNotIn("B076VQ91JJ", effective_asins)
+            product = next(item for item in data_pack["products"] if item.get("asin") == "B0BR4QYGS7")
+            self.assertNotEqual(product.get("title_cn"), "户外感应灯")
+            self.assertNotEqual(product.get("segment_cn"), "户外感应灯")
+            self.assertNotEqual(product.get("positioning_cn"), "户外感应灯")
+            self.assertNotIn("customer_title_cn", product)
 
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
         with tempfile.TemporaryDirectory() as tmp:

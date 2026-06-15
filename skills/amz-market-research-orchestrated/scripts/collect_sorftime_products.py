@@ -17,6 +17,8 @@ from typing import Any
 ENTITY_KEY = "products"
 PRIMARY_TOOL = "product_search"
 FALLBACK_TOOL = "keyword_search_results"
+IMAGE_COVERAGE_GAP_TYPE = "competitor_image_coverage"
+IMAGE_COVERAGE_MINIMUM = 0.25
 DEFAULT_SEGMENT_SEEDS = [
     ("橱柜感应灯", "under cabinet motion sensor light"),
     ("RGB 灯带", "rgbic led strip lights"),
@@ -213,7 +215,24 @@ def product_entity(row: dict[str, Any], source_id: str, seed: str, segment: str)
             first(row, "月销量", "estimated_monthly_sales", "MonthlySales", "monthly_sales", "sales_30d", "近30天销量", "销量")
         ),
         "bsr": to_number(first(row, "BSR", "bsr", "大类排名", "排名", "rank")),
-        "image_url": first(row, "图片", "image", "image_url", "Photo", "photo"),
+        "image_url": first(
+            row,
+            "图片",
+            "image",
+            "Image",
+            "image_url",
+            "ImageUrl",
+            "imageUrl",
+            "main_image",
+            "mainImage",
+            "main_image_url",
+            "MainImage",
+            "thumbnail",
+            "thumbnail_url",
+            "Thumbnail",
+            "Photo",
+            "photo",
+        ),
         "url": first(row, "url", "URL", "link", "商品链接", "product_url"),
         "category": first(row, "所属大类", "category", "Category", "大类"),
         "subcategory": first(row, "所属细分类目", "subcategory", "Subcategory", "细分类目"),
@@ -327,6 +346,51 @@ def segment_counts(products: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def image_url_coverage(products: list[dict[str, Any]]) -> dict[str, Any]:
+    seen: set[str] = set()
+    total = 0
+    with_image = 0
+    for product in products:
+        identity = product_identity(product)
+        if not identity or identity in seen or not is_valid_competitor(product) or not is_relevant_product(product):
+            continue
+        seen.add(identity)
+        total += 1
+        if normalize_space(product.get("image_url")):
+            with_image += 1
+    return {
+        "valid_competitors_total": total,
+        "with_image_url": with_image,
+        "coverage": round(with_image / total, 4) if total else 0,
+    }
+
+
+def sync_image_coverage_gap(data_pack: dict[str, Any], coverage: dict[str, Any], fetched_at: str) -> bool:
+    existing = data_pack.setdefault("data_gaps", [])
+    data_pack["data_gaps"] = [gap for gap in existing if gap.get("type") != IMAGE_COVERAGE_GAP_TYPE]
+    total = int(coverage.get("valid_competitors_total") or 0)
+    with_image = int(coverage.get("with_image_url") or 0)
+    ratio = float(coverage.get("coverage") or 0)
+    if total <= 0 or ratio >= IMAGE_COVERAGE_MINIMUM:
+        return False
+    if with_image == 0:
+        gap_text = f"Amazon 竞品池当前 {total} 个有效竞品未返回可展示主图 URL。"
+    else:
+        gap_text = f"Amazon 竞品池当前 {total} 个有效竞品中仅 {with_image} 个返回可展示主图 URL，图片覆盖率 {ratio:.0%}。"
+    data_pack["data_gaps"].append(
+        {
+            "type": IMAGE_COVERAGE_GAP_TYPE,
+            "module": "amazon_competitor_images",
+            "gap": gap_text,
+            "impact": "竞品全景扫描和标杆竞品狙击拆解只能保留图片槽位与中文诊断，不能使用 1688 货源图冒充 Amazon 竞品图。",
+            "next_action": "运行 collect_sorftime_product_enrichment.py 对核心 ASIN 调用 product_detail 补采图片字段；若多 ASIN 仍为空，保留诊断并记录 Sorftime 图片维度缺口。",
+            "coverage": coverage,
+            "fetched_at": fetched_at,
+        }
+    )
+    return True
+
+
 def collection_ready(products: list[dict[str, Any]], min_products: int, min_segments: int, min_per_segment: int) -> bool:
     if valid_competitor_count(products) < min_products:
         return False
@@ -388,6 +452,7 @@ def collect(
             "collection_ready": collection_ready(data_pack.get(ENTITY_KEY) or [], min_products, min_segments, min_per_segment),
             "min_products": min_products,
             "valid_competitors_total": valid_competitor_count(data_pack.get(ENTITY_KEY) or []),
+            "image_url_coverage": image_url_coverage(data_pack.get(ENTITY_KEY) or []),
             "segment_counts": segment_counts(data_pack.get(ENTITY_KEY) or []),
             "products_added": 0,
             "calls": 0,
@@ -459,6 +524,7 @@ def collect(
 
     total_valid = valid_competitor_count(data_pack.get(ENTITY_KEY) or [])
     segment_summary = segment_counts(data_pack.get(ENTITY_KEY) or [])
+    image_coverage = image_url_coverage(data_pack.get(ENTITY_KEY) or [])
     ready = collection_ready(data_pack.get(ENTITY_KEY) or [], min_products, min_segments, min_per_segment)
     if ready:
         failure_reason = ""
@@ -477,6 +543,7 @@ def collect(
                 "fetched_at": fetched_at,
             }
         )
+    image_gap_recorded = sync_image_coverage_gap(data_pack, image_coverage, fetched_at)
 
     invalidate_normalization(report_dir, data_pack)
     write_json(data_path, data_pack)
@@ -488,6 +555,8 @@ def collect(
         "min_segments": min_segments,
         "min_per_segment": min_per_segment,
         "valid_competitors_total": total_valid,
+        "image_url_coverage": image_coverage,
+        "image_gap_recorded": image_gap_recorded,
         "segment_counts": segment_summary,
         "products_added": added,
         "rejected_irrelevant_or_incomplete_rows": rejected_rows,

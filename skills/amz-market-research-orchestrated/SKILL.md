@@ -89,6 +89,11 @@ Fail-closed 恢复与停止规则：
 - 客户版 HTML 出现 `source_id`、provider、raw path、内部版本标记、`竞品记录` 等技术或占位字段时，必须停止交付并修正渲染层。
 - ASIN 只允许在“目标锚点”“标杆竞品狙击拆解”“竞品表”“竞品参考毛利率测算”“SKU 参考竞品”中通过白名单组件展示；其他区域仍需脱敏。
 - 英文原始评论只允许作为 VOC 短摘出现，并必须同时展示中文归纳、主题、情绪和行动建议。
+- 市场深度报告必须生成并读取 `analysis/cosmo_alexa_tags.json`。该文件固定包含 15 类 COSMO + Alexa 标签关系，优先读取 `analysis_plan.report_label_profile.cosmo_relation_terms` 作为当前类目的 AI 标签画像，再用当前 `effective_products`、`effective_keywords`、`effective_reviews`、TikTok 信号和 1688 标题/类目做逐词证据匹配和补充；不得写死某个行业的标签词。AI 标签画像只作为候选词，未被当前有效数据文本支撑的词不能进入客户可见 `terms`，只能在审计文件中作为低覆盖补证线索保留；不得写成高置信事实。
+- COSMO 标签必须按 relation 生成差异化词组，禁止把同一组标签或同一个泛化标签批量复用到多个 relation。英文 cue 必须按词边界匹配，不能让 `pet` 命中 `competitor`、`cat` 命中其他单词片段。
+- 客户 HTML 的 COSMO 模块只能展示中文标签、`产品意图/用户意图` 和客户可读的 `产品/用户` 标记；`P01/U09` 这类槽位编号只能保留在 `data-cosmo-relation` 属性和审计文件中，不得出现在可见客户文案。`USED_*`、`CAPABLE_OF`、`IS_A`、`xWANT`、`xIs_A`、`xINTERSTED_IN`、`REL_*` 等内部 relation code 只能保留在 `analysis/cosmo_alexa_tags.json` 和审计文件，不能出现在可见文本、隐藏文本或 `data-*` 属性。
+- 生命周期报告必须生成并读取 `analysis/lifecycle_strategy.json`。其中 `sku_candidate_pool` 是真实候选池，`recommended_skus` 是推荐 SKU，`ecosystem_nodes` 是图表节点，`filter_diagnostics` 说明筛选损耗；生命周期策略类型必须用 `core_validation`、`scenario_upgrade`、`accessory_gap`、`maintenance_repurchase` 语义 key 和中文 `type_label_cn`，不得在数据层或客户层使用裸 `A/B/C/D`；旧 5 个固定卡片只代表模板布局槽，不得冒充完整 SKU 池。
+- `research_relevance.passed=false` 的产品、关键词、评论、供应记录不得进入客户 view model。若剔除后 SKU 候选池或标签覆盖不足，客户页保留完整模板并显示中文诊断，不得用 `未命名竞品`、`户外感应灯`、`Type A/B/C/D` 或旧 fallback SKU 填充。
 
 ## Step 0: 解析并补齐用户输入
 
@@ -164,6 +169,7 @@ Fail-closed 恢复与停止规则：
 - TikTok 验证：跑 `collect_sorftime_tiktok_signals.py`，内部按 Sorftime schema 调用 `tiktok_similar_product(searchName,page,site)`、`tiktok_product_detail(productId,site)`、`tiktok_product_trend(productId,site)`、`tiktok_product_video(productId,page,site)`、`tiktok_product_video_author(productId,site)`。
 - 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime 官方文档调用 `ali1688_similar_product(searchName,page)`，并记录每页实际返回字段；1688 官方 16 字段覆盖率写入 `documented_field_coverage`，`Url/url` 只作为 `URL` 别名处理。若 MCP 实际响应缺少 `Title` / `URL`，必须阻断供应链毛利率结论并写入诊断。
 - 竞品池补采：跑 `collect_sorftime_products.py`，内部优先按 Amazon schema 调用 `product_search`，必要时回退到 `keyword_search_results`，不得复用 TikTok 或 1688 参数结构。
+- Amazon 竞品主图：`collect_sorftime_products.py` 必须统计 `image_url_coverage`。若有效竞品池图片覆盖不足，必须写入 `data_gaps.type=competitor_image_coverage` 并继续用 `collect_sorftime_product_enrichment.py` 对核心 ASIN 调用 `product_detail` 补采图片字段；竞品全景扫描、竞品表、标杆竞品狙击拆解、生命周期 SKU 卡和 SKU 表只能展示 Amazon 竞品主图或 ASIN 详情图，不能使用 1688 货源图冒充 Amazon 竞品图。生命周期候选池应把参考竞品图写入 `reference_image_url`；若 Sorftime 没返回图片，保留 SKU 槽位并显示数据诊断，不造图、不借用供应端图片。
 - Amazon 竞品增强：跑 `collect_sorftime_product_enrichment.py`，对已入池 ASIN 调用 `product_detail`、`product_trend`、`product_variations`、`product_traffic_terms`、`competitor_product_keywords`。可用维度必须写回 Data Pack；返回空的维度必须进入 `data_gaps`，不能写成已验证事实。若某个维度对首个 ASIN 返回 0 行，必须换其他已入池 ASIN 继续复测；多 ASIN 仍为空时才写成当前 Sorftime 维度缺口。
 - MCP 字段审计：当用户质疑官方字段与实际结果不一致，或采集字段缺失时，跑 `audit_sorftime_mcp_contracts.py`，保存 Amazon / TikTok / 1688 的 schema、实际参数、返回行数和实际字段集合。`tools/list` 只能证明入参 schema；出参字段覆盖率必须来自真实 `tools/call` 抽样。Amazon / TikTok 没有官方固定 16 字段清单时，以本 skill 的标准化维度覆盖率审计；1688 按官方 16 字段审计。
 
@@ -293,7 +299,7 @@ python skills/amz-market-research-orchestrated/scripts/normalize_data_pack.py --
 
 - 交叉验证和去重：Amazon 产品按 ASIN 或标题指纹，关键词按“全局词 / ASIN 反查词”分桶，Review 按 ASIN+日期+标题+正文指纹，TikTok 按 product_id / canonical URL，Web 按 canonical URL，1688 按 canonical URL、商品 ID 或标题+店铺。
 - 数据血缘合并：保留 `source_ids`、`validation.evidence_source_count`、`validation.cross_validated`、`validation.conflicts`。
-- 中文映射：关键词新增 `keyword_cn`、`intent_cn`、`relevance_cn`；产品新增 `title_cn`、`segment_cn`、`positioning_cn`；评论新增 `title_cn`、`summary_cn`、`themes_cn`，客户版 HTML 不直接展示英文原评。
+- 中文映射：关键词新增 `keyword_cn`、`intent_cn`、`relevance_cn`；产品新增 `title_cn`、`segment_cn`、`positioning_cn`；评论新增 `title_cn`、`summary_cn`、`themes_cn`，客户版 HTML 不直接展示英文原评。归一化脚本只负责清洗、去重、字段标准化和污染字段剔除，不得为某个类目写死客户标题、赛道名、标签或拓品类型名。
 - 噪声分层：核心关键词、相邻泛流量、ASIN 反查流量词必须分开展示，不能把泛词流量当成品类机会。
 - 幂等 baseline：首次归一化写入 `data/normalized/normalization_baseline.json`，后续反复渲染不得冲掉原始样本数和去重收益。
 - 样本门槛：标准版和深度版归一化后关键词不得少于 1000 条；不足时继续分页采集或在 `data_gaps` 标注为未达交付标准。
@@ -315,15 +321,74 @@ reports/{task_id}/data/normalized/normalized_data_pack.json
 2. 产品全生命周期拓品战略：战略仪表盘、用户画像、生命周期旅程、四维拓品生态、拓品方案池、Bundle 策略、30/60/90 天路线图、风险矩阵、市场验证摘要。
 3. 用户心智断层与需求机会：研究对象概述、决策看板、需求主题痛点图、满意度鸿沟、`KANO × JTBD`、用户原声、需求优先级。
 
+分析阶段必须由 AI 基于当前研究对象、有效竞品标题、类目、关键词、评论和供应链证据生成 `report_label_profile`，并写入 `analysis_plan.json`。这是客户页标题、标签和生命周期类型名的唯一来源；HTML 模板不得写死行业标签，也不得把内部类型码直接展示给客户。
+
+`report_label_profile` 最低结构：
+
+```json
+{
+  "label_generation_basis": "基于当前研究对象、effective_products、effective_keywords、effective_reviews 生成",
+  "product_title_labels": {
+    "B0EXAMPLE": "当前产品对应的中文短名"
+  },
+  "segment_labels": {
+    "raw segment/category text": "当前类目下的中文赛道名"
+  },
+  "keyword_labels": {
+    "raw keyword lower-case": "当前类目下的中文流量标签"
+  },
+  "traffic_tag_labels": {
+    "raw traffic keyword lower-case": "当前类目下的中文入口标签"
+  },
+  "lifecycle_type_labels": {
+    "A": "当前类目下的主产品路径名",
+    "B": "当前类目下的升级/套装路径名",
+    "C": "当前类目下的配件/补位路径名",
+    "D": "当前类目下的维护/复购路径名"
+  }
+}
+```
+
+生成要求：
+
+- `product_title_labels` 不得使用 `未命名竞品`、`竞品记录`、`样本`、旧类目名或模板词。
+- `segment_labels` 和 `keyword_labels` 必须来自当前产品语义；例如不能因为旧模板是 lighting，就在 Hunting Blinds、宠物用品、家居收纳等项目里输出照明标签。
+- `lifecycle_type_labels` 可以保留内部 A/B/C/D 作为键，但值必须是当前项目可读中文业务名；客户 HTML 只能展示值，不能展示 `Type A/B/C/D`。
+- 如果 AI 无法生成可信标签，必须写入 `analysis_plan.limitations` 和 critic 改进项；客户页对应槽位显示中文诊断，不得由模板硬编一个行业词兜底。
+
 推荐额外写入：
 
 ```text
 reports/{task_id}/analysis/
+  cosmo_alexa_tags.json
   lifecycle_strategy.json
   demand_gap.json
 ```
 
-如果这两个文件缺失，HTML 渲染器会从 Data Pack 推导基础区块，但必须在 `data_gaps` 或 `analysis_plan.limitations` 标注分析深度不足。
+如果 `cosmo_alexa_tags.json` 或 `lifecycle_strategy.json` 缺失，完整客户报告必须进入诊断或重新生成分析产物；不得静默退回旧模板样例。`demand_gap.json` 缺失时，HTML 渲染器可从 Data Pack 推导基础区块，但必须在 `data_gaps` 或 `analysis_plan.limitations` 标注分析深度不足。
+
+`analysis/cosmo_alexa_tags.json` 必须包含 15 类关系：`USED_FOR_FUNC`、`USED_FOR_EVE`、`USED_FOR_AUD`、`CAPABLE_OF`、`USED_TO`、`USED_AS`、`IS_A`、`USED_ON`、`USED_IN_LOC`、`USED_IN_BODY`、`USED_WITH`、`USED_BY`、`xINTERSTED_IN`、`xIs_A`、`xWANT`。每类必须包含中文标签名、英文 relation type、标签词、证据来源、置信度、覆盖证据数，以及 Listing / QA / 广告动作建议。市场深度 HTML 必须展示“COSMO + Alexa 标签识别 · 产品标签 × 用户标签”板块，包含覆盖矩阵、高置信标签、用户标签与产品标签缺口和建议动作。
+
+`analysis/lifecycle_strategy.json` 必须包含：
+
+```json
+{
+  "module": "lifecycle_strategy",
+  "sku_candidate_pool": [],
+  "recommended_skus": [],
+  "ecosystem_nodes": [],
+  "filter_diagnostics": {
+    "effective_products": 0,
+    "effective_suppliers": 0,
+    "sku_candidate_pool": 0,
+    "recommended_skus": 0,
+    "filtered_out": []
+  },
+  "limitations": []
+}
+```
+
+当有效竞品和供应记录充足时，`sku_candidate_pool` 目标为 30-80 个，图表、表格和筛选控件必须读取候选池而不是 5 个展示卡片。四维生态图必须是“研究对象 -> 四维路径 -> 细分赛道/场景 -> SKU/参考 ASIN”的多层结构；优先级图必须按 SKU 数量自适应，少量 SKU 用紧凑评分卡，多量 SKU 用 Top 榜和完整候选池折叠表。
 
 方法链必须记录：
 
@@ -356,6 +421,7 @@ reports/{task_id}/
     voc.json
     opportunity.json
     profitability.json
+    cosmo_alexa_tags.json
     lifecycle_strategy.json
     demand_gap.json
   output/
@@ -382,6 +448,9 @@ reports/{task_id}/
 - 三份子报告的视觉与交互基准必须吸收用户提供的本地下载模板：`downloadpage/143101` 对应市场深度、`downloadpage/143511` 对应生命周期、`downloadpage/143645` 对应需求断层。只抽取报告页 HTML/CSS/JS 的布局与交互模式到共享 `report.css` / `report.js`；不得搬运 `_next` chunks、iframe case 壳、CDN 依赖或样例硬编码数据。
 - Markdown 保留完整证据链和方法链；它是审计稿，不是 HTML 的渲染源。
 - HTML 要有客户可读的证据强度、数据覆盖、数据缺口、置信等级和建议动作；Markdown / JSON 保留完整审计链路。
+- HTML 必须统一读取 `report_readiness_view`，只允许出现三种交付状态：`完整可交付`、`诊断交付`、`阻断交付`。入口页、市场页、生命周期页和需求断层页不得各自独立判断供应链、证据强度或最终决策。
+- `delivery_result.json.decision` 必须明确为 `Go`、`Watch` 或 `No-Go`，不能为 `null`。当供应链毛利率被阻断但市场/VOC/生命周期仍可阅读时，默认降级为 `Watch`；核心数据污染或产品池/关键词不足时降级为 `No-Go` 或阻断交付。
+- 当 `report_readiness_view.supply_blocked=true` 时，所有客户 HTML 必须显示 `供应链测算未达门槛`，证据强度最高只能是 `中 / 诊断交付`，并禁止出现供应链已可控、可打样或毛利率可测算这类矛盾表达。
 - 聊天里只给摘要和路径，不粘贴完整报告。
 
 HTML 主体必须使用真实结构化组件：
@@ -393,6 +462,10 @@ HTML 主体必须使用真实结构化组件：
 - 能展示的数据要先转成 AI 深度分析后的结论、商业含义和建议动作；原始长表、数据血缘和完整来源细节只保留在 `data_pack.json`、`lineage.md`、`report.md`、`delivery_result.json` 中。
 - 评论/VOC 必须先做中文化映射：用户原声展示中文摘要、星级、情绪、主题和需求含义；可并列展示短英文评论摘录，但必须标记 `data-allow-english-review="short"`，完整英文原评、英文标题和抓取字段原值只留在审计文件。
 - 市场深度报告的 VOC 证据卡必须固定为左右分栏：左侧 `正面好评`、右侧 `负面差评`，每侧 6 槽，使用 `market-voc-sentiment-columns`、`market-voc-column positive`、`market-voc-column negative` 和 `market-voc-card joy/pain`。不得再用单一 `quote-grid` 把好评和差评混排。
+- 市场深度报告的 `COSMO + Alexa 标签识别` 必须使用固定四区块：`cosmo-matrix` 15 类 relation 矩阵、`cosmo-top-list` 高置信标签排行、`cosmo-gap-panel` 产品/用户标签缺口、`cosmo-action-board` Listing / QA / 广告动作。`cosmo-matrix` 内必须再拆成 `product-lane` 和 `user-lane` 两条中文分区：`产品标签 · 产品被算法识别为什么`、`用户标签 · 用户为什么搜索/购买`。矩阵格必须使用客户可读的 `产品意图/用户意图` 与 `产品/用户` 标记，不得把英文 relation code 或 `P01/U09` 槽位编号当成可见标题；不得退回普通小卡片堆叠，也不得为了填满 15 类而把无证据 relation 写成高置信。
+- COSMO 标签生成必须是类目通用逻辑：狩猎、灯具、宠物、电子等类目词只能在当前有效竞品、关键词、评论或供应标题明确支持时出现。禁止因为 `outdoor`、`box`、`waterproof` 等泛词，把非狩猎产品误标成 `盲棚`、`猎人`、`隐蔽装备` 等类目专属标签。
+- COSMO 客户页不得出现 `USED_*`、`CAPABLE_OF`、`xWANT`、`REL_1` 等内部码；这些只允许留在 `analysis/cosmo_alexa_tags.json` 和审计文件，不能出现在可见文本、隐藏文本或 `data-*` 属性。高/中置信 relation 的词组重复签名和单词过度复用必须让 validator 失败。
+- 生命周期 SKU 表默认只展示 Top 8-15 候选，完整候选池放入折叠表或分页表。每个 SKU 必须区分 `供应锚点` 和 `仅竞品/VOC 候选`；客户可见标签必须是当前产品证据生成的中文策略名，不得展示 `Type A/B/C/D`。
 
 推荐生成顺序：
 

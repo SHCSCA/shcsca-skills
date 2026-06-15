@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from html_components import as_float, clean, first, has_cjk, money, num, product_price, product_reviews, product_sales, truncate
 from normalize_data_pack import THEME_CN
+
+GENERIC_PRODUCT_LABELS = {"未命名竞品", "竞品记录", "未知", "未分层", "核心竞品"}
 
 
 def review_theme_labels(review: dict[str, Any]) -> list[str]:
@@ -38,7 +41,9 @@ def customer_review_summary(review: dict[str, Any], limit: int = 180) -> str:
     text = raw_text
     phrases: list[str] = []
     if rating >= 4:
-        if any(term in text for term in ["bright", "brightness", "light", "color", "rgb"]):
+        if re.search(r"\blight\s*weight\b|\blightweight\b", text):
+            phrases.append("轻便和携带体验获得正向反馈")
+        if any(term in text for term in ["bright", "brightness", "led", "rgb", "color temperature", "color mode"]):
             phrases.append("亮度和灯效获得正向反馈")
         if any(term in text for term in ["easy", "install", "setup", "stick", "adhesive"]):
             phrases.append("安装和上手体验获得正向反馈")
@@ -90,12 +95,27 @@ def review_sentiment_label(review: dict[str, Any]) -> str:
     return "待判定"
 
 
+def is_bad_customer_product_label(value: Any, product: dict[str, Any]) -> bool:
+    text = clean(value)
+    if not text:
+        return True
+    if text in GENERIC_PRODUCT_LABELS or text.startswith("未映射关键词"):
+        return True
+    product_context = " ".join(
+        clean(product.get(key)).casefold()
+        for key in ("title", "category", "subcategory", "seed_keyword", "search_term")
+    )
+    if text == "户外感应灯" and any(token in product_context for token in ["hunting", "blind", "camouflage", "tent"]):
+        return True
+    return False
+
+
 def customer_product_position(product: dict[str, Any]) -> str:
-    for key in ("positioning_cn", "title_cn"):
+    for key in ("customer_title_cn", "customer_segment_cn", "title_cn", "segment_cn", "positioning_cn"):
         value = clean(product.get(key))
-        if value and has_cjk(value):
+        if value and has_cjk(value) and not is_bad_customer_product_label(value, product):
             return truncate(value, 90)
-    segment = first(product.get("segment_cn"), product.get("segment"), default="核心竞品")
+    segment = first(product.get("customer_segment_cn"), product.get("segment_cn"), product.get("segment"), default="核心竞品")
     price = money(product_price(product))
     rating = first(product.get("rating"), default="-")
     reviews = num(product_reviews(product))

@@ -149,7 +149,7 @@ def customer_product_label(product: dict[str, Any]) -> str:
     title = clean(product.get("title"))
     if brand and title:
         return f"{brand} 竞品"[:80]
-    return brand or "未命名竞品"
+    return brand or "目标类目竞品"
 
 
 def product_sales(product: dict[str, Any]) -> Any:
@@ -204,45 +204,70 @@ def confidence_level(data_pack: dict[str, Any], analysis_plan: dict[str, Any] | 
 
 
 def lifecycle_skus(data_pack: dict[str, Any], lifecycle: dict[str, Any], fallback_source: str) -> list[dict[str, Any]]:
+    lifecycle = lifecycle or data_pack.get("lifecycle_strategy") or {}
+    candidate_pool = lifecycle.get("sku_candidate_pool")
+    if isinstance(candidate_pool, list) and candidate_pool:
+        return [item for item in candidate_pool if isinstance(item, dict)]
+    recommended = lifecycle.get("recommended_skus")
+    if isinstance(recommended, list) and recommended:
+        return [item for item in recommended if isinstance(item, dict)]
     explicit = lifecycle.get("skus")
     if isinstance(explicit, list) and explicit:
         return [item for item in explicit if isinstance(item, dict)]
-    products = relevant_products(data_pack.get("products") or [])
-    suppliers = data_pack.get("suppliers") or []
-    defaults = [
-        {"name": "备用与替换核心配件", "stage": "开箱与替换", "type": "A", "price": "$12-$29", "supply": "自有或可控供应链", "phase": "P1", "priority": 92, "source_id": fallback_source},
-        {"name": "信任说明卡 + 快速启动卡", "stage": "0-30 分钟", "type": "A", "price": "$3-$6", "supply": "印刷包装", "phase": "P1", "priority": 88, "source_id": fallback_source},
-        {"name": "场景化配件包", "stage": "1-7 天", "type": "B", "price": "$12-$24", "supply": "自有或外协供应链", "phase": "P1", "priority": 84, "source_id": fallback_source},
-        {"name": "清洁、保养与维护套装", "stage": "7 天-6 个月", "type": "D", "price": "$9-$19", "supply": "外采耗材", "phase": "P2", "priority": 78, "source_id": fallback_source},
-        {"name": "替换充电线与数据线套装", "stage": "维护期", "type": "D", "price": "$8-$12", "supply": "外采电子", "phase": "P2", "priority": 72, "source_id": fallback_source},
-    ]
-    for product in products[:3]:
-        defaults.append(
+    products = relevant_products(data_pack.get("effective_products") or data_pack.get("products") or [])
+    suppliers = data_pack.get("effective_suppliers") or data_pack.get("suppliers") or []
+    rows: list[dict[str, Any]] = []
+    type_labels = ["A", "B", "C", "D"]
+    suffix_by_type = {"A": "基础验证款", "B": "场景升级款", "C": "配件补位款", "D": "维护复购款"}
+    for idx, product in enumerate(products[:40]):
+        sku_type = type_labels[idx % len(type_labels)]
+        segment = infer_segment_cn(product) or customer_product_label(product)
+        price = as_float(product_price(product), 0)
+        rows.append(
             {
-                "name": f"{customer_product_label(product)} 对标配件",
-                "stage": "竞品补位",
-                "type": "C",
-                "price": money(max(9, as_float(product_price(product), 19) * 0.18)),
+                "name": f"{segment} {suffix_by_type[sku_type]}",
+                "stage": "竞品驱动候选",
+                "type": sku_type,
+                "type_label_cn": suffix_by_type[sku_type],
+                "target_segment": segment,
+                "reference_competitor": customer_product_label(product),
+                "reference_asin": clean(product.get("asin")),
+                "reference_price": money(price),
+                "reference_rating": product.get("rating"),
+                "reference_reviews": product.get("review_count"),
+                "reference_sales": product_sales(product),
+                "price": money(price or 19),
                 "supply": "按竞品差异打样",
-                "phase": "P2",
-                "priority": 70,
+                "phase": "P1" if idx < 16 else "P2",
+                "priority": max(45, min(96, int(60 + as_float(product_sales(product), 0) / 120 + as_float(product.get("rating"), 0) * 3))),
+                "ecosystem_path": {"A": "关联度", "B": "场景", "C": "消耗", "D": "维护"}[sku_type],
+                "ecosystem_segment": segment,
                 "source_id": source_ids_for(product, fallback_source),
             }
         )
-    for supplier in suppliers[:3]:
-        defaults.append(
+    for idx, supplier in enumerate(suppliers[:20]):
+        title = clean(first(supplier.get("title"), supplier.get("Title"), supplier.get("name"), default="供应端相似成品"))
+        if not title:
+            continue
+        sku_type = type_labels[(idx + len(rows)) % len(type_labels)]
+        rows.append(
             {
-                "name": "1688 相似供应端机会",
+                "name": f"{title[:28]} {suffix_by_type[sku_type]}",
                 "stage": "供应链验证",
-                "type": "D",
-                "price": money(first(supplier.get("price"), supplier.get("price_rmb"), default=12), "¥"),
-                "supply": "供应端机会",
+                "type": sku_type,
+                "type_label_cn": suffix_by_type[sku_type],
+                "target_segment": title[:18],
+                "reference_competitor": "供应端相似成品",
+                "price": money(first(supplier.get("price"), supplier.get("price_rmb"), supplier.get("Price"), default=12), "¥"),
+                "supply": title,
                 "phase": "P2",
-                "priority": 68,
+                "priority": max(42, 68 - idx),
+                "ecosystem_path": {"A": "关联度", "B": "场景", "C": "消耗", "D": "维护"}[sku_type],
+                "ecosystem_segment": title[:18],
                 "source_id": source_ids_for(supplier, fallback_source),
             }
         )
-    return defaults
+    return rows
 
 
 def readiness_summary(readiness: dict[str, Any] | None) -> dict[str, Any]:
@@ -322,6 +347,7 @@ def build_site_data(data_pack: dict[str, Any], analysis_plan: dict[str, Any], de
         "child_skills": child_skills,
         "interactive_features": INTERACTIVE_FEATURES,
         "decision": decision,
+        "report_readiness_view": client_safe_view_payload(data_pack.get("report_readiness_view") or {}),
         "readiness": readiness_summary(readiness),
         "quality": customer_quality_label(data_pack.get("quality") or {}),
         "decision_cockpit": decision_cockpit(data_pack, analysis_plan, decision, readiness),
@@ -433,7 +459,7 @@ def build_report_views(data_pack: dict[str, Any], analysis_plan: dict[str, Any],
         }
         for review in reviews[:80]
     ]
-    lifecycle_sku_rows = lifecycle_skus(data_pack, {}, primary_source_id(data_pack))
+    lifecycle_sku_rows = lifecycle_skus(data_pack, data_pack.get("lifecycle_strategy") or {}, primary_source_id(data_pack))
     return {
         "market_depth_view": {
             **common,

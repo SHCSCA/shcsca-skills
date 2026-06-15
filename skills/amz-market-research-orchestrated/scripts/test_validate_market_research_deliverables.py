@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import validate_market_research_deliverables as validator
 from delivery_writer import child_skill_invocations
@@ -121,10 +122,20 @@ def child_html(style, title, sections, extra_terms=""):
     lifecycle_scaffold = ""
     demand_scaffold = ""
     if style == "market-depth-report-v2":
+        cosmo_product_cards = "".join(
+            f'<article class="cosmo-tag-card cosmo-matrix-cell" data-cosmo-relation="{"P" if idx < 8 else "U"}{(idx + 1) if idx < 8 else (idx - 7):02d}" data-confidence="高" data-dimension="{"产品标签" if idx < 8 else "用户标签"}"><div class="cosmo-relation-lane"><span class="cosmo-relation-kind">{"产品意图" if idx < 8 else "用户意图"}</span><b class="cosmo-relation-id">{"产品" if idx < 8 else "用户"}</b></div><h3>标签</h3><p>{"产品标签" if idx < 8 else "用户标签"} · 已覆盖 · 证据 3</p><div class="cosmo-tag-terms"><span>有效标签</span></div></article>'
+            for idx in range(8)
+        )
+        cosmo_user_cards = "".join(
+            f'<article class="cosmo-tag-card cosmo-matrix-cell" data-cosmo-relation="U{idx - 7:02d}" data-confidence="高" data-dimension="用户标签"><div class="cosmo-relation-lane"><span class="cosmo-relation-kind">用户意图</span><b class="cosmo-relation-id">用户</b></div><h3>标签</h3><p>用户标签 · 已覆盖 · 证据 3</p><div class="cosmo-tag-terms"><span>有效标签</span></div></article>'
+            for idx in range(8, 15)
+        )
         market_scaffold = """
 <div class="fixed-template-copy">Strategic Intelligence Report Core Product Concept 新品狙击企划 · Product Definition 建议定价策略 视觉与包装指导 · Visual Direction AI生图 Prompt · 可直接使用 供应链成本估算 · 1688大盘数据 供应链核心结论</div>
 <div class="container header-badge subtitle header-meta header-meta-item label value section-title section-desc kpi-label kpi-value kpi-sub kpi-trend up hot success warning lavender card chart-grid chart-title chart-subtitle chart-body product-name product-brand price-tag rating-stars badge voc-card-title voc-item voc-content conclusion-title conclusion-grid conclusion-item conclusion-item-title conclusion-item-text"></div>
 <div id="priceChart"></div><div id="bubbleChart"></div><div id="growthChart"></div><div id="featureChart"></div><div id="radarChart"></div><div id="marginChart"></div>
+<div class="cosmo-layout"><section class="cosmo-panel cosmo-matrix"><div class="cosmo-panel-title">15 标签矩阵</div><div class="cosmo-matrix-lanes"><div class="cosmo-matrix-lane product-lane"><div class="cosmo-lane-title"><span>产品标签 · 产品被算法识别为什么</span><b>8 类</b></div><div class="cosmo-lane-grid">""" + cosmo_product_cards + """</div></div><div class="cosmo-matrix-lane user-lane"><div class="cosmo-lane-title"><span>用户标签 · 用户为什么搜索/购买</span><b>7 类</b></div><div class="cosmo-lane-grid">""" + cosmo_user_cards + """</div></div></div></section><section class="cosmo-panel cosmo-top-list"><div class="cosmo-panel-title">高置信标签排行</div><ol><li><span>功能·用途</span><strong>有效标签</strong><em>高 · 3 条证据</em></li></ol></section><section class="cosmo-panel cosmo-gap-panel"><div class="cosmo-panel-title">产品标签 / 用户标签缺口</div><p>缺口说明</p><ul><li><span>OK</span><strong>已覆盖</strong><em>继续验证</em></li></ul></section><section class="cosmo-panel cosmo-action-board"><div class="cosmo-panel-title">Listing / QA / 广告动作</div><div class="cosmo-action-grid"><article class="cosmo-action-card"><span>产品意图</span><h3>动作</h3><p>Listing：动作</p></article></div></section></div>
+<div class="card comp-image-strip-card"><div class="card-title">竞品图片诊断</div><p>图片维度未返回可展示 URL；已保留图片槽位，采集层返回真实图片字段后自动展示。</p></div>
 <table class="comp-table"><tr><th>ASIN</th><th>产品</th></tr><tr><td><span class="asin-token" data-allow-asin="competitor-table">B0TEST1234</span></td><td>数据</td></tr></table>
 <div class="market-voc-sentiment-columns"><section class="market-voc-column positive"><div class="market-voc-column-head"><span>Positive Reviews</span><h3>正面好评</h3></div><article class="market-voc-card joy">J1</article><article class="market-voc-card joy">J2</article><article class="market-voc-card joy">J3</article><article class="market-voc-card joy">J4</article><article class="market-voc-card joy">J5</article><article class="market-voc-card joy">J6</article></section><section class="market-voc-column negative"><div class="market-voc-column-head"><span>Negative Reviews</span><h3>负面差评</h3></div><article class="market-voc-card pain">P1</article><article class="market-voc-card pain">P2</article><article class="market-voc-card pain">P3</article><article class="market-voc-card pain">P4</article><article class="market-voc-card pain">P5</article><article class="market-voc-card pain">P6</article></section></div>
 <div class="voc-grid"><article class="pain-card"><div class="voc-rank pain-rank">P1</div><div class="voc-title">痛点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill pain-fill"></div></div></article><article class="joy-card"><div class="voc-rank joy-rank">J1</div><div class="voc-title">爽点</div><div class="voc-desc">描述</div><div class="voc-quote">摘要</div><div class="voc-bar"><div class="voc-bar-fill joy-fill"></div></div></article></div>
@@ -141,17 +152,19 @@ def child_html(style, title, sections, extra_terms=""):
         lifecycle_scaffold = """
 <div class="fixed-template-copy">Lifecycle Strategy 全生命周期拓品战略 战略仪表盘 用户画像 生命周期旅程 四维拓品生态 拓品方案池 Bundle 策略 30/60/90 天路线图 风险矩阵 市场验证摘要 供应链 复购 AOV LTV</div>
 <div class="accent archetype arrow badge blue bundle-body bundle-header bundle-items bundle-pricing bundle-target card chart-grid chart-subtitle chart-title conclusion-grid conclusion-item conclusion-item-text conclusion-item-title conclusion-title container desc detail emoji fill final gold green header-badge header-meta header-meta-item kpi-label kpi-sub kpi-value label mitigation name orig p1 p2 p3 persona-body persona-header persona-price phase-body phase-grid phase-header priority-bar purple quotes red report-footer save section-desc section-title sku-table-wrap source-card source-grid subtitle supply-badge tl-body tl-header tl-pain tl-skus tl-time type-badge value"></div>
+<div class="ecosystem-pool-summary">SKU 候选池总数：30；推荐 SKU：5；筛选损耗已在分析文件记录。</div>
 <div class="ecosystem-chart-grid"><div id="sunburst"></div><div id="priorityChart"></div></div><div id="aovChart"></div>
 <div class="kpi-grid"><article class="kpi-card">KPI1</article><article class="kpi-card">KPI2</article><article class="kpi-card">KPI3</article><article class="kpi-card">KPI4</article><article class="kpi-card">KPI5</article></div>
 <div class="persona-grid"><article class="persona-card">画像1</article><article class="persona-card">画像2</article><article class="persona-card">画像3</article></div>
 <div class="timeline-grid"><article class="tl-card">阶段1</article><article class="tl-card">阶段2</article><article class="tl-card">阶段3</article><article class="tl-card">阶段4</article><article class="tl-card">阶段5</article></div>
 <div class="sku-strategy-grid"><div class="sku-strategy-card">基础款</div><div class="sku-strategy-card">升级款</div><div class="sku-strategy-card">套装款</div><div class="sku-strategy-card">配件款</div><div class="sku-strategy-card">复购耗材</div></div>
-<div class="filter-bar"><button class="filter-btn">全部</button><button class="filter-btn">Type A</button><button class="filter-btn">Type B</button><button class="filter-btn">Type C</button><button class="filter-btn">Type D</button><button class="filter-btn">供应链验证</button><button class="filter-btn">P1 立即启动</button></div>
+<div class="filter-bar"><button class="filter-btn">全部</button><button class="filter-btn">基础款</button><button class="filter-btn">升级款</button><button class="filter-btn">配件款</button><button class="filter-btn">维护款</button><button class="filter-btn">供应链验证</button><button class="filter-btn">P1 立即启动</button></div>
 <div class="bundle-grid"><article class="bundle-card">Bundle 1</article><article class="bundle-card">Bundle 2</article><article class="bundle-card">Bundle 3</article><article class="bundle-card">Bundle 4</article></div>
 <div class="phase-grid roadmap-phase-grid"><div class="phase-card">Phase 1</div><div class="phase-card">Phase 2</div><div class="phase-card">Phase 3</div></div>
 <div class="phase-grid roadmap-action-grid"><div class="phase-card">30天行动清单</div><div class="phase-card">60天行动清单</div><div class="phase-card">90天行动清单</div></div>
 <div class="risk-grid"><article class="risk-card">风险1</article><article class="risk-card">风险2</article><article class="risk-card">风险3</article></div>
 <details class="evidence-drawer"><summary>证据1</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据2</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据3</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据4</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据5</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据6</summary><div>详情</div></details><details class="evidence-drawer"><summary>证据7</summary><div>详情</div></details>
+<details id="skuFullPool" class="evidence-drawer sku-full-pool"><summary>完整候选池</summary><table><tbody><tr><td>候选</td><td data-supply="pending">仅竞品/VOC 候选</td></tr></tbody></table></details>
 <table id="skuTable" class="sku"><tbody id="skuBody"></tbody></table>
 """
     if style == "demand-gap-report-v2":
@@ -261,6 +274,8 @@ def make_valid_report(root):
         },
     )
     data_pack = json.loads((root / "data" / "data_pack.json").read_text(encoding="utf-8"))
+    data_pack["effective_products"] = data_pack["products"]
+    data_pack["effective_suppliers"] = data_pack["suppliers"]
     counts = {key: len(data_pack.get(key) or []) for key in ENTITY_LIST_KEYS}
     data_pack["normalization"].update(
         {
@@ -290,6 +305,7 @@ def make_valid_report(root):
         "raw_suppliers": 50,
         "suppliers": 50,
         "valid_supplier_quotes": 50,
+        "raw_valid_supplier_quotes": 50,
         "web_documents": 1,
         "data_gaps": 1,
     }
@@ -297,9 +313,11 @@ def make_valid_report(root):
         "required": 50,
         "actual": 50,
         "raw_valid_quotes": 50,
+        "raw_finished_valid_quotes": 50,
         "non_finished_filtered": 0,
+        "strict_relevance_filtered": 0,
         "passed": True,
-        "policy": "1688 去重有效报价不足时必须多轮 Sorftime 采集，不得生成最终供应链毛利率结论。",
+        "policy": "1688 去重有效报价必须同时满足数量、字段质量和研究对象相关性，不得用无关报价生成最终供应链毛利率结论。",
     }
     supplier_quality_gate = {
         "required_field_coverage_pct": 70,
@@ -317,6 +335,25 @@ def make_valid_report(root):
         "same_search_bucket_gate": {"passed": False, "bucket": None, "valid_quotes": 0, "quality": None},
         "global_passed": True,
         "effective_passed": True,
+        "customer_visible_passed": True,
+        "raw_finished_valid_quotes": 50,
+        "strict_relevant_valid_quotes": 50,
+        "strict_relevance_filtered": 0,
+        "raw_quality_gate": {
+            "required_field_coverage_pct": 70,
+            "title_coverage_pct": 100.0,
+            "identity_coverage_pct": 100.0,
+            "segment_hint_coverage_pct": 0.0,
+            "p25_rmb": 24.25,
+            "p50_rmb": 36.5,
+            "p75_rmb": 48.75,
+            "max_rmb": 61.0,
+            "max_to_p50_ratio": 1.67,
+            "p75_to_p25_ratio": 2.01,
+            "field_quality_passed": True,
+            "price_spread_passed": True,
+            "passed": True,
+        },
         "passed": True,
     }
     competitor_gate = {
@@ -430,6 +467,111 @@ def make_valid_report(root):
     write_json(root / "analysis" / "market_depth_view.json", view_model)
     write_json(root / "analysis" / "lifecycle_strategy_view.json", view_model)
     write_json(root / "analysis" / "demand_gap_view.json", view_model)
+    cosmo_relation_labels = {
+        "USED_FOR_FUNC": "功能 / 用途",
+        "USED_FOR_EVE": "事件 / 活动",
+        "USED_FOR_AUD": "受众",
+        "CAPABLE_OF": "能力 / 可完成任务",
+        "USED_TO": "使用目的",
+        "USED_AS": "概念 / 产品类型",
+        "IS_A": "品类归属",
+        "USED_ON": "时间 / 季节 / 事件",
+        "USED_IN_LOC": "位置 / 场所",
+        "USED_IN_BODY": "身体部位",
+        "USED_WITH": "互补搭配",
+        "USED_BY": "使用者",
+        "xINTERSTED_IN": "兴趣偏好",
+        "xIs_A": "人群身份",
+        "xWANT": "用户想要达成",
+    }
+    cosmo_relation_terms = {
+        "USED_FOR_FUNC": ["语音互动", "情绪陪伴", "儿童安抚"],
+        "USED_FOR_EVE": ["生日礼物", "睡前陪伴", "节日赠礼"],
+        "USED_FOR_AUD": ["儿童家庭", "礼品买家", "亲子用户"],
+        "CAPABLE_OF": ["多轮对话", "故事播放", "安全互动"],
+        "USED_TO": ["陪孩子聊天", "安抚入睡", "提升互动感"],
+        "USED_AS": ["智能陪伴玩具", "AI 毛绒玩具", "儿童互动礼物"],
+        "IS_A": ["儿童智能玩具", "陪伴型礼品", "语音互动产品"],
+        "USED_ON": ["睡前场景", "生日季", "家庭陪伴时段"],
+        "USED_IN_LOC": ["儿童房", "客厅互动区", "家庭礼品场景"],
+        "USED_IN_BODY": ["手部抱握", "柔软接触", "儿童拥抱"],
+        "USED_WITH": ["充电线", "故事内容包", "礼盒包装"],
+        "USED_BY": ["儿童用户", "父母购买者", "亲子家庭"],
+        "xINTERSTED_IN": ["AI 陪伴", "互动玩具", "礼品创意"],
+        "xIs_A": ["新手父母", "礼品决策者", "儿童玩具买家"],
+        "xWANT": ["更安全互动", "更自然对话", "更持久陪伴"],
+    }
+    write_json(
+        root / "analysis" / "cosmo_alexa_tags.json",
+        {
+            "schema_version": "cosmo_alexa_tags.v1",
+            "coverage_summary": {
+                "relation_total": len(validator.COSMO_ALEXA_RELATION_TYPES),
+                "high_confidence_relations": len(validator.COSMO_ALEXA_RELATION_TYPES),
+                "evidence_records": 30,
+            },
+            "relations": [
+                {
+                    "relation_type": relation_type,
+                    "label_cn": cosmo_relation_labels[relation_type],
+                    "display_relation": cosmo_relation_labels[relation_type].replace(" / ", "·"),
+                    "dimension": "产品标签",
+                    "terms": cosmo_relation_terms[relation_type],
+                    "source_evidence": [
+                        {
+                            "source_type": "effective_products",
+                            "source_id": "B0VALID0001",
+                            "field": "title",
+                            "excerpt": " ".join(cosmo_relation_terms[relation_type]),
+                        }
+                    ],
+                    "confidence": "高",
+                    "coverage_status": "已覆盖",
+                    "evidence_count": 3,
+                    "listing_label": "首屏承诺",
+                    "listing_action": "标题与五点写入核心场景词。",
+                    "qa_label": "证据问答",
+                    "qa_action": "QA 补充用户使用场景。",
+                    "ad_label": "精准投放",
+                    "ad_action": "广告分组按场景词拆分。",
+                }
+                for relation_type in sorted(validator.COSMO_ALEXA_RELATION_TYPES)
+            ],
+        },
+    )
+    lifecycle_pool = [
+        {
+            "name": f"智能陪伴玩具 候选SKU {idx}",
+            "type": ["core_validation", "scenario_upgrade", "accessory_gap", "maintenance_repurchase"][idx % 4],
+            "strategy_type_key": ["core_validation", "scenario_upgrade", "accessory_gap", "maintenance_repurchase"][idx % 4],
+            "type_label_cn": ["基础验证款", "场景升级款", "配件补位款", "维护复购款"][idx % 4],
+            "target_segment": ["智能陪伴玩具", "语音互动玩具", "儿童礼品玩具"][idx % 3],
+            "reference_competitor": f"ToyBrand {idx % 8} 智能陪伴玩具",
+            "reference_asin": f"B0V{idx:07d}",
+            "priority": 90 - idx % 30,
+            "ecosystem_path": ["关联度", "场景", "消耗", "维护"][idx % 4],
+            "ecosystem_segment": ["智能陪伴玩具", "语音互动玩具", "儿童礼品玩具"][idx % 3],
+            "source_id": "src_001",
+        }
+        for idx in range(30)
+    ]
+    write_json(
+        root / "analysis" / "lifecycle_strategy.json",
+        {
+            "schema_version": "lifecycle_strategy.v1",
+            "sku_candidate_pool": lifecycle_pool,
+            "recommended_skus": lifecycle_pool[:5],
+            "ecosystem_nodes": [],
+            "filter_diagnostics": {
+                "effective_products": 30,
+                "effective_suppliers": 50,
+                "finished_suppliers": 50,
+                "sku_candidate_pool": 30,
+                "recommended_skus": 5,
+                "filtered_reason": "测试样本保留具备竞品锚点和供应证据的候选。",
+            },
+        },
+    )
     write_text(root / "data" / "lineage.md", "# Data Lineage\n\n- src_001: Sorftime product_search\n- src_002: Firecrawl search\n")
     write_text(root / "output" / "report.md", "# Report\n\n估算月销量（Sorftime）来自 src_001。\n\n## Go / Watch / No-Go\nWatch\n")
     write_text(
@@ -465,8 +607,9 @@ def make_valid_report(root):
             "市场深度调研报告",
             [
                 ("market-dashboard", "大盘仪表盘 · Market Dashboard"),
-                ("competitor-landscape", "Top 竞品全景扫描"),
-                ("voc", "VOC 体验深潜 · 痛点 × 爽点雷达"),
+                ("cosmo-alexa-tags", "COSMO + Alexa 标签识别 · 产品标签 × 用户标签"),
+                ("competitor-scan", "Top 竞品全景扫描"),
+                ("voc-deep-dive", "VOC 体验深潜 · 痛点 × 爽点雷达"),
                 ("competitor-deep-dive", "标杆竞品狙击拆解"),
                 ("opportunity", "新品狙击企划 · Product Definition"),
                 ("pricing", "建议定价策略"),
@@ -474,7 +617,7 @@ def make_valid_report(root):
                 ("prompt", "AI生图 Prompt · 可直接使用"),
                 ("supply-chain", "供应链成本估算 · 1688大盘数据"),
             ],
-            "价格带销量分布图 竞品狙击结论 定价战略核心逻辑 AI生图 Prompt 供应链核心结论",
+            "价格带销量分布图 COSMO + Alexa 15 类核心标签 竞品狙击结论 定价战略核心逻辑 AI生图 Prompt 供应链核心结论",
         ),
     )
     write_text(
@@ -532,6 +675,19 @@ def make_valid_report(root):
             "site_assets": site_assets,
             "interactive_features": interactive_features,
             "cleaning_summary": data_pack["normalization"],
+            "cosmo_alexa_tags": {
+                "path": "analysis/cosmo_alexa_tags.json",
+                "relation_total": len(validator.COSMO_ALEXA_RELATION_TYPES),
+                "high_confidence_relations": len(validator.COSMO_ALEXA_RELATION_TYPES),
+            },
+            "lifecycle_sku_pool_summary": {
+                "effective_products": 30,
+                "effective_suppliers": 50,
+                "finished_suppliers": 50,
+                "sku_candidate_pool": 30,
+                "recommended_skus": 5,
+                "filtered_reason": "测试样本保留具备竞品锚点和供应证据的候选。",
+            },
             "data_readiness": delivery_readiness,
             "asin_display_scope": ["competitor_table", "benchmark_sniper", "profit_model", "demand_target_anchor", "sku_reference"],
             "critic_review": {
@@ -550,7 +706,7 @@ def make_valid_report(root):
         ".template-market .report-header{}.template-lifecycle .report-header{}"
         ".template-demand .report-header{}.template-demand .hero{}"
         ".persona-grid{}.timeline-grid{}.bundle-grid{}.filter-btn{}.sku-table-wrap{}"
-        ".quote-cn{}.chart-interpretation{}@media(max-width:760px){}\n",
+        ".ecosystem-pool-summary{}.cosmo-layout{}.cosmo-matrix{}.cosmo-top-list{}.cosmo-gap-panel{}.cosmo-action-board{}.quote-cn{}.chart-interpretation{}@media(max-width:760px){}\n",
     )
     write_text(
         root / "output" / "html_reports" / "assets" / "report.js",
@@ -630,6 +786,198 @@ def make_valid_report(root):
 
 
 class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
+    def test_customer_html_rejects_empty_or_non_http_image_src(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        broken_images = [
+            '<section><img class="comp-product-thumb" src="" alt="竞品图片"></section>',
+            '<section><img class="comp-product-thumb" src="data:image/png;base64,abc" alt="竞品图片"></section>',
+        ]
+
+        for html_doc in broken_images:
+            with self.subTest(html_doc=html_doc):
+                with self.assertRaises(validator.ValidationError):
+                    validator.validate_customer_html("output/html_reports/market-depth-report.html", html_doc, data_pack)
+
+    def test_customer_html_rejects_1688_or_alibaba_images_in_competitor_modules(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="competitor-scan">'
+            '<img class="comp-product-thumb" src="https://cbu01.alicdn.com/img/ibank/example.jpg" alt="竞品图片">'
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "1688|Alibaba|竞品图片"):
+            validator.validate_customer_html("output/html_reports/market-depth-report.html", html_doc, data_pack)
+
+    def test_customer_html_rejects_1688_images_in_lifecycle_reference_sku_modules(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="sku-strategy">'
+            '<img class="sku-reference-thumb table-thumb" src="https://cbu01.alicdn.com/img/ibank/example.jpg" alt="参考竞品图片">'
+            "<p>证据强度 高 数据覆盖 已记录 数据缺口 已记录 置信等级 中 建议动作 继续核验</p>"
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "1688|Alibaba|竞品图片"):
+            validator.validate_customer_html("output/html_reports/lifecycle-strategy-report.html", html_doc, data_pack)
+
+    def test_customer_html_rejects_non_amazon_competitor_image_domains(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="competitor-scan">'
+            '<img class="comp-deep-image" src="https://cdn.example-shop.com/product/example.jpg" alt="竞品图片">'
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "Amazon|竞品图片"):
+            validator.validate_customer_html("output/html_reports/market-depth-report.html", html_doc, data_pack)
+
+    def test_market_template_requires_competitor_image_or_image_diagnostic(self):
+        cosmo_products = "".join(
+            f'<article data-cosmo-relation="{"P" if idx < 8 else "U"}{(idx + 1) if idx < 8 else (idx - 7):02d}" data-dimension="{"产品标签" if idx < 8 else "用户标签"}"><div class="cosmo-relation-lane"><span>{"产品意图" if idx < 8 else "用户意图"}</span><b class="cosmo-relation-id">{"产品" if idx < 8 else "用户"}</b></div><div class="cosmo-tag-terms">标签</div></article>'
+            for idx in range(8)
+        )
+        cosmo_users = "".join(
+            f'<article data-cosmo-relation="U{idx - 7:02d}" data-dimension="用户标签"><div class="cosmo-relation-lane"><span>用户意图</span><b class="cosmo-relation-id">用户</b></div><div class="cosmo-tag-terms">标签</div></article>'
+            for idx in range(8, 15)
+        )
+        pricing = "".join('<div class="pricing-card">价格</div>' for _ in range(3))
+        prompts = "".join('<div class="prompt-card">Prompt</div>' for _ in range(3))
+        html_doc = (
+            '<section id="market-dashboard"></section>'
+            '<section id="cosmo-alexa-tags">'
+            '<div class="cosmo-matrix"><div class="cosmo-matrix-lanes">'
+            '<div class="cosmo-matrix-lane product-lane"><div class="cosmo-lane-title"><span>产品标签 · 产品被算法识别为什么</span></div>'
+            f"{cosmo_products}</div>"
+            '<div class="cosmo-matrix-lane user-lane"><div class="cosmo-lane-title"><span>用户标签 · 用户为什么搜索/购买</span></div>'
+            f"{cosmo_users}</div></div></div>"
+            '<div class="cosmo-top-list"></div><div class="cosmo-gap-panel"></div><div class="cosmo-action-board"></div></section>'
+            '<section id="competitor-scan"><table><tr><th>ASIN</th></tr><tr><td data-allow-asin="competitor-table">B0TEST1234</td></tr></table></section>'
+            '<section id="voc-deep-dive"></section>'
+            '<div id="pricing"></div><div id="prompt"></div>'
+            f"{pricing}{prompts}"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "competitor image|竞品图片|图片诊断"):
+            validator.validate_fixed_template_slots("output/html_reports/market-depth-report.html", html_doc, "market-depth-report-v2")
+
+    def test_market_template_rejects_visible_cosmo_relation_codes_and_missing_intent_slots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_doc = html_path.read_text(encoding="utf-8")
+            html_doc = html_doc.replace("产品意图", "USED_FOR_FUNC")
+            html_doc = html_doc.replace('class="cosmo-relation-id">产品</b>', "")
+            html_path.write_text(html_doc, encoding="utf-8")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_market_template_requires_cosmo_product_and_user_lanes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_doc = html_path.read_text(encoding="utf-8")
+            html_doc = html_doc.replace('class="cosmo-matrix-lane product-lane"', 'class="cosmo-matrix-lane"')
+            html_doc = html_doc.replace("产品标签 · 产品被算法识别为什么", "15 标签矩阵")
+            html_path.write_text(html_doc, encoding="utf-8")
+            refresh_child_output_sha(report_dir, "output/html_reports/market-depth-report.html")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_market_template_rejects_visible_internal_cosmo_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_doc = html_path.read_text(encoding="utf-8")
+            html_doc = html_doc.replace("产品意图", "产品意图 P01")
+            html_path.write_text(html_doc, encoding="utf-8")
+            refresh_child_output_sha(report_dir, "output/html_reports/market-depth-report.html")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_market_template_rejects_internal_cosmo_codes_in_data_attributes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "market-depth-report.html"
+            html_doc = html_path.read_text(encoding="utf-8")
+            html_doc = html_doc.replace('data-cosmo-relation="P01"', 'data-cosmo-relation="USED_FOR_FUNC"')
+            html_path.write_text(html_doc, encoding="utf-8")
+            refresh_child_output_sha(report_dir, "output/html_reports/market-depth-report.html")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_rejects_cosmo_relations_with_repeated_term_signatures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+            payload = json.loads(cosmo_path.read_text(encoding="utf-8"))
+            for item in payload["relations"][:10]:
+                item["terms"] = ["通用标签", "泛化场景", "有效标签"]
+                item["confidence"] = "高"
+                item["evidence_count"] = 12
+            write_json(cosmo_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_rejects_cosmo_relations_with_overused_single_term(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+            payload = json.loads(cosmo_path.read_text(encoding="utf-8"))
+            for idx, item in enumerate(payload["relations"][:8]):
+                item["terms"] = [f"专属标签{idx}", "重复泛词", f"证据词{idx}"]
+                item["confidence"] = "高"
+                item["evidence_count"] = 10
+            write_json(cosmo_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
+    def test_rejects_cosmo_terms_without_current_evidence_support(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+            payload = json.loads(cosmo_path.read_text(encoding="utf-8"))
+            payload["relations"][0]["terms"] = ["语音互动", "宠物饮水机"]
+            payload["relations"][0]["source_evidence"] = [
+                {
+                    "source_type": "effective_products",
+                    "source_id": "B0VALID0001",
+                    "field": "title",
+                    "excerpt": "语音互动 情绪陪伴 儿童安抚",
+                }
+            ]
+            write_json(cosmo_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("COSMO", result.stderr + result.stdout)
+
     def test_customer_safety_context_is_cached_per_data_pack(self):
         data_pack = {
             "sources": [{"source_id": "src_001", "provider": "sorftime"}],
@@ -937,6 +1285,21 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("customer HTML leaks technical identifier", result.stderr + result.stdout)
 
+    def test_rejects_customer_html_leaking_collector_script_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            html_path = report_dir / "output" / "html_reports" / "report.html"
+            write_text(
+                html_path,
+                html_path.read_text(encoding="utf-8") + "<p>运行 collect_市场数据_keywords.py 补到 1200 条采集目标。</p>",
+            )
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("customer HTML leaks technical identifier", result.stderr + result.stdout)
+
     def test_rejects_customer_html_placeholder_wording(self):
         for placeholder in ["样本", "待补", "暂无有效数据", "未分层", "清洗数据", "清洗后数据", "清洗后的竞品"]:
             with self.subTest(placeholder=placeholder):
@@ -1093,6 +1456,20 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("customer asset leaks technical identifier", result.stderr + result.stdout)
 
+    def test_rejects_customer_visible_json_leaking_collector_script_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            asset_path = report_dir / "output" / "html_reports" / "assets" / "report-data.json"
+            payload = json.loads(asset_path.read_text(encoding="utf-8"))
+            payload.setdefault("report_readiness_view", {})["next_step"] = "运行 collect_市场数据_keywords.py 补到 1200 条采集目标。"
+            write_json(asset_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("customer asset leaks technical identifier", result.stderr + result.stdout)
+
     def test_rejects_low_sample_high_score_strong_go(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1177,7 +1554,62 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             result = self.run_validator(report_dir)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("data readiness must pass", result.stderr + result.stdout)
+            self.assertIn("acceptance_ready or partial_report_ready", result.stderr + result.stdout)
+
+    def test_data_readiness_allows_blocked_diagnostic_delivery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [{"module": "keyword_sample_depth", "reason": "关键词不足"}],
+            }
+            write_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
+
+            with patch.object(validator, "assess_data_readiness", return_value=readiness):
+                validator.validate_data_readiness(report_dir, {"status": "blocked", "decision": "No-Go"})
+
+    def test_delivery_allows_blocked_diagnostic_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "supply_conclusion_blocked": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [{"module": "keyword_sample_depth", "reason": "关键词不足"}],
+                "warnings": [],
+                "counts": {"keywords": 50},
+                "supplier_quote_gate": {"passed": True},
+                "supplier_quality_gate": {"passed": True},
+                "competitor_gate": {"passed": False},
+                "segment_gate": {"passed": False},
+            }
+            write_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
+            delivery_path = report_dir / "output" / "delivery_result.json"
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            delivery["status"] = "blocked"
+            delivery["decision"] = "No-Go"
+            delivery["data_readiness"] = {
+                "path": "data/normalized/data_readiness_report.json",
+                **validator.readiness_summary_for_contract(readiness),
+            }
+            delivery["critic_review"]["pass"] = False
+            delivery["critic_review"]["score"] = 0
+            for entry in delivery["child_skill_invocations"].values():
+                entry["status"] = "diagnostic_template"
+                entry["dispatch_mode"] = "main_renderer_diagnostic"
+                entry["invocation_log"] = None
+            write_json(delivery_path, delivery)
+            asset_path = report_dir / "output" / "html_reports" / "assets" / "report-data.json"
+            site_data = json.loads(asset_path.read_text(encoding="utf-8"))
+            site_data["readiness"] = validator.readiness_summary_for_contract(readiness)
+            write_json(asset_path, site_data)
+
+            with patch.object(validator, "assess_data_readiness", return_value=readiness):
+                validator.validate_delivery(report_dir)
 
     def test_rejects_forged_delivery_readiness_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1281,6 +1713,34 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("market-depth-report.html", result.stderr + result.stdout)
+
+    def test_lifecycle_strategy_requires_semantic_strategy_type_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            lifecycle_path = report_dir / "analysis" / "lifecycle_strategy.json"
+            payload = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+            payload["sku_candidate_pool"][0].pop("strategy_type_key", None)
+            lifecycle_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("strategy_type_key", result.stderr + result.stdout)
+
+    def test_lifecycle_strategy_rejects_raw_letter_type_as_customer_strategy_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            lifecycle_path = report_dir / "analysis" / "lifecycle_strategy.json"
+            payload = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+            payload["sku_candidate_pool"][0]["strategy_type_key"] = "A"
+            lifecycle_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("strategy_type_key", result.stderr + result.stdout)
 
 
 if __name__ == "__main__":

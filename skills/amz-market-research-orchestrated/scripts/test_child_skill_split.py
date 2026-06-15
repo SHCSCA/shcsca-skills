@@ -52,6 +52,14 @@ class ChildSkillSplitTest(unittest.TestCase):
         for old_name in ["amz-market-depth-report", "amz-lifecycle-strategy-report", "amz-demand-gap-report"]:
             self.assertFalse((ROOT / old_name).exists(), f"{old_name} should live under amz-market-research-orchestrated/child_skills")
 
+    def test_main_skill_documents_competitor_image_enrichment_gate(self):
+        text = (ROOT / "amz-market-research-orchestrated" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("competitor_image_coverage", text)
+        self.assertIn("Amazon 竞品主图", text)
+        self.assertIn("不能使用 1688 货源图冒充 Amazon 竞品图", text)
+        self.assertIn("collect_sorftime_product_enrichment.py", text)
+
     def test_internal_child_render_scripts_write_expected_html(self):
         child_root = ROOT / "amz-market-research-orchestrated" / "child_skills"
         scripts = [
@@ -83,7 +91,7 @@ class ChildSkillSplitTest(unittest.TestCase):
                 self.assertTrue(html_path.exists(), output_file)
                 html = html_path.read_text(encoding="utf-8")
                 self.assertIn(f'class="{template_class}"', html)
-                self.assertNotIn("site-nav", html)
+                self.assertIn("site-nav", html)
                 self.assertIn('href="assets/report.css"', html)
                 self.assertIn('src="assets/report.js"', html)
                 self.assertIn(required_section, html)

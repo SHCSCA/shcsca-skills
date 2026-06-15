@@ -111,6 +111,17 @@ class ViewModelBuilderTest(unittest.TestCase):
     def test_site_data_exposes_pc_decision_cockpit_without_internal_status(self):
         data_pack = sample_data_pack()
         data_pack["quality"]["grade"] = "ready_for_normalization"
+        data_pack["report_readiness_view"] = {
+            "status": "诊断交付",
+            "decision": "Watch",
+            "supply_blocked": True,
+            "blocking_gaps": [
+                {
+                    "module": "keyword_sample_depth",
+                    "next_step": "运行 collect_sorftime_keywords.py 补到 1200 条采集目标。",
+                }
+            ],
+        }
         analysis_plan = {"method_chain": [{"method_id": "market.scan"}], "limitations": []}
         readiness = {
             "acceptance_ready": False,
@@ -127,8 +138,12 @@ class ViewModelBuilderTest(unittest.TestCase):
         payload = json.dumps(site_data, ensure_ascii=False)
 
         self.assertIn("decision_cockpit", site_data)
+        self.assertEqual(site_data["report_readiness_view"]["status"], "诊断交付")
         self.assertIn("当前阻断项", payload)
         self.assertNotIn("ready_for_normalization", payload)
+        self.assertNotIn("sorftime", payload.casefold())
+        self.assertNotIn("collect_", payload)
+        self.assertIn("数据采集流程", payload)
 
     def test_views_filter_off_target_competitor_noise(self):
         data_pack = sample_data_pack()

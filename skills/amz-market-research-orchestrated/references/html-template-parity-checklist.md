@@ -36,6 +36,7 @@ Baseline folder: `143101`.
 Required section density:
 
 - 大盘结论
+- COSMO + Alexa 标签识别
 - 需求结构
 - 竞品格局
 - VOC 洞察
@@ -55,6 +56,7 @@ Required section density:
 Required components:
 
 - `report-header`, `header-meta`, `kpi-grid`, `kpi-card`.
+- `cosmo-layout` with four fixed zones: `cosmo-matrix`, `cosmo-top-list`, `cosmo-gap-panel`, and `cosmo-action-board`. The matrix must render all 15 COSMO + Alexa relation slots with `data-cosmo-relation`, evidence coverage, confidence status, and Listing / QA / ad actions.
 - `chart-container`, `mini-chart`, radar/bar/bubble fallback semantics.
 - `comp-table` or equivalent competitor evidence table.
 - `voc-grid`, `deep-dive-grid`, `comp-deep-card`.
@@ -100,13 +102,16 @@ Required components:
 
 - `persona-grid`, `timeline-grid`, `bundle-grid`, `phase-grid`, `risk-grid`.
 - `sku-table-wrap`, sortable SKU table, priority bars.
-- `#skuTable` and `#skuBody` as stable SKU table anchors.
+- `#skuTable`, `#skuBody`, and `#skuFullPool` / `sku-full-pool` as stable SKU table and full candidate-pool anchors.
 - `type-badge`, `supply-badge`, filter bar and filter buttons.
 - Bundle cards with price, savings, and dependency assumptions.
 - Four-dimensional ecosystem must keep a two-chart layout: `#sunburst` plus `#priorityChart`.
+- `#sunburst` must use a three-layer data structure: research object -> four-dimensional path -> segment/scenario -> SKU candidate or reference ASIN. A flat A/B/C/D pie/donut is not acceptable.
+- `#priorityChart` must adapt to candidate-pool size: compact score cards for `<=8`, full horizontal list for `9-20`, and Top 15 plus full candidate-pool table/drawer for `>20`.
 - 拓品方案池 must keep the five fixed SKU slots: 基础款、升级款、套装款、配件款、复购耗材.
 - 30/60/90 路线图 must keep six roadmap cards: three `Phase` strategy cards plus three action checklist cards, split across `roadmap-phase-grid` and `roadmap-action-grid`.
-- SKU table controls must keep seven reference filters: 全部、Type A、Type B、Type C、Type D、供应链验证、P1 立即启动.
+- SKU table controls must keep seven reference filters: 全部、四个当前证据生成的中文策略类型、供应链验证、P1 立即启动.
+- Filter controls may use internal `data-filter` values such as A/B/C/D, but visible customer labels must come from current `analysis_plan.report_label_profile.lifecycle_type_labels` or current evidence-derived Chinese names, never raw `Type A/B/C/D`.
 
 Required interactions:
 

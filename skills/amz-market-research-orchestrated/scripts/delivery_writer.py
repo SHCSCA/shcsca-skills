@@ -81,6 +81,24 @@ def child_skill_invocations(child_skills: dict[str, str]) -> dict[str, dict[str,
     return invocations
 
 
+def diagnostic_child_skill_invocations(child_skills: dict[str, str]) -> dict[str, dict[str, Any]]:
+    invocations: dict[str, dict[str, Any]] = {}
+    for key, module_path in child_skills.items():
+        spec = CHILD_SKILL_INVOCATION_SPECS.get(key, {})
+        invocations[key] = {
+            "module": module_path,
+            "status": "diagnostic_template",
+            "dispatch_mode": "main_renderer_diagnostic",
+            "inputs": spec.get("inputs") or [],
+            "outputs": spec.get("outputs") or [],
+            "renderer": spec.get("renderer"),
+            "template": spec.get("template"),
+            "data_policy": "read_only_normalized_data_pack",
+            "invocation_log": None,
+        }
+    return invocations
+
+
 def write_lineage_markdown(data_pack: dict[str, Any], path: Path) -> None:
     lines = ["# Data Lineage", ""]
     for source in data_pack.get("sources", []):
@@ -137,6 +155,7 @@ def write_delivery_result(report_dir: Path, delivery: dict[str, Any], child_skil
     output_path = report_dir / "output" / "delivery_result.json"
     delivery = dict(delivery)
     delivery.setdefault("status", "complete")
+    delivery["decision"] = delivery.get("decision") or "Watch"
     formats = list(delivery.get("formats") or [])
     if "html" not in formats:
         formats.append("html")
@@ -146,7 +165,10 @@ def write_delivery_result(report_dir: Path, delivery: dict[str, Any], child_skil
     delivery["html_reports"] = html_reports
     delivery["html_bundle_dir"] = HTML_BUNDLE_DIR
     delivery["child_skills"] = child_skills
-    delivery["child_skill_invocations"] = child_skill_invocations(child_skills)
+    if delivery.get("status") == "blocked":
+        delivery["child_skill_invocations"] = diagnostic_child_skill_invocations(child_skills)
+    else:
+        delivery["child_skill_invocations"] = child_skill_invocations(child_skills)
     delivery["site_assets"] = SITE_ASSETS
     delivery["interactive_features"] = INTERACTIVE_FEATURES
     output_path.parent.mkdir(parents=True, exist_ok=True)

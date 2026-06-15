@@ -312,7 +312,13 @@ def has_product_relevance_signal(product: dict[str, Any]) -> bool:
 
 
 def relevant_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    candidates = [product for product in products if isinstance(product, dict) and not is_off_target_product(product)]
+    candidates = [
+        product
+        for product in products
+        if isinstance(product, dict)
+        and not is_off_target_product(product)
+        and (product.get("research_relevance") or {}).get("passed") is not False
+    ]
     signaled = [product for product in candidates if has_product_relevance_signal(product)]
     return signaled if signaled else candidates
 

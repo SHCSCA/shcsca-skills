@@ -59,12 +59,8 @@ test('real report visual parity audit', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto(reportUrl(report.name), { waitUntil: 'networkidle' });
-      if (report.key === 'index') {
-        await expect(page.locator('.site-nav')).toHaveCount(1);
-        await expect(page.locator('.site-nav')).toBeVisible();
-      } else {
-        await expect(page.locator('.site-nav')).toHaveCount(0);
-      }
+      await expect(page.locator('.site-nav')).toHaveCount(1);
+      await expect(page.locator('.site-nav')).toBeVisible();
       await expect(page.locator('h1').first()).toBeVisible();
       await expect(page.locator(report.selector)).toHaveCount(1);
       const metrics = await page.evaluate(() => {

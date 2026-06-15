@@ -57,6 +57,15 @@ STATUS_TEXT_REPLACEMENTS = [
     ("warning", "需复核"),
 ]
 
+TOOL_DIMENSION_LABELS = {
+    "product_detail": "产品详情维度",
+    "product_trend": "趋势维度",
+    "product_variations": "变体维度",
+    "tiktok_product_detail": "TikTok 商品详情维度",
+    "tiktok_product_search": "TikTok 商品搜索维度",
+    "ali1688_similar_product": "1688 相似货源维度",
+}
+
 
 def clean(value: Any) -> str:
     return re.sub(r"\s+", " ", "" if value is None else str(value)).strip()
@@ -71,6 +80,22 @@ def truncate(value: Any, limit: int = 120) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def customer_safe_technical_failure_text(text: str) -> str:
+    lower = text.casefold()
+    if "returned no rows" not in lower and "no rows for" not in lower:
+        return text
+    dimensions: list[str] = []
+    for raw, label in TOOL_DIMENSION_LABELS.items():
+        if raw.casefold() in lower and label not in dimensions:
+            dimensions.append(label)
+    dimension_text = "、".join(dimensions) if dimensions else "部分数据维度"
+    if "amazon" in lower or "asin" in lower or "参考竞品" in text:
+        return f"{dimension_text}本轮未返回可验证结果，不能用于页面事实承诺；需要更换参考竞品或重新调用对应维度。"
+    if "tiktok" in lower:
+        return f"{dimension_text}本轮未返回可验证结果，不能用于内容趋势结论；需要更换关键词或重新调用对应维度。"
+    return f"{dimension_text}本轮未返回可验证结果，不能用于客户版结论；需要补采后重新生成。"
 
 
 def has_cjk(value: Any) -> bool:
@@ -215,6 +240,7 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
 
 def customer_safe_asset_text(value: Any) -> str:
     text = clean(value)
+    text = customer_safe_technical_failure_text(text)
     if "MCP returned Unauthorized" in text:
         text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
     for old, new in CUSTOMER_LABEL_REPLACEMENTS:
@@ -239,6 +265,7 @@ def customer_safe_asset_text(value: Any) -> str:
     for old, new in replacements.items():
         text = text.replace(old, new)
     text = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", text)
+    text = re.sub(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", "数据采集流程", text, flags=re.IGNORECASE)
     text = re.sub(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", "高", text, flags=re.IGNORECASE)
     text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
@@ -259,11 +286,13 @@ def client_safe_view_payload(value: Any) -> Any:
         return [client_safe_view_payload(item) for item in value]
     if isinstance(value, str):
         text = clean(value)
+        text = customer_safe_technical_failure_text(text)
         for old, new in CUSTOMER_LABEL_REPLACEMENTS:
             text = text.replace(old, new)
         for old, new in STATUS_TEXT_REPLACEMENTS:
             text = re.sub(rf"\b{re.escape(old)}\b", new, text)
         text = re.sub(r"\bB0[A-Z0-9]{8}\b", "参考竞品", text)
+        text = re.sub(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", "数据采集流程", text, flags=re.IGNORECASE)
         text = re.sub(r"\b(?:src|sf)[_-][\w\u4e00-\u9fff-]+\b", "内部证据", text, flags=re.IGNORECASE)
         text = re.sub(r"\bdata/raw/[^\s<>'\"]+", "内部审计记录", text, flags=re.IGNORECASE)
         text = re.sub(r"[A-Za-z]:\\[^\s<>'\"]+", "内部审计记录", text)

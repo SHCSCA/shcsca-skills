@@ -104,6 +104,49 @@ class CollectSorftimeProductEnrichmentTest(unittest.TestCase):
             )
             self.assertGreater(summary["product_patches"], 0)
 
+    def test_product_detail_image_field_is_promoted_for_customer_html(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "products": [{"asin": "B0AAA", "title": "Hunting Blind", "brand": "A"}],
+                    "keywords": [],
+                    "data_gaps": [],
+                },
+            )
+
+            def fake_call_tool(_url, name, _args):
+                if name == "product_detail":
+                    return mcp_rows(
+                        [
+                            {
+                                "标题": "Hunting Blind",
+                                "品牌": "A",
+                                "价格": 89.99,
+                                "Photo": "https://m.media-amazon.com/images/I/hunting-blind.jpg",
+                            }
+                        ]
+                    )
+                if name == "product_trend":
+                    return mcp_rows([])
+                if name == "product_variations":
+                    return mcp_rows([])
+                if name == "product_traffic_terms":
+                    return mcp_rows([])
+                if name == "competitor_product_keywords":
+                    return mcp_rows([])
+                raise AssertionError(name)
+
+            with patch.object(collector, "mcp_url", return_value="http://sorftime.test"), patch.object(collector, "call_tool", side_effect=fake_call_tool):
+                collector.collect(report_dir, max_products=1, max_pages=1, site="US", sleep_seconds=0)
+
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            product = data_pack["products"][0]
+            self.assertEqual(product["image_url"], "https://m.media-amazon.com/images/I/hunting-blind.jpg")
+            self.assertEqual(product["sorftime_enrichment"]["detail_image_url"], "https://m.media-amazon.com/images/I/hunting-blind.jpg")
+
 
 if __name__ == "__main__":
     unittest.main()

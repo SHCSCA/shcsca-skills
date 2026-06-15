@@ -168,6 +168,7 @@ Amazon competitor data is delivery-blocking for standard/deep market and profita
 
 - Standard reports require at least 30 deduped valid competitors; deep reports require at least 60.
 - Each valid competitor must have ASIN, title, brand, price, rating, review count, sales or ranking proxy, and segment.
+- Amazon competitor collectors must preserve product image URLs when the MCP response provides them. Normalize documented/common image fields such as `Photo`, `photo`, `image`, `Image`, `image_url`, `ImageUrl`, `imageUrl`, `main_image`, `mainImage`, `main_image_url`, `MainImage`, `thumbnail`, `thumbnail_url`, and `Thumbnail` into `products[].image_url`; write image URL coverage into `product_collection_summary.json`.
 - Broad terms such as `smart lighting`, `lighting`, and `智能照明` must split into primary segments before analysis. At least three primary segments must each carry ten valid competitors.
 - Gross-margin tables must use real competitor ASIN prices as price-band anchors; brand averages and mixed-category averages cannot substitute for ASIN-backed prices.
 - Amazon and TikTok output-field coverage is verified from actual MCP result rows, not from `tools/list` input schemas. Zero-row ASIN/productId/category dimensions must be retried with alternate valid samples and recorded as data gaps only after retry evidence exists.

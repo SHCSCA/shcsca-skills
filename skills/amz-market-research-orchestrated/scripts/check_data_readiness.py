@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +30,12 @@ MIN_SUPPLIER_FIELD_COVERAGE_PCT = 70
 MAX_SUPPLIER_MAX_TO_P50_RATIO = 20
 MAX_SUPPLIER_P75_TO_P25_RATIO = 5
 RECOMMENDED_TIKTOK_SIGNALS = 1
-SUPPLY_BLOCKER_MODULES = {"supplier_quote_depth", "supplier_quote_quality", "supplier_quote_price_spread"}
+SUPPLY_BLOCKER_MODULES = {
+    "supplier_quote_depth",
+    "supplier_quote_relevance",
+    "supplier_quote_quality",
+    "supplier_quote_price_spread",
+}
 SUPPLIER_NON_FINISHED_TOKENS = [
     "灯珠",
     "发光二极管",
@@ -58,6 +64,41 @@ SUPPLIER_NON_FINISHED_TOKENS = [
     "module",
     "accessory",
 ]
+SUPPLIER_CONTEXT_GENERIC_TERMS = {
+    "产品",
+    "商品",
+    "供应",
+    "厂家",
+    "工厂",
+    "批发",
+    "现货",
+    "跨境",
+    "专供",
+    "亚马逊",
+    "外贸",
+    "1688",
+    "配件",
+    "套装",
+    "定制",
+    "户外",
+    "便携",
+    "多功能",
+}
+SUPPLIER_CONTEXT_NOISE_TERMS = {
+    "儿童",
+    "玩具",
+    "吊床",
+    "急救",
+    "医疗",
+    "沙滩",
+    "餐具",
+    "背包",
+    "广告",
+    "婚礼",
+    "蒙古包",
+    "更衣",
+    "淋浴",
+}
 BROAD_RESEARCH_TERMS = {
     "smart lighting",
     "智能照明",
@@ -354,6 +395,68 @@ def supplier_title_text(supplier: dict[str, Any]) -> str:
     ).strip().casefold()
 
 
+def supplier_product_text(supplier: dict[str, Any]) -> str:
+    return " ".join(
+        str(supplier.get(key) or "")
+        for key in ["title", "title_cn", "name", "product_name"]
+    ).strip().casefold()
+
+
+def cjk_terms(value: Any) -> set[str]:
+    terms: set[str] = set()
+    for chunk in re.findall(r"[\u4e00-\u9fff]{2,}", str(value or "")):
+        if chunk not in SUPPLIER_CONTEXT_GENERIC_TERMS and len(chunk) <= 12:
+            terms.add(chunk)
+        max_len = min(5, len(chunk))
+        for size in range(2, max_len + 1):
+            for idx in range(0, len(chunk) - size + 1):
+                term = chunk[idx : idx + size]
+                if term not in SUPPLIER_CONTEXT_GENERIC_TERMS:
+                    terms.add(term)
+    return terms
+
+
+def supplier_relevance_terms(data_pack: dict[str, Any]) -> set[str]:
+    texts: list[str] = []
+    research_object = data_pack.get("research_object")
+    if isinstance(research_object, dict):
+        texts.append(str(research_object.get("value") or ""))
+    elif research_object:
+        texts.append(str(research_object))
+    for product in valid_competitor_products(data_pack)[:80]:
+        texts.extend(
+            str(product.get(key) or "")
+            for key in (
+                "customer_segment_cn",
+                "segment_cn",
+                "segment",
+                "title_cn",
+                "customer_label_cn",
+                "category_cn",
+            )
+        )
+    for keyword in effective_records(data_pack, "keywords")[:160]:
+        keyword_cn = str(keyword.get("keyword_cn") or keyword.get("label_cn") or "")
+        if keyword_cn and "未映射关键词" not in keyword_cn:
+            texts.append(keyword_cn)
+    terms: set[str] = set()
+    for text in texts:
+        terms.update(cjk_terms(text))
+    return {term for term in terms if len(term) >= 2 and term not in SUPPLIER_CONTEXT_GENERIC_TERMS}
+
+
+def supplier_matches_research_context(supplier: dict[str, Any], data_pack: dict[str, Any]) -> bool:
+    product_text = supplier_product_text(supplier)
+    if not product_text:
+        return False
+    context_terms = supplier_relevance_terms(data_pack)
+    has_context_hit = any(term in product_text for term in context_terms)
+    has_noise = any(term in product_text for term in SUPPLIER_CONTEXT_NOISE_TERMS)
+    if context_terms:
+        return has_context_hit and not (has_noise and not has_context_hit)
+    return not has_noise
+
+
 def is_finished_supplier_quote(supplier: dict[str, Any]) -> bool:
     price = to_float(supplier_price(supplier))
     if price is None or price <= 0:
@@ -511,18 +614,28 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
 
     raw_supplier_quotes = valid_supplier_quotes(data_pack)
     supplier_quotes = [quote for quote in raw_supplier_quotes if is_finished_supplier_quote(quote)]
+    relevant_supplier_quotes = [quote for quote in supplier_quotes if supplier_matches_research_context(quote, data_pack)]
     non_finished_filtered = len(raw_supplier_quotes) - len(supplier_quotes)
     competitor_products = valid_competitor_products(data_pack)
     competitor_segments = segment_counts(competitor_products)
     effective_keywords = effective_records(data_pack, "keywords")
     effective_reviews = effective_records(data_pack, "reviews")
     keyword_duplicate_gate = keyword_duplicate_diagnostic(effective_keywords)
-    supplier_quality_gate = supplier_quality(supplier_quotes)
-    same_search_bucket_gate = same_search_supplier_bucket_gate(supplier_quotes)
+    raw_supplier_quality_gate = supplier_quality(supplier_quotes)
+    supplier_quality_gate = supplier_quality(relevant_supplier_quotes)
+    same_search_bucket_gate = same_search_supplier_bucket_gate(relevant_supplier_quotes)
     supplier_quality_gate["same_search_bucket_gate"] = same_search_bucket_gate
     supplier_quality_gate["global_passed"] = supplier_quality_gate["passed"]
     supplier_quality_gate["effective_passed"] = bool(supplier_quality_gate["passed"] or same_search_bucket_gate.get("passed"))
-    supplier_quality_gate["passed"] = supplier_quality_gate["effective_passed"]
+    supplier_quality_gate["customer_visible_passed"] = bool(
+        len(relevant_supplier_quotes) >= (MIN_VALID_1688_QUOTES if standard_like else 1)
+        and supplier_quality_gate["effective_passed"]
+    )
+    supplier_quality_gate["passed"] = supplier_quality_gate["customer_visible_passed"]
+    supplier_quality_gate["raw_finished_valid_quotes"] = len(supplier_quotes)
+    supplier_quality_gate["strict_relevant_valid_quotes"] = len(relevant_supplier_quotes)
+    supplier_quality_gate["strict_relevance_filtered"] = len(supplier_quotes) - len(relevant_supplier_quotes)
+    supplier_quality_gate["raw_quality_gate"] = raw_supplier_quality_gate
     supplier_collection_summary = load_json(report_dir / "data" / "normalized" / "supplier_1688_collection_summary.json", {})
     missing_1688_fields = supplier_collection_summary.get("missing_documented_required_fields") or []
     if missing_1688_fields:
@@ -560,7 +673,8 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "tiktok_authors": count(data_pack, "tiktok_authors"),
         "raw_suppliers": count(data_pack, "suppliers"),
         "suppliers": len(effective_records(data_pack, "suppliers")),
-        "valid_supplier_quotes": len(supplier_quotes),
+        "valid_supplier_quotes": len(relevant_supplier_quotes),
+        "raw_valid_supplier_quotes": len(supplier_quotes),
         "web_documents": count(data_pack, "web_documents"),
         "data_gaps": count(data_pack, "data_gaps"),
     }
@@ -675,30 +789,50 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "required": MIN_VALID_1688_QUOTES if standard_like else 1,
         "actual": counts["valid_supplier_quotes"],
         "raw_valid_quotes": len(raw_supplier_quotes),
+        "raw_finished_valid_quotes": len(supplier_quotes),
         "non_finished_filtered": non_finished_filtered,
+        "strict_relevance_filtered": len(supplier_quotes) - len(relevant_supplier_quotes),
         "passed": counts["valid_supplier_quotes"] >= (MIN_VALID_1688_QUOTES if standard_like else 1),
-        "policy": "1688 去重有效报价不足时必须多轮 Sorftime 采集，不得生成最终供应链毛利率结论。",
+        "policy": "1688 去重有效报价必须同时满足数量、字段质量和研究对象相关性，不得用无关报价生成最终供应链毛利率结论。",
     }
     if not supplier_gate["passed"]:
+        module = "supplier_quote_depth" if len(supplier_quotes) < supplier_gate["required"] else "supplier_quote_relevance"
+        reason = (
+            "1688 去重有效报价不足 50 条，不能支撑供应链成本和毛利率测算。"
+            if module == "supplier_quote_depth"
+            else "1688 成品报价数量足够，但与当前研究对象严格相关的报价不足 50 条，不能支撑供应链成本和毛利率测算。"
+        )
+        action = (
+            "运行 collect_sorftime_1688_suppliers.py 多轮切换搜索词补采；5 轮仍不足时阻断供应链结论并输出诊断。"
+            if module == "supplier_quote_depth"
+            else "用当前产品标题、细分类目和核心功能词重新生成 1688 中文搜索词，剔除儿童帐篷、吊床、急救帐篷等无关结果后再测算。"
+        )
         blocking_gaps.append(
             gap(
-                "supplier_quote_depth",
+                module,
                 counts["valid_supplier_quotes"],
                 supplier_gate["required"],
-                "1688 去重有效报价不足 50 条，不能支撑供应链成本和毛利率测算。",
-                "运行 collect_sorftime_1688_suppliers.py 多轮切换搜索词补采；5 轮仍不足时阻断供应链结论并输出诊断。",
+                reason,
+                action,
             )
         )
-    if supplier_gate["passed"] and not supplier_quality_gate["field_quality_passed"] and not same_search_bucket_gate.get("passed"):
+    raw_quality_failed = len(supplier_quotes) >= supplier_gate["required"] and not raw_supplier_quality_gate["field_quality_passed"]
+    if (supplier_gate["passed"] and not supplier_quality_gate["field_quality_passed"] and not same_search_bucket_gate.get("passed")) or raw_quality_failed:
         missing_field_note = (
             f" 当前 Sorftime 1688 MCP 实际响应缺少官方文档关键字段：{', '.join(str(field) for field in missing_1688_fields)}。"
             if missing_1688_fields
             else ""
         )
+        field_quality_current = int(
+            min(
+                supplier_quality_gate["title_coverage_pct"] or raw_supplier_quality_gate["title_coverage_pct"],
+                supplier_quality_gate["identity_coverage_pct"] or raw_supplier_quality_gate["identity_coverage_pct"],
+            )
+        )
         blocking_gaps.append(
             gap(
                 "supplier_quote_quality",
-                int(min(supplier_quality_gate["title_coverage_pct"], supplier_quality_gate["identity_coverage_pct"])),
+                field_quality_current,
                 MIN_SUPPLIER_FIELD_COVERAGE_PCT,
                 "1688 报价虽然达到数量门槛，但商品标题、链接或稳定商品指纹覆盖不足，不能证明报价与目标赛道匹配。" + missing_field_note,
                 "用细分赛道中文词重新采集 1688，要求去重报价同时具备标题、供应商、价格和链接或稳定商品指纹；若 MCP 继续缺少 Title/URL，需要先修正 Sorftime 返回字段。",

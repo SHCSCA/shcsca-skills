@@ -163,6 +163,8 @@ def merge_product_patch(data_pack: dict[str, Any], asin: str, patch: dict[str, A
             for key, value in patch.items():
                 if value not in (None, "", []):
                     enrichment[key] = value
+                    if key == "detail_image_url" and not product.get("image_url"):
+                        product["image_url"] = value
             return True
     return False
 
@@ -176,6 +178,24 @@ def detail_patch(row: dict[str, Any]) -> dict[str, Any]:
         "detail_review_count": to_number(first(row, "评论数", "评论数量", "ReviewCount")),
         "detail_monthly_sales": to_number(first(row, "月销量", "MonthlySales", "monthly_sales")),
         "detail_category": first(row, "所属类目", "所属细分类目", "category"),
+        "detail_image_url": first(
+            row,
+            "图片",
+            "image",
+            "Image",
+            "image_url",
+            "ImageUrl",
+            "imageUrl",
+            "main_image",
+            "mainImage",
+            "main_image_url",
+            "MainImage",
+            "thumbnail",
+            "thumbnail_url",
+            "Thumbnail",
+            "Photo",
+            "photo",
+        ),
     }
 
 

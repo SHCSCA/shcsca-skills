@@ -46,6 +46,9 @@ def evidence_profile(data_pack: dict[str, Any], analysis_plan: dict[str, Any], d
     cross_counts = normalization.get("cross_validated_counts") or {}
     review_count = len(data_pack.get("reviews") or [])
     non_keyword_cross = sum(as_float(value, 0) for key, value in cross_counts.items() if key != "keywords")
+    readiness = delivery.get("data_readiness") or {}
+    readiness_gaps = readiness.get("blocking_gaps") or []
+    readiness_gap_count = len(readiness_gaps) if readiness_gaps else int(as_float(readiness.get("blocking_gap_count"), 0))
     return {
         "review_count": review_count,
         "gap_count": len(data_pack.get("data_gaps") or []) + len(analysis_plan.get("limitations") or []),
@@ -54,8 +57,15 @@ def evidence_profile(data_pack: dict[str, Any], analysis_plan: dict[str, Any], d
         "non_keyword_cross_validated": non_keyword_cross,
         "review_depth": "low" if review_count < 80 else "medium" if review_count < 200 else "high",
         "cross_validation": "low" if non_keyword_cross <= 0 else "medium" if non_keyword_cross < 5 else "high",
-        "readiness_acceptance": (delivery.get("data_readiness") or {}).get("acceptance_ready"),
-        "readiness_blocking_gaps": len((delivery.get("data_readiness") or {}).get("blocking_gaps") or []),
+        "readiness_acceptance": readiness.get("acceptance_ready"),
+        "readiness_partial": readiness.get("partial_report_ready"),
+        "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
+        "readiness_blocking_gaps": readiness_gap_count,
+        "readiness_blocking_modules": [
+            str(item.get("module") or "")
+            for item in readiness_gaps
+            if isinstance(item, dict)
+        ],
     }
 
 
@@ -141,7 +151,26 @@ def build_critic_review(
                 "surface_limitations=data_gaps",
             )
         )
-    if profile["readiness_acceptance"] is False or profile["readiness_blocking_gaps"] > 0:
+    rendered_docs = rendered_docs or {}
+    combined_html = strip_allowed_customer_exceptions("\n".join(rendered_docs.values()))
+    supply_only_diagnostic = (
+        profile["readiness_acceptance"] is False
+        and profile["readiness_partial"] is True
+        and profile["supply_conclusion_blocked"] is True
+        and profile["readiness_blocking_gaps"] > 0
+        and (
+            not profile["readiness_blocking_modules"]
+            or set(profile["readiness_blocking_modules"]) <= {
+                "supplier_quote_depth",
+                "supplier_quote_relevance",
+                "supplier_quote_quality",
+                "supplier_quote_price_spread",
+            }
+        )
+        and "当前数据不能进入毛利率测算" in combined_html
+        and "需补采" in combined_html
+    )
+    if (profile["readiness_acceptance"] is False or profile["readiness_blocking_gaps"] > 0) and not supply_only_diagnostic:
         findings.append(
             finding(
                 "F-readiness-gate",
@@ -154,9 +183,20 @@ def build_critic_review(
                 "render_full_template_diagnostic; block_acceptance_until_readiness_passes",
             )
         )
+    elif supply_only_diagnostic:
+        findings.append(
+            finding(
+                "F-readiness-diagnostic",
+                "data_gate",
+                "warning",
+                "market_depth",
+                "data_readiness.partial_report_ready",
+                "output/html_reports/market-depth-report.html",
+                "供应链数据未达最终毛利率门槛，但客户页已按固定模板诊断模式阻断成本结论。",
+                "keep_diagnostic_delivery; continue_1688_recollection_before_profit_claims",
+            )
+        )
 
-    rendered_docs = rendered_docs or {}
-    combined_html = strip_allowed_customer_exceptions("\n".join(rendered_docs.values()))
     if rendered_docs:
         for pattern in HTML_LEAK_PATTERNS:
             match = pattern.search(combined_html)

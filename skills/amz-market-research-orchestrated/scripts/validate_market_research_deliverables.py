@@ -11,8 +11,10 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from normalize_data_pack import (
+    CABINET_CLOSET_HARD_NOISE,
     LIGHTING_KEYWORD_SIGNALS,
     LIGHTING_HARD_PRODUCT_NOISE,
     LIGHTING_NOISE_TOKENS,
@@ -58,6 +60,8 @@ REQUIRED_FILES = [
     "data/lineage.md",
     "report_brief.json",
     "analysis/analysis_plan.json",
+    "analysis/cosmo_alexa_tags.json",
+    "analysis/lifecycle_strategy.json",
     "analysis/market_depth_view.json",
     "analysis/lifecycle_strategy_view.json",
     "analysis/demand_gap_view.json",
@@ -123,6 +127,7 @@ CHILD_REPORTS = {
         "style": "market-depth-report-v2",
         "sections": [
             "大盘仪表盘 · Market Dashboard",
+            "COSMO + Alexa 标签识别 · 产品标签 × 用户标签",
             "Top 竞品全景扫描",
             "VOC 体验深潜 · 痛点 × 爽点雷达",
             "标杆竞品狙击拆解",
@@ -132,7 +137,7 @@ CHILD_REPORTS = {
             "AI生图 Prompt · 可直接使用",
             "供应链成本估算 · 1688大盘数据",
         ],
-        "terms": ["价格带销量分布图", "竞品狙击结论", "定价战略核心逻辑", "AI生图 Prompt", "供应链核心结论"],
+        "terms": ["价格带销量分布图", "COSMO + Alexa", "15 类核心标签", "竞品狙击结论", "定价战略核心逻辑", "AI生图 Prompt", "供应链核心结论"],
     },
     "lifecycle_strategy": {
         "path": f"{HTML_BUNDLE_DIR}/lifecycle-strategy-report.html",
@@ -170,6 +175,49 @@ CHILD_REPORTS = {
 
 SUBPROCESS_REPORT_KEYS = {"market_depth", "lifecycle_strategy", "demand_gap"}
 SUBPROCESS_CHILD_KEYS = {*SUBPROCESS_REPORT_KEYS, "critic"}
+
+COSMO_ALEXA_RELATION_TYPES = {
+    "USED_FOR_FUNC",
+    "USED_FOR_EVE",
+    "USED_FOR_AUD",
+    "CAPABLE_OF",
+    "USED_TO",
+    "USED_AS",
+    "IS_A",
+    "USED_ON",
+    "USED_IN_LOC",
+    "USED_IN_BODY",
+    "USED_WITH",
+    "USED_BY",
+    "xINTERSTED_IN",
+    "xIs_A",
+    "xWANT",
+}
+
+LIFECYCLE_BANNED_FALLBACK_TERMS = [
+    "备用与替换核心配件",
+    "信任说明卡 + 快速启动卡",
+    "场景化配件包",
+    "清洁、保养与维护套装",
+    "替换充电线与数据线套装",
+    "户外感应灯 对标配件",
+    "Type A",
+    "Type B",
+    "Type C",
+    "Type D",
+    "拓品路径A",
+    "拓品路径B",
+    "拓品路径C",
+    "拓品路径D",
+    "STEM 探索套装",
+]
+LIFECYCLE_STRATEGY_TYPE_KEYS = {
+    "core_validation",
+    "scenario_upgrade",
+    "accessory_gap",
+    "maintenance_repurchase",
+}
+LIFECYCLE_RAW_TYPE_CODES = {"A", "B", "C", "D"}
 
 BUNDLE_INDEX_REQUIRED_LINKS = [spec["filename"] for spec in CHILD_REPORTS.values()]
 COMPAT_INDEX_REQUIRED_LINKS = [f"html_reports/{spec['filename']}" for spec in CHILD_REPORTS.values()]
@@ -280,9 +328,14 @@ CUSTOMER_HTML_BANNED_LITERALS = [
     "ready_for_normalization",
     "amz-market-research-orchestrated",
     "three-report-index-v2",
+    "Type A",
+    "Type B",
+    "Type C",
+    "Type D",
 ]
 
 CUSTOMER_HTML_BANNED_PATTERNS = [
+    re.compile(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", re.IGNORECASE),
     re.compile(r"\bsrc[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
     re.compile(r"\bsf[_-][\w\u4e00-\u9fff-]+\b", re.IGNORECASE),
     re.compile(r"\bB0[A-Z0-9]{8}\b"),
@@ -495,6 +548,27 @@ def validate_research_relevance_gate(data_pack: dict[str, Any]) -> None:
             f"research_relevance.effective_counts.{key} must match effective_{key} length",
         )
     seed_terms = relevance.get("seed_terms") or []
+    cabinet_closet_mode = relevance.get("mode") == "cabinet_closet_lighting"
+    if cabinet_closet_mode:
+        for idx, product in enumerate(effective_records(data_pack, "products")):
+            text = entity_text(product, ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "positioning_cn"])
+            require(not contains_any(text, CABINET_CLOSET_HARD_NOISE), f"effective_products[{idx}] contains cabinet/closet lighting pollution")
+            require((product.get("research_relevance") or {}).get("passed") is True, f"effective_products[{idx}] missing passed research_relevance flag")
+        seen_keyword_buckets: set[str] = set()
+        for idx, keyword in enumerate(effective_records(data_pack, "keywords")):
+            keyword_text = normalized_key(keyword.get("keyword"))
+            require(not contains_any(keyword_text, CABINET_CLOSET_HARD_NOISE), f"effective_keywords[{idx}] contains cabinet/closet lighting pollution")
+            require((keyword.get("research_relevance") or {}).get("passed") is True, f"effective_keywords[{idx}] missing passed research_relevance flag")
+            source_type = normalized_key(keyword.get("source_type"))
+            asin = normalized_key(keyword.get("asin"))
+            bucket = f"traffic:{asin or 'unknown'}" if source_type == "product_traffic_terms" or asin else "market"
+            dedupe_key = f"{bucket}|{keyword_text}"
+            require(dedupe_key not in seen_keyword_buckets, f"effective_keywords duplicate bucket: {dedupe_key}")
+            seen_keyword_buckets.add(dedupe_key)
+        categorized_products = [product for product in effective_records(data_pack, "products") if product.get("category") or product.get("category_cn")]
+        if categorized_products:
+            require(data_pack.get("categories"), "data_pack.categories must be generated from effective product categories")
+        return
     lighting_mode = relevance.get("mode") == "lighting" or is_lighting_research([str(term) for term in seed_terms])
     if not lighting_mode:
         return
@@ -551,23 +625,34 @@ def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, 
     )
 
 
-def validate_data_readiness(report_dir: Path) -> None:
+def validate_data_readiness(report_dir: Path, delivery: dict[str, Any] | None = None) -> None:
+    delivery = delivery or {}
     readiness = assess_data_readiness(report_dir, "auto")
     modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
+    delivery_status = str(delivery.get("status") or "").strip().lower()
+    delivery_decision = str(delivery.get("decision") or "").strip().lower()
+    delivery_blocked = delivery_status == "blocked"
+    ready_or_partial = readiness.get("acceptance_ready") is True or readiness.get("partial_report_ready") is True
     require(
-        readiness.get("acceptance_ready") is True or readiness.get("partial_report_ready") is True,
+        ready_or_partial or delivery_blocked,
         f"data readiness must pass or be partial-ready before final delivery validation: {modules}",
     )
+    if delivery_blocked:
+        require(not ready_or_partial, "blocked delivery status requires failed readiness")
+        require(delivery_decision != "go", "blocked delivery cannot carry an unconditional Go decision")
+        require(readiness.get("blocking_gaps"), "blocked delivery must include readiness blocking_gaps")
 
     recorded_path = report_dir / "data" / "normalized" / "data_readiness_report.json"
     if recorded_path.exists():
         recorded = load_json(recorded_path)
         require(isinstance(recorded, dict), "data_readiness_report.json must be an object")
+        recorded_ready_or_partial = recorded.get("acceptance_ready") is True or recorded.get("partial_report_ready") is True
         require(
-            recorded.get("acceptance_ready") is True or recorded.get("partial_report_ready") is True,
+            recorded_ready_or_partial or delivery_blocked,
             "data_readiness_report.json must be acceptance_ready or partial_report_ready for final delivery validation",
         )
-        require(recorded.get("sample_class") in {"acceptance_sample", "partial_acceptance_sample"}, "data_readiness_report.json sample_class must be acceptance_sample or partial_acceptance_sample")
+        allowed_sample_classes = {"non_acceptance_sample"} if delivery_blocked else {"acceptance_sample", "partial_acceptance_sample"}
+        require(recorded.get("sample_class") in allowed_sample_classes, "data_readiness_report.json sample_class must match delivery status")
 
 
 def readiness_summary_for_contract(readiness: dict[str, Any]) -> dict[str, Any]:
@@ -719,6 +804,72 @@ def normalized_visible_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def cosmo_term_supported_by_evidence(term: Any, evidence_text: str) -> bool:
+    normalized_term = normalized_visible_text(term)
+    normalized_evidence = normalized_visible_text(evidence_text)
+    if not normalized_term:
+        return True
+    if not normalized_evidence:
+        return False
+    if contains_cjk(normalized_term):
+        if normalized_term in normalized_evidence:
+            return True
+        cjk_text = "".join(re.findall(r"[\u4e00-\u9fff]+", normalized_term))
+        cjk_bigrams = {
+            cjk_text[idx : idx + 2]
+            for idx in range(max(0, len(cjk_text) - 1))
+            if len(cjk_text[idx : idx + 2]) == 2
+        }
+        return any(token in normalized_evidence for token in cjk_bigrams)
+    return re.search(rf"\b{re.escape(normalized_term.casefold())}\b", normalized_evidence.casefold()) is not None
+
+
+def cosmo_evidence_text(source_evidence: Any) -> str:
+    if not isinstance(source_evidence, list):
+        return ""
+    parts: list[str] = []
+    for evidence in source_evidence:
+        if not isinstance(evidence, dict):
+            continue
+        for key in ["excerpt", "text", "title", "summary", "field", "source_id"]:
+            value = normalized_visible_text(evidence.get(key))
+            if value:
+                parts.append(value)
+        supported_terms = evidence.get("supported_terms")
+        if isinstance(supported_terms, list):
+            parts.extend(normalized_visible_text(term) for term in supported_terms if normalized_visible_text(term))
+    return " ".join(parts)
+
+
+def is_supplier_or_1688_image_src(src: str) -> bool:
+    text = normalized_visible_text(src).casefold()
+    return any(
+        marker in text
+        for marker in [
+            "detail.1688.com",
+            "1688.com/offer",
+            "alicdn.com",
+            "alibaba.com",
+            "aliexpress.com",
+        ]
+    )
+
+
+def is_amazon_competitor_image_src(src: str) -> bool:
+    try:
+        host = (urlparse(normalized_visible_text(src)).hostname or "").casefold()
+    except ValueError:
+        return False
+    return any(
+        host == domain or host.endswith(f".{domain}")
+        for domain in [
+            "media-amazon.com",
+            "ssl-images-amazon.com",
+            "images-amazon.com",
+        ]
+    )
+
+
 def raw_english_client_fragments(data_pack: dict[str, Any]) -> set[str]:
     fragments: set[str] = set()
     for value in raw_english_client_values(data_pack):
@@ -854,6 +1005,25 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
         if match is not None:
             raise ValidationError(f"{rel_path} customer HTML leaks technical identifier: {match.group(0)}")
 
+    for img_match in re.finditer(r"<img\b[^>]*>", html_doc, flags=re.I):
+        tag = img_match.group(0)
+        src_match = re.search(r"\bsrc\s*=\s*(['\"])(.*?)\1", tag, flags=re.I | re.S)
+        require(src_match is not None, f"{rel_path} customer HTML image missing src")
+        src = (src_match.group(2) or "").strip()
+        require(bool(src), f"{rel_path} customer HTML image has empty src")
+        require(re.match(r"^https?://", src, flags=re.I) is not None, f"{rel_path} customer HTML image src must be an http(s) URL")
+        class_match = re.search(r"\bclass\s*=\s*(['\"])(.*?)\1", tag, flags=re.I | re.S)
+        class_text = class_match.group(2) if class_match else ""
+        if any(token in class_text.split() for token in ["comp-product-thumb", "comp-image-thumb", "comp-deep-image", "sku-reference-thumb"]):
+            require(
+                not is_supplier_or_1688_image_src(src),
+                f"{rel_path} customer HTML competitor image must use Amazon competitor image, not 1688/Alibaba supplier image",
+            )
+            require(
+                is_amazon_competitor_image_src(src),
+                f"{rel_path} customer HTML competitor image must use Amazon competitor image domain",
+            )
+
     for value in customer_safety_context(data_pack)["technical_values"]:
         require(value not in html_for_safety, f"{rel_path} customer HTML leaks technical identifier: {value}")
 
@@ -922,6 +1092,116 @@ def validate_customer_visible_assets(report_dir: Path, data_pack: dict[str, Any]
         validate_customer_visible_asset(rel_path, text, data_pack)
 
 
+def validate_cosmo_alexa_tags(report_dir: Path) -> None:
+    rel_path = "analysis/cosmo_alexa_tags.json"
+    payload = load_json(report_dir / rel_path)
+    require(isinstance(payload, dict), f"{rel_path} must be an object")
+    relations = payload.get("relations")
+    require(isinstance(relations, list), f"{rel_path} relations must be a list")
+    relation_types = {str(item.get("relation_type")) for item in relations if isinstance(item, dict)}
+    missing = sorted(COSMO_ALEXA_RELATION_TYPES - relation_types)
+    require(not missing, f"{rel_path} missing 15-tag relation types: {', '.join(missing)}")
+    require(len(relations) >= len(COSMO_ALEXA_RELATION_TYPES), f"{rel_path} must contain all 15 relation entries")
+    raw_relation_code_re = re.compile(r"\b(?:USED|CAPABLE|IS_A)[A-Z_]*\b|\bx(?:WANT|INTERSTED_IN|Is_A)\b|\bREL_\d+\b")
+    term_signatures: dict[tuple[str, ...], list[str]] = {}
+    term_relations: dict[str, set[str]] = {}
+    for idx, item in enumerate(relations):
+        require(isinstance(item, dict), f"{rel_path} relations[{idx}] must be an object")
+        for key in [
+            "relation_type",
+            "label_cn",
+            "display_relation",
+            "terms",
+            "source_evidence",
+            "confidence",
+            "evidence_count",
+            "listing_label",
+            "listing_action",
+            "qa_label",
+            "qa_action",
+            "ad_label",
+            "ad_action",
+        ]:
+            require(key in item, f"{rel_path} relations[{idx}] missing {key}")
+        require(not raw_relation_code_re.search(str(item.get("label_cn") or "")), f"{rel_path} relations[{idx}].label_cn leaks raw relation code")
+        require(not raw_relation_code_re.search(str(item.get("display_relation") or "")), f"{rel_path} relations[{idx}].display_relation leaks raw relation code")
+        require(isinstance(item.get("terms"), list), f"{rel_path} relations[{idx}].terms must be a list")
+        require(isinstance(item.get("source_evidence"), list), f"{rel_path} relations[{idx}].source_evidence must be a list")
+        if item.get("confidence") != "低" and item.get("terms"):
+            evidence_text = cosmo_evidence_text(item.get("source_evidence"))
+            unsupported_terms = [
+                normalized_visible_text(term)
+                for term in item.get("terms")
+                if normalized_visible_text(term) and not cosmo_term_supported_by_evidence(term, evidence_text)
+            ]
+            require(
+                not unsupported_terms,
+                f"{rel_path} relations[{idx}] COSMO terms lack current evidence support: {', '.join(unsupported_terms[:5])}",
+            )
+        if item.get("confidence") != "低":
+            relation_type = str(item.get("relation_type"))
+            normalized_terms = {
+                normalized_visible_text(term).casefold()
+                for term in item.get("terms")
+                if normalized_visible_text(term)
+            }
+            signature = tuple(
+                sorted(
+                    normalized_terms
+                )
+            )
+            if len(signature) >= 2:
+                term_signatures.setdefault(signature, []).append(relation_type)
+            for term in normalized_terms:
+                term_relations.setdefault(term, set()).add(relation_type)
+    repeated = {signature: rels for signature, rels in term_signatures.items() if len(rels) > 2}
+    require(
+        not repeated,
+        f"{rel_path} COSMO relation terms are over-reused across relation cards; duplicate signatures: "
+        + "; ".join(f"{'/'.join(rels)}={','.join(signature[:4])}" for signature, rels in repeated.items()),
+    )
+    overused_terms = {term: sorted(rels) for term, rels in term_relations.items() if len(rels) > 3}
+    require(
+        not overused_terms,
+        f"{rel_path} COSMO single tag is over-reused across relation cards: "
+        + "; ".join(f"{term}=>{'/'.join(rels)}" for term, rels in overused_terms.items()),
+    )
+
+
+def validate_lifecycle_strategy_analysis(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    rel_path = "analysis/lifecycle_strategy.json"
+    payload = load_json(report_dir / rel_path)
+    require(isinstance(payload, dict), f"{rel_path} must be an object")
+    pool = payload.get("sku_candidate_pool")
+    recommended = payload.get("recommended_skus")
+    diagnostics = payload.get("filter_diagnostics")
+    require(isinstance(pool, list), f"{rel_path} sku_candidate_pool must be a list")
+    require(isinstance(recommended, list), f"{rel_path} recommended_skus must be a list")
+    require(isinstance(diagnostics, dict), f"{rel_path} filter_diagnostics must be an object")
+    effective_product_count = len(data_pack.get("effective_products") or [])
+    if effective_product_count >= 30:
+        require(len(pool) > 5, f"{rel_path} must not collapse {effective_product_count} effective products into five fallback SKUs")
+        require(len(pool) >= min(30, effective_product_count), f"{rel_path} sku_candidate_pool too small for effective product pool")
+    for idx, sku in enumerate(pool[:80]):
+        require(isinstance(sku, dict), f"{rel_path} sku_candidate_pool[{idx}] must be an object")
+        for key in ["name", "strategy_type_key", "type_label_cn", "target_segment", "reference_competitor", "priority", "ecosystem_path", "ecosystem_segment"]:
+            require(sku.get(key) not in (None, "", [], {}), f"{rel_path} sku_candidate_pool[{idx}] missing {key}")
+        strategy_type_key = str(sku.get("strategy_type_key") or "").strip()
+        require(strategy_type_key in LIFECYCLE_STRATEGY_TYPE_KEYS, f"{rel_path} sku_candidate_pool[{idx}] strategy_type_key must be a semantic key")
+        raw_type = str(sku.get("type") or "").strip()
+        require(raw_type not in LIFECYCLE_RAW_TYPE_CODES, f"{rel_path} sku_candidate_pool[{idx}] type must not expose raw A/B/C/D codes")
+        if raw_type:
+            require(raw_type in LIFECYCLE_STRATEGY_TYPE_KEYS, f"{rel_path} sku_candidate_pool[{idx}] type must use semantic strategy key")
+    for idx, sku in enumerate(recommended[:15]):
+        require(isinstance(sku, dict), f"{rel_path} recommended_skus[{idx}] must be an object")
+        strategy_type_key = str(sku.get("strategy_type_key") or "").strip()
+        require(strategy_type_key in LIFECYCLE_STRATEGY_TYPE_KEYS, f"{rel_path} recommended_skus[{idx}] strategy_type_key must be a semantic key")
+        require(str(sku.get("type") or "").strip() not in LIFECYCLE_RAW_TYPE_CODES, f"{rel_path} recommended_skus[{idx}] type must not expose raw A/B/C/D codes")
+    serialized = json.dumps(payload, ensure_ascii=False)
+    for term in LIFECYCLE_BANNED_FALLBACK_TERMS:
+        require(term not in serialized, f"{rel_path} contains old lifecycle fallback term: {term}")
+
+
 def validate_site_asset_contract(report_dir: Path) -> None:
     manifest = load_json(TEMPLATE_BASELINE_MANIFEST)
     baselines = manifest.get("baselines") if isinstance(manifest, dict) else None
@@ -954,6 +1234,12 @@ def validate_site_asset_contract(report_dir: Path) -> None:
         ".bundle-grid",
         ".filter-btn",
         ".sku-table-wrap",
+        ".ecosystem-pool-summary",
+        ".cosmo-layout",
+        ".cosmo-matrix",
+        ".cosmo-top-list",
+        ".cosmo-gap-panel",
+        ".cosmo-action-board",
         ".quote-cn",
         ".chart-interpretation",
         "@media(max-width:760px)",
@@ -1035,10 +1321,13 @@ def validate_supply_html_readiness_alignment(report_dir: Path) -> None:
     readiness = load_json(readiness_path)
     supplier_quote_gate = readiness.get("supplier_quote_gate") or {}
     supplier_quality_gate = readiness.get("supplier_quality_gate") or {}
+    customer_visible_quality_passed = supplier_quality_gate.get("customer_visible_passed")
+    if customer_visible_quality_passed is None:
+        customer_visible_quality_passed = supplier_quality_gate.get("passed")
     supply_passed = (
         readiness.get("supply_conclusion_blocked") is False
         and supplier_quote_gate.get("passed") is True
-        and supplier_quality_gate.get("passed") is True
+        and customer_visible_quality_passed is True
     )
     if not supply_passed:
         return
@@ -1125,15 +1414,50 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
     if spec["style"] == "market-depth-report-v2":
         for placeholder in MARKET_DEPTH_BANNED_PLACEHOLDERS:
             require(placeholder not in report_html, f"{rel_path} customer HTML contains placeholder or non-final data wording: {placeholder}")
+    if spec["style"] == "lifecycle-strategy-report-v2":
+        for term in LIFECYCLE_BANNED_FALLBACK_TERMS:
+            require(term not in report_html, f"{rel_path} customer HTML contains old lifecycle fallback term: {term}")
 
 
 def validate_fixed_template_slots(rel_path: str, report_html: str, style: str) -> None:
     if style == "market-depth-report-v2":
+        ordered_ids = ["market-dashboard", "cosmo-alexa-tags", "competitor-scan", "voc-deep-dive"]
+        positions = []
+        for section_id in ordered_ids:
+            match = re.search(rf'id=[\'"]{re.escape(section_id)}[\'"]', report_html)
+            require(match is not None, f"{rel_path} fixed template slot mismatch: missing section id {section_id}")
+            positions.append(match.start())
+        require(positions == sorted(positions), f"{rel_path} fixed template slot mismatch: market sections must follow 01/02/03/04 order")
+        require(report_html.count('data-cosmo-relation="') >= 15, f"{rel_path} fixed template slot mismatch: COSMO must render all 15 relation cards")
+        require(report_html.count('class="cosmo-tag-terms"') >= 15, f"{rel_path} fixed template slot mismatch: COSMO relation cards must render tag chips")
+        visible_cosmo_text = normalized_visible_text(
+            re.sub(r"<[^>]+>", " ", re.sub(r"<script\b.*?</script>|<style\b.*?</style>", " ", report_html, flags=re.I | re.S))
+        )
+        raw_relation_code_re = re.compile(r"\b(?:USED_FOR|USED_TO|USED_AS|USED_ON|USED_IN|USED_WITH|USED_BY|CAPABLE_OF|IS_A)[A-Z_]*\b|\bx(?:WANT|INTERSTED_IN|Is_A)\b|\bREL_\d+\b")
+        visible_slot_id_re = re.compile(r"\b(?:P0[1-8]|U0[1-9])\b")
+        require(raw_relation_code_re.search(visible_cosmo_text) is None, f"{rel_path} fixed template slot mismatch: COSMO relation code must not be visible customer copy")
+        require(visible_slot_id_re.search(visible_cosmo_text) is None, f"{rel_path} fixed template slot mismatch: COSMO internal slot IDs must not be visible customer copy")
+        require(raw_relation_code_re.search(report_html) is None, f"{rel_path} fixed template slot mismatch: COSMO relation code must not appear in customer HTML attributes")
+        require("产品意图" in report_html and "用户意图" in report_html, f"{rel_path} fixed template slot mismatch: COSMO must show 产品意图/用户意图 labels")
+        require('class="cosmo-relation-id">产品</b>' in report_html and 'class="cosmo-relation-id">用户</b>' in report_html, f"{rel_path} fixed template slot mismatch: COSMO must show customer-readable product/user markers")
+        require('data-dimension="产品标签"' in report_html and 'data-dimension="用户标签"' in report_html, f"{rel_path} fixed template slot mismatch: COSMO must mark product/user dimensions")
+        require('class="cosmo-matrix-lanes"' in report_html, f"{rel_path} fixed template slot mismatch: COSMO matrix must use product/user lanes")
+        require('class="cosmo-matrix-lane product-lane"' in report_html and 'class="cosmo-matrix-lane user-lane"' in report_html, f"{rel_path} fixed template slot mismatch: COSMO must separate product and user label lanes")
+        require("产品标签 · 产品被算法识别为什么" in report_html and "用户标签 · 用户为什么搜索/购买" in report_html, f"{rel_path} fixed template slot mismatch: COSMO lane titles must be customer-readable")
+        for cosmo_slot in ["cosmo-matrix", "cosmo-top-list", "cosmo-gap-panel", "cosmo-action-board"]:
+            require(cosmo_slot in report_html, f"{rel_path} fixed template slot mismatch: COSMO missing {cosmo_slot}")
         require(report_html.count('class="pricing-card') == 3, f"{rel_path} fixed template slot mismatch: pricing-card must be exactly 3")
         require(report_html.count('class="prompt-card') == 3, f"{rel_path} fixed template slot mismatch: prompt-card must be exactly 3")
         require('id="pricing"' in report_html and 'id="prompt"' in report_html, f"{rel_path} fixed template slot mismatch: pricing and prompt anchors must be present")
         require("<th>ASIN</th>" in report_html, f"{rel_path} fixed template slot mismatch: competitor table must expose ASIN")
         require('data-allow-asin="competitor-table"' in report_html, f"{rel_path} fixed template slot mismatch: competitor ASIN must be whitelisted")
+        has_competitor_image_evidence = (
+            "comp-image-strip" in report_html
+            or "comp-product-thumb" in report_html
+            or "comp-deep-image" in report_html
+            or "图片维度未返回可展示 URL" in report_html
+        )
+        require(has_competitor_image_evidence, f"{rel_path} fixed template slot mismatch: 竞品图片或图片诊断槽位缺失")
     elif style == "lifecycle-strategy-report-v2":
         require("ecosystem-chart-grid" in report_html, f"{rel_path} fixed template slot mismatch: ecosystem two-chart grid missing")
         require('id="sunburst"' in report_html and 'id="priorityChart"' in report_html, f"{rel_path} fixed template slot mismatch: lifecycle charts missing")
@@ -1320,12 +1644,21 @@ def validate_delivery(report_dir: Path) -> None:
     readiness = assess_data_readiness(report_dir, "auto")
     expected_readiness = readiness_summary_for_contract(readiness)
     require(isinstance(delivery, dict), "delivery_result.json must be an object")
-    require(delivery.get("status") in {"complete", "partial"}, "delivery_result.json status must be complete or partial")
+    status = delivery.get("status")
+    blocked_delivery = status == "blocked"
+    require(status in {"complete", "partial", "blocked"}, "delivery_result.json status must be complete, partial, or blocked")
     delivery_readiness = delivery.get("data_readiness")
     require(isinstance(delivery_readiness, dict), "delivery_result.json missing data_readiness summary")
     require(delivery_readiness.get("path") == "data/normalized/data_readiness_report.json", "delivery_result.json data_readiness.path mismatch")
     for key, expected in expected_readiness.items():
         require(readiness_contract_value_matches(key, delivery_readiness.get(key), expected), f"delivery_result.json data_readiness.{key} mismatch")
+    if blocked_delivery:
+        require(
+            not (delivery_readiness.get("acceptance_ready") or delivery_readiness.get("partial_report_ready")),
+            "blocked delivery cannot carry ready data_readiness",
+        )
+        require(str(delivery.get("decision") or "").casefold() != "go", "blocked delivery cannot carry an unconditional Go decision")
+        require(delivery_readiness.get("blocking_gap_count", 0) > 0, "blocked delivery must include blocking gaps")
     html_reports = delivery.get("html_reports")
     require(isinstance(html_reports, dict), "delivery_result.json missing html_reports mapping")
     require(html_reports.get("index") == BUNDLE_INDEX_REPORT, f"delivery_result.json html_reports.index must be {BUNDLE_INDEX_REPORT}")
@@ -1334,8 +1667,18 @@ def validate_delivery(report_dir: Path) -> None:
     for key, spec in CHILD_REPORTS.items():
         require(html_reports.get(key) == spec["path"], f"delivery_result.json html_reports.{key} must be {spec['path']}")
     require(delivery.get("child_skills") == CHILD_SKILLS, "delivery_result.json child_skills must declare internal report modules and critic")
-    validate_child_skill_invocations(report_dir, delivery.get("child_skill_invocations"), "delivery_result.json")
-    validate_child_skill_invocation_log(report_dir)
+    if blocked_delivery:
+        invocations = delivery.get("child_skill_invocations")
+        require(isinstance(invocations, dict), "blocked delivery must declare diagnostic child_skill_invocations")
+        for key, module_path in CHILD_SKILLS.items():
+            entry = invocations.get(key)
+            require(isinstance(entry, dict), f"blocked delivery child invocation missing {key}")
+            require(entry.get("module") == module_path, f"blocked delivery child invocation {key} module mismatch")
+            require(entry.get("status") == "diagnostic_template", f"blocked delivery child invocation {key} must use diagnostic_template status")
+            require(entry.get("dispatch_mode") == "main_renderer_diagnostic", f"blocked delivery child invocation {key} dispatch_mode mismatch")
+    else:
+        validate_child_skill_invocations(report_dir, delivery.get("child_skill_invocations"), "delivery_result.json")
+        validate_child_skill_invocation_log(report_dir)
     require(delivery.get("site_assets") == SITE_ASSETS, "delivery_result.json site_assets must declare static site assets")
     critic = delivery.get("critic_review")
     require(isinstance(critic, dict), "delivery_result.json missing critic_review summary")
@@ -1343,6 +1686,8 @@ def validate_delivery(report_dir: Path) -> None:
     require(critic.get("refinement_plan") == "analysis/refinement_plan.json", "delivery_result.json critic_review.refinement_plan mismatch")
     require(critic.get("summary") == "analysis/critic_summary.md", "delivery_result.json critic_review.summary mismatch")
     require(critic.get("max_refinement_rounds") == 2, "delivery_result.json critic max_refinement_rounds must be 2")
+    if blocked_delivery:
+        require(critic.get("pass") is False, "blocked delivery critic_review.pass must be false")
     require(
         not (critic.get("pass") is True and not (delivery_readiness.get("acceptance_ready") or delivery_readiness.get("partial_report_ready"))),
         "critic pass cannot override failed data readiness",
@@ -1362,6 +1707,13 @@ def validate_delivery(report_dir: Path) -> None:
     cleaning = delivery.get("cleaning_summary")
     require(isinstance(cleaning, dict), "delivery_result.json missing cleaning_summary")
     require(isinstance(cleaning.get("removed_counts"), dict), "delivery_result.json cleaning_summary missing removed_counts")
+    cosmo_summary = delivery.get("cosmo_alexa_tags")
+    require(isinstance(cosmo_summary, dict), "delivery_result.json missing cosmo_alexa_tags summary")
+    require(cosmo_summary.get("path") == "analysis/cosmo_alexa_tags.json", "delivery_result.json cosmo_alexa_tags.path mismatch")
+    require(cosmo_summary.get("relation_total") == len(COSMO_ALEXA_RELATION_TYPES), "delivery_result.json cosmo_alexa_tags relation_total mismatch")
+    lifecycle_summary = delivery.get("lifecycle_sku_pool_summary")
+    require(isinstance(lifecycle_summary, dict), "delivery_result.json missing lifecycle_sku_pool_summary")
+    require(isinstance(lifecycle_summary.get("sku_candidate_pool"), int), "delivery_result.json lifecycle_sku_pool_summary.sku_candidate_pool must be an integer")
 
     site_data = load_json(report_dir / SITE_ASSETS["data"])
     require(site_data.get("child_skills") == CHILD_SKILLS, "report-data.json child_skills mismatch")
@@ -1390,11 +1742,13 @@ def validate(report_dir: Path) -> None:
     source_ids = validate_sources(data_pack)
     validate_entity_lineage(data_pack, source_ids)
     validate_data_gaps_contract(data_pack)
-    validate_data_readiness(report_dir)
+    validate_data_readiness(report_dir, delivery)
     validate_normalized_data_pack_consistency(report_dir, data_pack)
     validate_research_relevance_gate(data_pack)
     validate_quality_consistency(data_pack, delivery)
     validate_analysis_plan(analysis_plan, source_ids)
+    validate_cosmo_alexa_tags(report_dir)
+    validate_lifecycle_strategy_analysis(report_dir, data_pack)
     validate_supply_html_readiness_alignment(report_dir)
     validate_text_artifacts(report_dir, source_ids, data_pack)
     validate_site_asset_contract(report_dir)

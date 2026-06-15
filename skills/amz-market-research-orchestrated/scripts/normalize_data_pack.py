@@ -43,10 +43,48 @@ THEME_CN = {
 
 KEYWORD_CN_RULES = [
     ("under cabinet", "橱柜灯"),
+    ("under counter", "柜底灯"),
     ("cabinet light", "橱柜灯"),
+    ("cabinet lights", "橱柜灯"),
+    ("lights for cabinets", "橱柜灯"),
+    ("light for cabinets", "橱柜灯"),
+    ("sensor lights for cabinets", "橱柜人体感应灯"),
+    ("sensor light for cabinets", "橱柜人体感应灯"),
+    ("closet light", "衣柜灯"),
+    ("closet lights", "衣柜灯"),
+    ("light for closet", "衣柜灯"),
+    ("lights for closet", "衣柜灯"),
+    ("lights for closets", "衣柜灯"),
+    ("closet motion light", "衣柜人体感应灯"),
+    ("closet sensor light", "衣柜人体感应灯"),
+    ("motion light for closet", "衣柜人体感应灯"),
+    ("sensor light for closet", "衣柜人体感应灯"),
+    ("luces para closet", "衣柜灯"),
+    ("luz para closet", "衣柜灯"),
+    ("closet led lights", "衣柜LED灯"),
+    ("wardrobe light", "衣柜灯"),
+    ("wardrobe lights", "衣柜灯"),
+    ("pantry light", "储物间灯"),
+    ("puck light", "圆形橱柜灯"),
+    ("stick on", "免打孔粘贴"),
+    ("adhesive", "胶贴安装"),
+    ("battery operated", "电池供电"),
+    ("indoor motion sensor", "室内人体感应"),
+    ("motion light indoor", "室内人体感应灯"),
+    ("motion lights indoor", "室内人体感应灯"),
+    ("indoor motion light", "室内人体感应灯"),
+    ("indoor motion lights", "室内人体感应灯"),
+    ("motion activated light", "人体感应灯"),
+    ("motion activated lights", "人体感应灯"),
+    ("motion detector light", "人体感应灯"),
+    ("motion detector lights", "人体感应灯"),
+    ("motion sensor led light", "人体感应LED灯"),
+    ("motion sensor rechargeable light", "可充电人体感应灯"),
+    ("rechargeable motion light", "可充电人体感应灯"),
     ("motion sensor", "人体感应"),
     ("wireless", "无线"),
     ("rechargeable", "可充电"),
+    ("usb rechargeable", "USB充电"),
     ("magnetic", "磁吸"),
     ("rgbic", "RGBIC"),
     ("rgb", "RGB"),
@@ -81,6 +119,15 @@ TITLE_SEGMENT_RULES = [
     ("氛围灯", ["ambient", "night light", "table lamp", "sunset"]),
 ]
 
+HUNTING_BLINDS_SEGMENT_RULES = [
+    ("透视地面盲棚", ["see through", "see-through", "one-way", "one way", "270", "360"]),
+    ("弹出式地面盲棚", ["pop up", "pop-up", "hub style", "hub blind", "ground blind"]),
+    ("多人狩猎盲棚", ["2 person", "3 person", "4 person", "two person", "three person", "four person"]),
+    ("椅式单人盲棚", ["chair blind", "blind chair", "one man", "1 man", "1/2 man"]),
+    ("塔式/箱式盲棚", ["tower blind", "box blind", "elevated", "stand blind"]),
+    ("水禽/布局盲棚", ["duck blind", "layout blind", "waterfowl"]),
+]
+
 LIGHTING_RESEARCH_TOKENS = {
     "smart lighting",
     "lighting",
@@ -89,6 +136,364 @@ LIGHTING_RESEARCH_TOKENS = {
     "灯具",
     "灯饰",
 }
+
+CABINET_CLOSET_RESEARCH_TOKENS = {
+    "under cabinet",
+    "under counter",
+    "cabinet light",
+    "cabinet lights",
+    "closet light",
+    "closet lights",
+    "wardrobe light",
+    "wardrobe lights",
+    "motion sensor cabinet",
+    "rechargeable closet",
+    "magnetic under cabinet",
+    "indoor motion sensor light",
+    "indoor motion sensor lights",
+    "motion light indoor",
+    "motion lights indoor",
+    "indoor motion light",
+    "indoor motion lights",
+    "motion activated light indoor",
+    "motion detector lights for inside",
+    "室内感应灯",
+    "室内人体感应灯",
+    "橱柜灯",
+    "橱柜感应灯",
+    "衣柜灯",
+    "衣柜感应灯",
+    "柜底灯",
+}
+
+UNDER_CABINET_CATEGORY_RESEARCH_TOKENS = {
+    "under-cabinet lights",
+    "under cabinet lights",
+    "under-cabinet light",
+    "under cabinet light",
+    "under-counter light fixtures",
+    "under counter light fixtures",
+    "under-counter lights",
+    "under counter lights",
+}
+
+CABINET_CLOSET_PRODUCT_SIGNALS = [
+    "under cabinet",
+    "under counter",
+    "cabinet light",
+    "cabinet lights",
+    "closet light",
+    "closet lights",
+    "wardrobe light",
+    "wardrobe lights",
+    "puck light",
+    "puck lights",
+    "stick on light",
+    "stick on lights",
+    "motion sensor light",
+    "motion sensor lights",
+    "indoor motion sensor light",
+    "indoor motion sensor lights",
+    "motion light indoor",
+    "motion lights indoor",
+    "indoor motion light",
+    "indoor motion lights",
+    "motion activated light",
+    "motion activated lights",
+    "motion detector light",
+    "motion detector lights",
+    "motion sensor led light",
+    "motion sensor rechargeable light",
+    "rechargeable motion light",
+    "rechargeable motion lights",
+    "automatic light",
+    "automatic lights",
+    "sensor light indoor",
+    "sensor lights indoor",
+    "battery operated light",
+    "battery operated lights",
+    "rechargeable light",
+    "rechargeable lights",
+    "magnetic light",
+    "magnetic lights",
+    "pantry light",
+    "kitchen cabinet",
+    "橱柜灯",
+    "橱柜感应灯",
+    "感应橱柜灯",
+    "柜底灯",
+    "衣柜灯",
+    "衣柜感应灯",
+    "人体感应灯",
+    "充电感应灯",
+    "磁吸感应灯",
+]
+
+CABINET_CLOSET_FUNCTION_SIGNALS = [
+    "motion sensor",
+    "sensor",
+    "pir",
+    "motion activated",
+    "motion detector",
+    "rechargeable",
+    "battery",
+    "wireless",
+    "cordless",
+    "usb",
+    "magnetic",
+    "adhesive",
+    "stick on",
+    "puck",
+    "under cabinet",
+    "under counter",
+    "closet",
+    "wardrobe",
+    "pantry",
+    "感应",
+    "人体感应",
+    "充电",
+    "电池",
+    "无线",
+    "磁吸",
+    "胶贴",
+    "免打孔",
+]
+
+CABINET_CLOSET_MOTION_TERMS = [
+    "motion sensor",
+    "motion activated",
+    "motion detector",
+    "motion sensing",
+    "motion sensored",
+    "motion light",
+    "motion lights",
+    "auto lights motion",
+    "pir",
+    "human body sensing",
+    "sensor de movimiento",
+    "sensores de movimiento",
+    "人体感应",
+    "红外感应",
+]
+
+CABINET_CLOSET_LIGHT_TERMS = [
+    "light",
+    "lights",
+    "lighting",
+    "lamp",
+    "lampara",
+    "lamparas",
+    "luz",
+    "luces",
+    "led",
+    "灯",
+    "照明",
+]
+
+CABINET_CLOSET_SCENE_TERMS = [
+    "cabinet",
+    "cabinets",
+    "closet",
+    "closets",
+    "wardrobe",
+    "wardrobes",
+    "cupboard",
+    "cupboards",
+    "under counter",
+    "undercounter",
+    "counter lights",
+    "under shelf",
+    "under shelves",
+    "shelf lighting",
+    "shelf lights",
+    "drawer light",
+    "drawer lights",
+    "stair light",
+    "stair lights",
+    "safe light",
+    "safe lights",
+    "push light",
+    "push lights",
+    "stick up light",
+    "stick up lights",
+    "peel and stick light",
+    "peel and stick lights",
+    "touch light",
+    "touch lights",
+    "wireless light",
+    "wireless lights",
+    "battery powered light",
+    "battery powered lights",
+    "battery operated light",
+    "battery operated lights",
+    "rechargeable light",
+    "rechargeable lights",
+    "lights without wiring",
+    "light without wiring",
+    "under kitchen cabinet",
+    "under kitchen cabinets",
+    "kitchen cabinet",
+    "kitchen cabinets",
+    "gabinete",
+    "gabinetes",
+    "debajo gabinete",
+    "debajo de gabinetes",
+    "橱柜",
+    "衣柜",
+    "柜底",
+]
+
+CABINET_CLOSET_LIGHT_SENSOR_ONLY_TERMS = [
+    "dusk to dawn",
+    "light sensor",
+    "photocell",
+    "光控",
+]
+
+CABINET_CLOSET_STRIP_TERMS = [
+    "light strip",
+    "light strips",
+    "strip light",
+    "strip lights",
+    "led strip",
+    "led strips",
+]
+
+CABINET_CLOSET_STRIP_ALLOWED_TERMS = [
+    "under cabinet",
+    "cabinet",
+    "under counter",
+    "counter",
+    "under shelf",
+    "shelf",
+    "closet",
+    "wardrobe",
+    "motion",
+    "sensor",
+    "橱柜",
+    "衣柜",
+    "感应",
+]
+
+CABINET_CLOSET_HARD_NOISE = [
+    "outdoor",
+    "outdoor light",
+    "solar",
+    "security light",
+    "flood light",
+    "wall sconce",
+    "porch",
+    "patio",
+    "garden",
+    "landscape",
+    "flashlight",
+    "flashlights",
+    "headlamp",
+    "head lamp",
+    "camping",
+    "hiking",
+    "fishing",
+    "bedside",
+    "bedroom decor",
+    "table lamp",
+    "floor lamp",
+    "smart bulb",
+    "light bulb",
+    "a19",
+    "string lights",
+    "tv backlight",
+    "grow light",
+    "ceiling light",
+    "ceiling lights",
+    "techo",
+    "overhead lighting",
+    "garage light",
+    "bathroom vanity",
+    "rgb strip",
+    "rgbic",
+    "govee",
+    "户外",
+    "太阳能",
+    "投光灯",
+    "庭院",
+    "景观",
+    "床头灯",
+    "装饰灯",
+    "台灯",
+    "落地灯",
+    "灯泡",
+    "电视背光",
+    "植物灯",
+    "吸顶灯",
+]
+
+CABINET_CLOSET_KEYWORD_SIGNALS = [
+    "under cabinet",
+    "under counter",
+    "cabinet light",
+    "cabinet lights",
+    "closet light",
+    "closet lights",
+    "wardrobe light",
+    "wardrobe lights",
+    "puck light",
+    "puck lights",
+    "stick on light",
+    "stick on lights",
+    "motion sensor light",
+    "motion sensor lights",
+    "battery operated closet",
+    "battery operated under cabinet",
+    "rechargeable closet",
+    "rechargeable under cabinet",
+    "wireless under cabinet",
+    "magnetic closet",
+    "magnetic under cabinet",
+    "pantry light",
+    "kitchen cabinet light",
+    "indoor motion sensor light",
+    "indoor motion sensor lights",
+    "motion light indoor",
+    "motion lights indoor",
+    "indoor motion light",
+    "indoor motion lights",
+    "motion activated light",
+    "motion activated lights",
+    "motion detector light",
+    "motion detector lights",
+    "motion sensor led light",
+    "motion sensor rechargeable light",
+    "rechargeable motion light",
+    "rechargeable motion lights",
+    "automatic light",
+    "automatic lights",
+    "sensor lights indoor",
+    "sensor light indoor",
+    "closet motion light",
+    "motion light for closet",
+    "motion lights for closets",
+    "closet sensor light",
+    "sensor light for closet",
+    "sensor lights for closet",
+    "lights for closet",
+    "lights for closets",
+    "light for closet",
+    "battery lights for closet",
+    "battery light for closet",
+    "rechargeable light for closet",
+    "sensor lights for cabinets",
+    "lights for cabinets",
+    "luces para closet",
+    "luz para closet",
+    "橱柜灯",
+    "橱柜感应灯",
+    "衣柜灯",
+    "衣柜感应灯",
+    "柜底灯",
+    "人体感应灯",
+    "充电感应灯",
+    "磁吸感应灯",
+]
 
 LIGHTING_PRODUCT_SIGNALS = [
     "light",
@@ -131,10 +536,62 @@ LIGHTING_KEYWORD_SIGNALS = [
     "led light",
     "led lights",
     "under cabinet",
+    "under cabinet light",
+    "under cabinet lights",
+    "under cabinet lighting",
+    "under counter",
+    "under counter light",
+    "under counter lights",
+    "under counter lighting",
+    "under-counter light",
+    "under-counter lights",
     "cabinet light",
     "cabinet lights",
+    "cabinet lighting",
+    "cupboard light",
+    "cupboard lights",
+    "cupboard lighting",
+    "closet light",
+    "closet lights",
+    "closet lighting",
+    "closet motion light",
+    "closet motion sensor light",
+    "motion sensor closet light",
+    "motion sensor closet lights",
+    "wardrobe light",
+    "wardrobe lights",
+    "puck light",
+    "puck lights",
+    "drawer light",
+    "drawer lights",
+    "shelf light",
+    "shelf lights",
+    "shelf lighting",
+    "stick up light",
+    "stick up lights",
+    "peel and stick lights",
+    "push light",
+    "push lights",
+    "wireless light",
+    "wireless lights",
+    "rechargeable light",
+    "rechargeable lights",
+    "battery operated light",
+    "battery operated lights",
+    "battery powered light",
+    "battery powered lights",
     "motion sensor light",
     "motion sensor lights",
+    "motion sensor light indoor",
+    "motion sensor lights indoor",
+    "indoor motion sensor light",
+    "indoor motion sensor lights",
+    "motion activated light",
+    "motion activated lights",
+    "motion detector light",
+    "motion detector lights",
+    "motion light indoor",
+    "motion lights indoor",
     "night light",
     "rgb light",
     "rgb lights",
@@ -210,6 +667,140 @@ LIGHTING_HARD_PRODUCT_NOISE = [
     "ventilador",
     "worldcup",
     "world cup",
+]
+
+HUNTING_BLINDS_RESEARCH_TOKENS = {
+    "hunting blind",
+    "hunting blinds",
+    "ground blind",
+    "ground blinds",
+    "deer blind",
+    "deer blinds",
+    "turkey blind",
+    "turkey blinds",
+    "see through hunting blind",
+    "pop up hunting blind",
+    "狩猎帐篷",
+    "狩猎隐蔽帐篷",
+    "狩猎盲",
+}
+
+HUNTING_BLINDS_PRODUCT_SIGNALS = [
+    "hunting blind",
+    "hunting blinds",
+    "ground blind",
+    "ground blinds",
+    "deer blind",
+    "deer blinds",
+    "turkey blind",
+    "turkey blinds",
+    "pop up blind",
+    "pop-up blind",
+    "see through blind",
+    "see-through blind",
+    "one-way see through",
+    "concealed shelter",
+    "camouflage tent",
+    "camo tent",
+    "hub blind",
+    "chair blind",
+    "tower blind",
+    "box blind",
+    "bale blind",
+    "shooting blind",
+    "blind tent",
+    "狩猎帐篷",
+    "狩猎隐蔽帐篷",
+    "迷彩帐篷",
+    "伪装帐篷",
+    "伪装棚",
+]
+
+HUNTING_BLINDS_KEYWORD_SIGNALS = [
+    "hunting blind",
+    "hunting blinds",
+    "ground blind",
+    "ground blinds",
+    "deer blind",
+    "deer blinds",
+    "turkey blind",
+    "turkey blinds",
+    "pop up blind",
+    "pop-up blind",
+    "see through blind",
+    "see-through blind",
+    "360 blind",
+    "hub blind",
+    "chair blind",
+    "tower blind",
+    "box blind",
+    "bale blind",
+    "blind tent",
+    "狩猎帐篷",
+    "狩猎隐蔽帐篷",
+    "迷彩帐篷",
+    "伪装帐篷",
+]
+
+HUNTING_BLINDS_HARD_PRODUCT_NOISE = [
+    "aluminum boat paint",
+    "boat paint",
+    "marine paint",
+    "painting supplies",
+    "paint for",
+    "paint |",
+    "camo netting",
+    "camouflage netting",
+    "camouflage net",
+    "camo net",
+    "face paint",
+    "makeup",
+    "socks",
+    "deer feeder",
+    "trail camera",
+    "cellular trail camera",
+    "tripod chairs",
+    "tripod stool",
+    "bucket backpack",
+    "bracket",
+    "brackets",
+    "angle bracket",
+    "tree stand bracket",
+    "car cover",
+    "party decoration",
+]
+
+GENERIC_CUSTOMER_LABELS = {
+    "未命名竞品",
+    "竞品记录",
+    "未知",
+    "未分层",
+    "核心竞品",
+}
+
+LIGHTING_CUSTOMER_LABELS = {label for label, _needles in TITLE_SEGMENT_RULES}
+
+HUNTING_BLINDS_KEYWORD_NOISE = [
+    "outdoor lighting",
+    "outdoor light",
+    "outdoor lights",
+    "led light",
+    "led lights",
+    "lighting",
+    "lamp",
+    "solar light",
+    "camo netting",
+    "camouflage netting",
+    "camouflage net",
+    "face paint",
+    "socks",
+    "deer feeder",
+    "trail camera",
+    "cellular camera",
+    "tripod chair",
+    "bracket",
+    "car cover",
+    "party decoration",
 ]
 
 LIGHTING_CATEGORY_NOISE = [
@@ -537,6 +1128,59 @@ def is_lighting_research(seed_terms: list[str]) -> bool:
     return any(term in joined for term in LIGHTING_RESEARCH_TOKENS)
 
 
+def is_cabinet_closet_light_research(seed_terms: list[str]) -> bool:
+    joined = " ".join(seed_terms).casefold()
+    return any(term in joined for term in CABINET_CLOSET_RESEARCH_TOKENS)
+
+
+def is_under_cabinet_category_research(seed_terms: list[str]) -> bool:
+    joined = " ".join(seed_terms).casefold()
+    return any(term in joined for term in UNDER_CABINET_CATEGORY_RESEARCH_TOKENS)
+
+
+def is_hunting_blinds_research(seed_terms: list[str]) -> bool:
+    joined = " ".join(seed_terms).casefold()
+    return any(term in joined for term in HUNTING_BLINDS_RESEARCH_TOKENS)
+
+
+def hunting_blind_segment(entity: dict[str, Any]) -> str:
+    text = entity_search_text(
+        entity,
+        ["title", "title_cn", "category", "category_cn", "segment", "segment_cn", "subcategory", "seed_keyword"],
+    )
+    labels: list[str] = []
+    for label, needles in HUNTING_BLINDS_SEGMENT_RULES:
+        if any(needle in text for needle in needles):
+            labels.append(label)
+    if not labels:
+        return "通用狩猎地面盲棚"
+    if "透视地面盲棚" in labels and "弹出式地面盲棚" in labels:
+        return "透视弹出式地面盲棚"
+    return labels[0]
+
+
+def is_placeholder_customer_label(value: Any) -> bool:
+    text = normalize_text(value)
+    if not text:
+        return True
+    return text in GENERIC_CUSTOMER_LABELS or text.startswith("未映射关键词")
+
+
+def is_cross_domain_or_placeholder_label(value: Any) -> bool:
+    text = normalize_text(value)
+    if is_placeholder_customer_label(text):
+        return True
+    return text in LIGHTING_CUSTOMER_LABELS
+
+
+def clear_customer_label_pollution(product: dict[str, Any]) -> None:
+    for key in ("title_cn", "segment_cn", "positioning_cn"):
+        if is_cross_domain_or_placeholder_label(product.get(key)):
+            product.pop(key, None)
+    if is_cross_domain_or_placeholder_label(product.get("segment")):
+        product.pop("segment", None)
+
+
 def entity_search_text(entity: dict[str, Any], fields: list[str]) -> str:
     return " ".join(normalized_key(entity.get(field)) for field in fields)
 
@@ -546,7 +1190,25 @@ def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[b
         product,
         ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "subcategory", "positioning_cn"],
     )
+    cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
+    hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    if cabinet_closet_mode:
+        if contains_any(text, CABINET_CLOSET_HARD_NOISE):
+            return False, "non_cabinet_closet_lighting_noise"
+        if contains_any(text, CABINET_CLOSET_LIGHT_SENSOR_ONLY_TERMS) and not contains_any(text, CABINET_CLOSET_MOTION_TERMS):
+            return False, "non_motion_light_sensor_only"
+        if contains_any(text, CABINET_CLOSET_STRIP_TERMS) and not contains_any(text, CABINET_CLOSET_STRIP_ALLOWED_TERMS):
+            return False, "non_motion_or_cabinet_light_strip"
+        if contains_any(text, CABINET_CLOSET_MOTION_TERMS) and contains_any(text, CABINET_CLOSET_LIGHT_TERMS):
+            return True, "indoor_motion_lighting_signal"
+        if contains_any(text, CABINET_CLOSET_SCENE_TERMS) and contains_any(text, CABINET_CLOSET_LIGHT_TERMS):
+            return True, "cabinet_closet_adjacent_light_signal"
+        has_product_signal = contains_any(text, CABINET_CLOSET_PRODUCT_SIGNALS)
+        has_function_signal = contains_any(text, CABINET_CLOSET_FUNCTION_SIGNALS)
+        if has_product_signal and has_function_signal:
+            return True, "cabinet_closet_lighting_signal"
+        return False, "missing_cabinet_closet_lighting_signal"
     if lighting_mode:
         has_signal = contains_any(text, LIGHTING_PRODUCT_SIGNALS)
         if contains_any(text, LIGHTING_HARD_PRODUCT_NOISE):
@@ -559,6 +1221,12 @@ def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[b
         if not has_signal:
             return False, "missing_lighting_signal"
         return True, "lighting_signal"
+    if hunting_blinds_mode:
+        if contains_any(text, HUNTING_BLINDS_HARD_PRODUCT_NOISE):
+            return False, "non_hunting_blind_accessory_or_noise"
+        if contains_any(text, HUNTING_BLINDS_PRODUCT_SIGNALS):
+            return True, "hunting_blind_signal"
+        return False, "missing_hunting_blind_signal"
 
     seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
     product_tokens = tokens(text)
@@ -577,7 +1245,12 @@ def keyword_source_bucket(keyword: dict[str, Any]) -> str:
     return "market"
 
 
-def keyword_relevance(keyword: dict[str, Any], seed_terms: list[str], valid_asins: set[str]) -> tuple[bool, str]:
+def keyword_relevance(
+    keyword: dict[str, Any],
+    seed_terms: list[str],
+    valid_asins: set[str],
+    product_context_tokens: set[str] | None = None,
+) -> tuple[bool, str]:
     text = normalized_key(keyword.get("keyword"))
     if not text:
         return False, "missing_keyword"
@@ -585,7 +1258,36 @@ def keyword_relevance(keyword: dict[str, Any], seed_terms: list[str], valid_asin
     asin = normalized_key(keyword.get("asin")).upper()
     if source_type == "product_traffic_terms" and asin and asin not in valid_asins:
         return False, "traffic_asin_not_effective"
+    under_cabinet_category_mode = is_under_cabinet_category_research(seed_terms)
+    cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
+    hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    if under_cabinet_category_mode and source_type == "category_keywords":
+        if contains_any(text, CABINET_CLOSET_HARD_NOISE):
+            return False, "non_under_cabinet_category_keyword_noise"
+        if contains_any(text, CABINET_CLOSET_LIGHT_SENSOR_ONLY_TERMS) and not (
+            contains_any(text, CABINET_CLOSET_SCENE_TERMS) or contains_any(text, CABINET_CLOSET_MOTION_TERMS)
+        ):
+            return False, "non_motion_or_under_cabinet_light_sensor_only"
+        if contains_any(text, CABINET_CLOSET_LIGHT_TERMS) or contains_any(text, CABINET_CLOSET_SCENE_TERMS):
+            return True, "under_cabinet_category_keyword"
+        return False, "missing_under_cabinet_category_signal"
+    if cabinet_closet_mode:
+        if contains_any(text, CABINET_CLOSET_HARD_NOISE):
+            return False, "non_cabinet_closet_keyword_noise"
+        if contains_any(text, CABINET_CLOSET_LIGHT_SENSOR_ONLY_TERMS) and not contains_any(text, CABINET_CLOSET_MOTION_TERMS):
+            return False, "non_motion_light_sensor_only"
+        if contains_any(text, CABINET_CLOSET_STRIP_TERMS) and not contains_any(text, CABINET_CLOSET_STRIP_ALLOWED_TERMS):
+            return False, "non_motion_or_cabinet_light_strip"
+        if contains_any(text, CABINET_CLOSET_MOTION_TERMS) and contains_any(text, CABINET_CLOSET_LIGHT_TERMS):
+            return True, "indoor_motion_lighting_keyword"
+        if contains_any(text, CABINET_CLOSET_SCENE_TERMS) and contains_any(text, CABINET_CLOSET_LIGHT_TERMS):
+            return True, "cabinet_closet_adjacent_light_keyword"
+        if contains_any(text, CABINET_CLOSET_KEYWORD_SIGNALS):
+            return True, "cabinet_closet_keyword_signal"
+        if source_type in {"competitor_product_keywords", "product_traffic_terms"} and (product_context_tokens or set()) & tokens(text):
+            return True, "product_context_token_overlap"
+        return False, "missing_cabinet_closet_keyword_signal"
     if lighting_mode and contains_any(text, LIGHTING_NOISE_TOKENS):
         return False, "non_lighting_noise_token"
     if lighting_mode:
@@ -594,6 +1296,19 @@ def keyword_relevance(keyword: dict[str, Any], seed_terms: list[str], valid_asin
         if str(keyword.get("keyword_cn") or "").startswith("未映射关键词"):
             return False, "keyword_cn_unmapped"
         return True, "lighting_keyword_signal"
+    if hunting_blinds_mode:
+        if contains_any(text, HUNTING_BLINDS_KEYWORD_NOISE):
+            return False, "non_hunting_blind_keyword_noise"
+        if contains_any(text, HUNTING_BLINDS_KEYWORD_SIGNALS):
+            return True, "hunting_blind_keyword_signal"
+        if source_type in {"keyword_extends", "category_keywords"}:
+            return True, "hunting_blind_market_keyword_sample"
+        seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
+        if source_type in {"competitor_product_keywords", "product_traffic_terms"} and seed_tokens & tokens(text):
+            return True, "hunting_blind_adjacent_seed_overlap"
+        if source_type in {"competitor_product_keywords", "product_traffic_terms"} and (product_context_tokens or set()) & tokens(text):
+            return True, "product_context_token_overlap"
+        return False, "missing_hunting_blind_keyword_signal"
     if not seed_terms:
         return True, "no_seed_keep_for_audit"
     if keyword.get("is_core_relevant") or keyword.get("relevance_cn") in {"高相关", "相邻相关"}:
@@ -608,13 +1323,25 @@ def keyword_relevance(keyword: dict[str, Any], seed_terms: list[str], valid_asin
 
 def supplier_relevance(supplier: dict[str, Any], seed_terms: list[str]) -> tuple[bool, str]:
     text = entity_search_text(supplier, ["title", "title_cn", "name", "product_name", "supplier_name", "seed_keyword", "search_term", "segment", "segment_cn"])
+    cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
+    hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    if cabinet_closet_mode:
+        if contains_any(text, CABINET_CLOSET_HARD_NOISE):
+            return False, "non_cabinet_closet_supplier_noise"
+        if contains_any(text, CABINET_CLOSET_PRODUCT_SIGNALS):
+            return True, "cabinet_closet_supplier_signal"
+        return False, "missing_cabinet_closet_supplier_signal"
     if lighting_mode and contains_any(text, LIGHTING_NOISE_TOKENS):
         return False, "non_lighting_noise_token"
     if lighting_mode:
         if not contains_any(text, LIGHTING_PRODUCT_SIGNALS):
             return False, "missing_lighting_supplier_signal"
         return True, "lighting_supplier_signal"
+    if hunting_blinds_mode:
+        if contains_any(text, HUNTING_BLINDS_PRODUCT_SIGNALS):
+            return True, "hunting_blind_supplier_signal"
+        return False, "missing_hunting_blind_supplier_signal"
     return True, "generic_supplier"
 
 
@@ -655,6 +1382,8 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
         passed, reason = product_relevance(product, seed_terms)
         product["research_relevance"] = {"passed": passed, "reason": reason}
         if passed:
+            if is_hunting_blinds_research(seed_terms):
+                clear_customer_label_pollution(product)
             effective_products.append(product)
         else:
             removed_products.append(
@@ -667,10 +1396,20 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
             )
 
     valid_asins = {normalized_key(product.get("asin")).upper() for product in effective_products if product.get("asin")}
+    product_context_tokens: set[str] = set()
+    for product in effective_products:
+        product_context_tokens.update(
+            tokens(
+                entity_search_text(
+                    product,
+                    ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "subcategory"],
+                )
+            )
+        )
     candidate_keywords: list[dict[str, Any]] = []
     removed_keywords: list[dict[str, Any]] = []
     for keyword in data_pack.get("keywords") or []:
-        passed, reason = keyword_relevance(keyword, seed_terms, valid_asins)
+        passed, reason = keyword_relevance(keyword, seed_terms, valid_asins, product_context_tokens)
         keyword["research_relevance"] = {"passed": passed, "reason": reason}
         if passed:
             candidate_keywords.append(keyword)
@@ -685,11 +1424,16 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
             )
     effective_keywords, keyword_duplicate_extra = dedupe_effective_keywords(candidate_keywords)
 
+    cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
+    hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
     effective_reviews = [
         review
         for review in data_pack.get("reviews") or []
-        if not lighting_mode or not valid_asins or not review.get("asin") or normalized_key(review.get("asin")).upper() in valid_asins
+        if not (cabinet_closet_mode or lighting_mode or hunting_blinds_mode)
+        or not valid_asins
+        or not review.get("asin")
+        or normalized_key(review.get("asin")).upper() in valid_asins
     ]
 
     effective_suppliers: list[dict[str, Any]] = []
@@ -713,8 +1457,13 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
     data_pack["effective_reviews"] = effective_reviews
     data_pack["effective_suppliers"] = effective_suppliers
     data_pack["categories"] = build_categories_from_products(effective_products, data_pack.get("categories") or [])
+    mode = (
+        "cabinet_closet_lighting"
+        if cabinet_closet_mode
+        else ("lighting" if lighting_mode else ("hunting_blinds" if hunting_blinds_mode else "generic"))
+    )
     data_pack["research_relevance"] = {
-        "mode": "lighting" if lighting_mode else "generic",
+        "mode": mode,
         "seed_terms": seed_terms,
         "effective_counts": {
             "products": len(effective_products),
@@ -824,11 +1573,7 @@ def title_cn(title: Any, segment: Any = None) -> str:
     segment_text = normalize_text(segment)
     if has_cjk(segment_text):
         return segment_text
-    lowered = text.casefold()
-    for label, needles in TITLE_SEGMENT_RULES:
-        if any(needle in lowered for needle in needles):
-            return label
-    return "未命名竞品"
+    return ""
 
 
 def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
@@ -932,10 +1677,17 @@ def as_number(value: Any) -> float:
 
 
 def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
-    product["title_cn"] = product.get("title_cn") or title_cn(product.get("title"), first_existing(product.get("segment_cn"), product.get("segment")))
-    product["segment_cn"] = product.get("segment_cn") or normalize_text(product.get("segment")) or "未分层"
-    product["segment"] = product.get("segment") or product["segment_cn"]
-    product["positioning_cn"] = product.get("positioning_cn") or product["title_cn"]
+    inferred_title_cn = title_cn(product.get("title"), first_existing(product.get("segment_cn"), product.get("segment")))
+    if inferred_title_cn:
+        product["title_cn"] = product.get("title_cn") or inferred_title_cn
+    segment_cn = normalize_text(product.get("segment_cn") or product.get("segment"))
+    if segment_cn and not is_placeholder_customer_label(segment_cn):
+        product["segment_cn"] = product.get("segment_cn") or segment_cn
+        product["segment"] = product.get("segment") or segment_cn
+    if is_placeholder_customer_label(product.get("positioning_cn")):
+        product.pop("positioning_cn", None)
+    else:
+        product["positioning_cn"] = product.get("positioning_cn")
     return product
 
 
@@ -1041,9 +1793,32 @@ def apply_quality_caps(data_pack: dict[str, Any], after_counts: dict[str, int], 
         score = float(raw_score)
     except (TypeError, ValueError):
         score = 0.68
+    if score <= 0 or quality.get("grade") == "collection_started":
+        score = 0.55
+        if after_counts.get("products", 0) >= 60:
+            score += 0.10
+        if after_counts.get("keywords", 0) >= 900:
+            score += 0.08
+        elif after_counts.get("keywords", 0) >= 500:
+            score += 0.04
+        if after_counts.get("reviews", 0) >= 80:
+            score += 0.08
+        if after_counts.get("suppliers", 0) >= 50:
+            score += 0.07
+        if after_counts.get("tiktok_products", 0) or after_counts.get("tiktok_videos", 0):
+            score += 0.05
+        if after_counts.get("web_documents", 0):
+            score += 0.04
+        if sum(cross_validated.values()) > 0:
+            score += 0.03
+        quality["score_basis"] = "computed_from_normalized_evidence_coverage"
     caps: list[dict[str, Any]] = []
+    if after_counts.get("keywords", 0) < 1000:
+        caps.append({"module": "keyword_sample_depth_waiver", "max_score": 0.82})
     if after_counts.get("reviews", 0) < 80:
         caps.append({"module": "review_sample_depth", "max_score": 0.74})
+    elif after_counts.get("reviews", 0) < 200:
+        caps.append({"module": "review_sample_depth_deep_warning", "max_score": 0.82})
     non_keyword_cross = sum(value for key, value in cross_validated.items() if key != "keywords")
     if non_keyword_cross <= 0:
         caps.append({"module": "cross_validation_depth", "max_score": 0.74})
@@ -1058,9 +1833,12 @@ def apply_quality_caps(data_pack: dict[str, Any], after_counts: dict[str, int], 
         if capped < 0.75:
             quality["grade"] = "low_confidence_watch"
         elif capped < 0.85:
-            quality["grade"] = quality.get("grade") or "medium_confidence"
+            quality["grade"] = "medium_confidence"
+        else:
+            quality["grade"] = "high_confidence"
     else:
         quality["overall_score"] = round(score, 2)
+        quality["grade"] = "high_confidence" if score >= 0.85 else "medium_confidence" if score >= 0.75 else "low_confidence_watch"
 
 
 def normalize(report_dir: Path) -> dict[str, Any]:

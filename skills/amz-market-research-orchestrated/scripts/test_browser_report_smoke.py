@@ -35,12 +35,8 @@ async function openReport(page, name, width = 1280, height = 900) {
   page.on('pageerror', err => errors.push(err.message));
   await page.setViewportSize({ width, height });
   await page.goto(reportUrl(name), { waitUntil: 'networkidle' });
-  if (name === 'report.html') {
-    await expect(page.locator('.site-nav')).toHaveCount(1);
-    await expect(page.locator('.site-nav')).toBeVisible();
-  } else {
-    await expect(page.locator('.site-nav')).toHaveCount(0);
-  }
+  await expect(page.locator('.site-nav')).toHaveCount(1);
+  await expect(page.locator('.site-nav')).toBeVisible();
   await expect(page.locator('h1').first()).toBeVisible();
   expect(errors).toEqual([]);
 }
@@ -66,7 +62,7 @@ test('static bundle links navigate and render visible report pages', async ({ pa
     await openReport(page, 'report.html');
     await page.click(`a[href="${href}"]`);
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('.site-nav')).toHaveCount(0);
+    await expect(page.locator('.site-nav')).toHaveCount(1);
     await expect(page.locator('h1').first()).toBeVisible();
     await expect(page.locator('table:visible').first()).toBeVisible();
     await expectEchartsRendered(page, chartIds[href]);

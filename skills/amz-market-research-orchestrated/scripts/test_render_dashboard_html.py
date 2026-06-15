@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import json
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,6 +153,638 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             check=False,
         )
 
+    def test_market_template_keeps_cosmo_section_before_competitor_scan(self):
+        template = (SCRIPT.parent.parent / "assets" / "market-depth-template.html").read_text(encoding="utf-8")
+        market_pos = template.index('id="market-dashboard"')
+        cosmo_pos = template.index('id="cosmo-alexa-tags"')
+        competitor_pos = template.index('id="competitor-scan"')
+        self.assertLess(market_pos, cosmo_pos)
+        self.assertLess(cosmo_pos, competitor_pos)
+        self.assertLess(template.index(">02<"), template.index(">03<"))
+
+    def test_market_template_exposes_competitor_image_and_diagnostic_slot(self):
+        template = (SCRIPT.parent.parent / "assets" / "market-depth-template.html").read_text(encoding="utf-8")
+        competitor_pos = template.index('id="competitor-scan"')
+        cards_pos = template.index("{{COMPETITOR_SEGMENT_CARDS}}")
+        table_pos = template.index("{{COMPETITOR_TABLE}}")
+        deep_dive_pos = template.index("{{COMPETITOR_DEEP_DIVES}}")
+
+        self.assertLess(competitor_pos, cards_pos)
+        self.assertLess(cards_pos, table_pos)
+        self.assertLess(table_pos, deep_dive_pos)
+
+    def test_competitor_renderer_shows_amazon_images_in_scan_and_deep_dive(self):
+        data_pack = {
+            "products": [
+                {
+                    "asin": "B0IMG00001",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "透视弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视地面盲棚",
+                    "price": 87.98,
+                    "rating": 4.5,
+                    "review_count": 1087,
+                    "estimated_monthly_sales": 349,
+                    "main_image_url": "https://m.media-amazon.com/images/I/71example.jpg",
+                }
+            ]
+        }
+
+        table_html, cards_html, products = renderer.render_competitors(data_pack)
+        deep_dive_html = renderer.render_product_deep_dives(products, [])
+
+        self.assertIn('class="comp-image-thumb"', cards_html)
+        self.assertIn('class="comp-product-thumb"', table_html)
+        self.assertIn('class="comp-deep-image"', deep_dive_html)
+        self.assertIn("https://m.media-amazon.com/images/I/71example.jpg", table_html + cards_html + deep_dive_html)
+        self.assertNotIn("图片维度未返回可展示 URL", cards_html)
+
+    def test_competitor_renderer_keeps_visible_image_diagnostic_when_images_missing(self):
+        data_pack = {
+            "products": [
+                {
+                    "asin": "B0NOIMAGE01",
+                    "title": "Pop Up Hunting Blind",
+                    "title_cn": "弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "地面盲棚",
+                    "price": 79.99,
+                    "rating": 4.4,
+                    "review_count": 900,
+                    "estimated_monthly_sales": 320,
+                }
+            ]
+        }
+
+        _table_html, cards_html, _products = renderer.render_competitors(data_pack)
+
+        self.assertIn("comp-image-diagnostic-card", cards_html)
+        self.assertIn("图片维度未返回可展示 URL", cards_html)
+        self.assertIn("采集层补齐商品主图链接", cards_html)
+
+    def test_cosmo_renderer_exposes_all_relation_cards_with_tag_chips(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "FUNHORUN 透视弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                    "price": 87.98,
+                    "rating": 4.5,
+                    "review_count": 1087,
+                    "estimated_monthly_sales": 349,
+                }
+            ],
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚主词"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎场景"},
+                {"keyword": "turkey hunting blind", "keyword_cn": "火鸡狩猎场景"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "title": "easy to set up",
+                    "text": "Easy to set up for deer hunting and keeps me concealed in the field.",
+                    "theme_cn": "安装与隐蔽",
+                }
+            ],
+            "suppliers": [
+                {
+                    "title": "跨境户外270度单向透视迷彩打猎狩猎帐篷",
+                    "price_rmb": 168,
+                    "seed_keyword": "狩猎盲棚",
+                }
+            ],
+        }
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+        self.assertEqual(html.count('data-cosmo-relation="'), 15)
+        self.assertGreaterEqual(html.count('class="cosmo-tag-terms"'), 15)
+        self.assertIn('data-cosmo-relation="P01"', html)
+        self.assertIn('data-cosmo-relation="U09"', html)
+        self.assertNotRegex(html, r"\b(?:USED_[A-Z_]+|CAPABLE_OF|IS_A|xWANT|xIs_A|xINTERSTED_IN)\b")
+        self.assertNotIn(">USED_FOR_FUNC<", html)
+        self.assertNotIn(">xWANT<", html)
+        self.assertIn("功能·用途", html)
+        self.assertIn("用户想要达成", html)
+        self.assertIn("15 类意图关系", html)
+        self.assertNotIn("relation types", html)
+
+    def test_cosmo_renderer_uses_reference_style_four_zone_layout(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚", "monthly_search_volume": 1200},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎隐蔽场景", "monthly_search_volume": 980},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "Easy to set up and keeps me concealed during deer hunting.",
+                    "theme_cn": "安装与隐蔽",
+                }
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertEqual(html.count('data-cosmo-relation="'), 15)
+        for required in [
+            "cosmo-matrix",
+            "cosmo-top-list",
+            "cosmo-gap-panel",
+            "cosmo-action-board",
+            "15 标签矩阵",
+            "高置信标签排行",
+            "产品标签 / 用户标签缺口",
+            "Listing / QA / 广告动作",
+        ]:
+            self.assertIn(required, html)
+        self.assertNotIn(">USED_FOR_FUNC<", html)
+        self.assertNotIn(">USED_IN_BODY<", html)
+        self.assertIn('class="cosmo-relation-kind">产品意图</span>', html)
+        self.assertIn('class="cosmo-relation-kind">用户意图</span>', html)
+        self.assertIn('class="cosmo-relation-id">产品</b>', html)
+        self.assertIn('class="cosmo-relation-id">用户</b>', html)
+        self.assertIn('data-dimension="产品标签"', html)
+        self.assertIn('data-dimension="用户标签"', html)
+        self.assertNotIn('class="cosmo-relation-code">功能·用途</div>', html)
+
+    def test_cosmo_renderer_groups_product_and_user_labels_into_separate_lanes(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚", "monthly_search_volume": 1200},
+                {"keyword": "ground blind", "keyword_cn": "地面隐蔽棚", "monthly_search_volume": 900},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "Easy to set up for deer hunting and keeps hunters concealed in the field.",
+                    "theme_cn": "安装与隐蔽",
+                }
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertIn('class="cosmo-matrix-lanes"', html)
+        self.assertIn('class="cosmo-matrix-lane product-lane"', html)
+        self.assertIn('class="cosmo-matrix-lane user-lane"', html)
+        self.assertIn("产品标签 · 产品被算法识别为什么", html)
+        self.assertIn("用户标签 · 用户为什么搜索/购买", html)
+        self.assertEqual(html.count('data-cosmo-relation="'), 15)
+        self.assertRegex(html, r'class="cosmo-matrix-lane product-lane".*data-dimension="产品标签"')
+        self.assertRegex(html, r'class="cosmo-matrix-lane user-lane".*data-dimension="用户标签"')
+        self.assertNotRegex(html, r">\s*(?:P0[1-8]|U0[1-9])\s*<")
+
+    def test_cosmo_renderer_outputs_analyzed_chinese_labels_not_raw_fragments(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "FUNHORUN 透视弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                    "price": 87.98,
+                    "rating": 4.5,
+                    "review_count": 1087,
+                    "estimated_monthly_sales": 349,
+                }
+            ],
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎场景"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "Easy to set up and keeps me concealed during deer hunting.",
+                    "theme_cn": "安装与隐蔽",
+                },
+                {
+                    "rating": 2,
+                    "text": "Material was not durable and the blind felt cramped.",
+                    "theme_cn": "质量与空间",
+                },
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertIn("cosmo-business-meaning", html)
+        self.assertIn("隐蔽观察", html)
+        self.assertIn("更容易安装", html)
+        self.assertIn("材质更耐用", html)
+        self.assertNotIn(">USED_FOR_FUNC<", html)
+        for bad_fragment in ["弹出式地</span>", "出式地面盲</span>", "视弹出式地</span>"]:
+            self.assertNotIn(bad_fragment, html)
+        self.assertRegex(html, r'data-cosmo-relation="U05" data-confidence="低"')
+
+    def test_cosmo_renderer_does_not_show_relation_codes_as_customer_copy(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "FUNHORUN 透视弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                }
+            ],
+            "keywords": [{"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"}],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+        visible_text = re.sub(r"<[^>]+>", " ", html)
+
+        self.assertNotRegex(visible_text, r"\b(?:USED|CAPABLE|IS_A)[A-Z_]*\b")
+        self.assertNotRegex(visible_text, r"\bx(?:WANT|INTERSTED_IN|Is_A)\b")
+        self.assertIn('data-cosmo-relation="P01"', html)
+        self.assertNotRegex(html, r"\b(?:USED_[A-Z_]+|CAPABLE_OF|IS_A|xWANT|xIs_A|xINTERSTED_IN)\b")
+
+    def test_cosmo_renderer_does_not_show_internal_slot_ids_as_customer_copy(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "FUNHORUN 透视弹出式地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                }
+            ],
+            "keywords": [{"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"}],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+        visible_text = re.sub(r"<[^>]+>", " ", html)
+
+        self.assertIn('data-cosmo-relation="P01"', html)
+        self.assertIn('data-cosmo-relation="U09"', html)
+        self.assertNotRegex(visible_text, r"\b[PU]\d{2}\b")
+        self.assertIn("产品标签", visible_text)
+        self.assertIn("用户标签", visible_text)
+
+    def test_cosmo_renderer_does_not_fill_action_relations_with_generic_product_names(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Hunting Blind",
+                    "title_cn": "通用狩猎地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "通用狩猎地面盲棚",
+                }
+            ],
+            "keywords": [{"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"}],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+
+        self.assertIn("狩猎盲棚", by_relation["IS_A"]["terms"])
+        for relation in ["CAPABLE_OF", "USED_TO", "USED_WITH"]:
+            self.assertNotIn("通用狩猎地面盲棚", by_relation[relation]["terms"])
+
+    def test_cosmo_renderer_generates_category_specific_tags_without_hunting_fallbacks(self):
+        data_pack = {
+            "research_object": {"value": "smart cat water fountain"},
+            "products": [
+                {
+                    "asin": "B0PETWATER1",
+                    "title": "Smart Cat Water Fountain Stainless Steel Pet Drinking Fountain Quiet Pump",
+                    "title_cn": "不锈钢宠物饮水机 静音水泵 自动循环",
+                    "brand": "PetFlow",
+                    "segment_cn": "宠物饮水机",
+                    "category": "Pet Supplies",
+                    "price": 29.99,
+                    "rating": 4.6,
+                    "review_count": 2400,
+                    "estimated_monthly_sales": 1800,
+                }
+            ],
+            "keywords": [
+                {"keyword": "cat water fountain", "keyword_cn": "猫咪饮水机", "intent_cn": "宠物补水"},
+                {"keyword": "pet drinking fountain", "keyword_cn": "宠物自动饮水", "intent_cn": "自动循环饮水"},
+                {"keyword": "quiet pump cat fountain", "keyword_cn": "静音水泵饮水机", "intent_cn": "低噪运行"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "My cats drink more water now. The pump is quiet and the stainless bowl is easy to clean.",
+                    "theme_cn": "饮水量与静音",
+                    "summary_cn": "猫咪饮水量增加，水泵安静，不锈钢碗容易清洁。",
+                },
+                {
+                    "rating": 2,
+                    "text": "Filter replacement is confusing and the pump needs cleaning often.",
+                    "theme_cn": "滤芯维护",
+                    "summary_cn": "滤芯更换说明不清晰，水泵需要频繁清洁。",
+                },
+            ],
+            "suppliers": [
+                {
+                    "title": "宠物饮水机静音循环水泵不锈钢猫咪自动饮水器",
+                    "price_rmb": 38,
+                    "supplier_name": "宠物用品工厂",
+                    "url": "https://detail.1688.com/offer/123.html",
+                }
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+
+        for forbidden in ["狩猎", "盲棚", "猎人", "迷彩", "地面盲棚"]:
+            self.assertNotIn(forbidden, all_terms)
+        self.assertIn("宠物饮水机", by_relation["USED_AS"]["terms"])
+        self.assertTrue({"静音水泵", "自动循环饮水"} & set(by_relation["USED_FOR_FUNC"]["terms"]))
+        self.assertTrue({"猫咪饮水", "宠物补水"} & set(by_relation["USED_TO"]["terms"]))
+        self.assertTrue({"宠物主人", "猫咪用户"} & set(by_relation["USED_BY"]["terms"]))
+        self.assertTrue({"更容易清洁", "安静运行"} & set(by_relation["xWANT"]["terms"]))
+
+    def test_cosmo_renderer_does_not_leak_hunting_labels_into_outdoor_non_hunting_categories(self):
+        data_pack = {
+            "research_object": {"value": "wireless bluetooth speaker"},
+            "products": [
+                {
+                    "asin": "B0SPEAKER1",
+                    "title": "Portable Bluetooth Speaker Waterproof Outdoor Wireless Speaker",
+                    "title_cn": "便携蓝牙音箱 防水户外无线音箱",
+                    "brand": "SoundBox",
+                    "segment_cn": "蓝牙音箱",
+                    "category": "Electronics",
+                    "price": 39.99,
+                    "rating": 4.6,
+                    "review_count": 4200,
+                    "estimated_monthly_sales": 2600,
+                }
+            ],
+            "keywords": [
+                {"keyword": "bluetooth speaker", "keyword_cn": "蓝牙音箱", "intent_cn": "户外音乐"},
+                {"keyword": "waterproof speaker", "keyword_cn": "防水音箱", "intent_cn": "户外使用"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "The speaker is easy to carry outside and the waterproof shell works well.",
+                    "theme_cn": "便携与防水",
+                    "summary_cn": "用户认可便携、防水和户外播放。",
+                }
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+
+        for forbidden in ["狩猎", "盲棚", "猎人", "迷彩", "隐蔽装备", "塔式/箱式盲棚", "地面盲棚"]:
+            self.assertNotIn(forbidden, all_terms)
+        self.assertIn("蓝牙音箱", by_relation["USED_AS"]["terms"])
+        self.assertTrue({"户外使用", "户外播放", "户外音乐"} & set(by_relation["USED_TO"]["terms"]))
+
+    def test_cosmo_renderer_uses_analysis_plan_relation_profile_for_generic_categories(self):
+        data_pack = {
+            "research_object": {"value": "ergonomic office chair"},
+            "products": [
+                {
+                    "asin": "B0CHAIR0001",
+                    "title": "Ergonomic Office Chair Adjustable Lumbar Support Mesh Seat",
+                    "title_cn": "人体工学办公椅 可调节腰托 网布坐垫",
+                    "brand": "WorkSeat",
+                    "segment_cn": "人体工学办公椅",
+                    "category": "Office Furniture",
+                    "price": 129.99,
+                    "rating": 4.4,
+                    "review_count": 1800,
+                    "estimated_monthly_sales": 900,
+                }
+            ],
+            "keywords": [
+                {"keyword": "ergonomic office chair", "keyword_cn": "人体工学办公椅", "intent_cn": "久坐支撑"},
+                {"keyword": "office chair lumbar support", "keyword_cn": "腰托办公椅", "intent_cn": "腰背支撑"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "The lumbar support helps during long work days and the armrests are easy to adjust.",
+                    "theme_cn": "腰背支撑",
+                    "summary_cn": "用户认可久坐支撑和扶手调节。",
+                }
+            ],
+        }
+        analysis_plan = {
+            "report_label_profile": {
+                "cosmo_relation_terms": {
+                    "USED_FOR_FUNC": ["腰背支撑", "扶手调节", "网布透气"],
+                    "USED_FOR_AUD": ["居家办公人群"],
+                    "USED_TO": ["久坐办公", "姿势支撑"],
+                    "USED_AS": ["人体工学办公椅"],
+                    "USED_BY": ["办公室用户"],
+                    "xWANT": ["久坐不累", "调节更顺手"],
+                }
+            }
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, analysis_plan)
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+
+        self.assertEqual(by_relation["USED_FOR_FUNC"]["terms"][:3], ["腰背支撑", "扶手调节", "网布透气"])
+        self.assertIn("居家办公人群", by_relation["USED_FOR_AUD"]["terms"])
+        self.assertIn("人体工学办公椅", by_relation["USED_AS"]["terms"])
+        self.assertIn("久坐不累", by_relation["xWANT"]["terms"])
+        for forbidden in ["狩猎", "盲棚", "宠物饮水机", "蓝牙音箱"]:
+            self.assertNotIn(forbidden, all_terms)
+
+    def test_cosmo_renderer_filters_unsupported_ai_profile_terms_per_term(self):
+        data_pack = {
+            "research_object": {"value": "ergonomic office chair"},
+            "products": [
+                {
+                    "asin": "B0CHAIR0001",
+                    "title": "Ergonomic Office Chair Adjustable Lumbar Support Mesh Seat",
+                    "title_cn": "人体工学办公椅 可调节腰托 网布坐垫",
+                    "brand": "WorkSeat",
+                    "segment_cn": "人体工学办公椅",
+                    "category": "Office Furniture",
+                    "price": 129.99,
+                    "rating": 4.4,
+                    "review_count": 1800,
+                    "estimated_monthly_sales": 900,
+                }
+            ],
+            "keywords": [
+                {"keyword": "ergonomic office chair", "keyword_cn": "人体工学办公椅", "intent_cn": "久坐支撑"},
+                {"keyword": "office chair lumbar support", "keyword_cn": "腰托办公椅", "intent_cn": "腰背支撑"},
+            ],
+            "reviews": [
+                {
+                    "rating": 5,
+                    "text": "The lumbar support helps during long work days and the mesh back is breathable.",
+                    "theme_cn": "腰背支撑",
+                    "summary_cn": "用户认可久坐支撑和网布透气。",
+                }
+            ],
+        }
+        analysis_plan = {
+            "report_label_profile": {
+                "cosmo_relation_terms": {
+                    "USED_FOR_FUNC": ["腰背支撑", "宠物饮水机", "狩猎盲棚", "LED灯带"],
+                    "USED_AS": ["人体工学办公椅", "蓝牙音箱", "塔式狩猎盲棚"],
+                    "xWANT": ["久坐不累", "水杯保冷", "隐蔽观察"],
+                }
+            }
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, analysis_plan)
+        all_terms = " ".join(term for item in payload["relations"] for term in item["terms"])
+        by_relation = {item["relation_type"]: item for item in payload["relations"]}
+
+        self.assertIn("腰背支撑", by_relation["USED_FOR_FUNC"]["terms"])
+        self.assertIn("人体工学办公椅", by_relation["USED_AS"]["terms"])
+        for forbidden in ["宠物饮水机", "狩猎盲棚", "LED灯带", "蓝牙音箱", "塔式狩猎盲棚", "水杯保冷", "隐蔽观察"]:
+            self.assertNotIn(forbidden, all_terms)
+
+    def test_cosmo_action_cards_are_relation_specific_not_template_repeats(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎场景"},
+                {"keyword": "ground blind", "keyword_cn": "地面隐蔽棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "Easy to set up and keeps me concealed.", "theme_cn": "安装与隐蔽"},
+                {"rating": 2, "text": "Material was not durable.", "theme_cn": "质量与耐用"},
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertLessEqual(html.count("自然覆盖"), 2)
+        self.assertLessEqual(html.count("避免堆砌"), 2)
+        for expected in ["首屏承诺", "证据问答", "精准投放"]:
+            self.assertIn(expected, html)
+
+    def test_cosmo_terms_are_not_over_reused_across_high_confidence_relations(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎场景"},
+                {"keyword": "ground blind", "keyword_cn": "地面隐蔽棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "Easy to set up and keeps me concealed in the field.", "theme_cn": "安装与隐蔽"},
+                {"rating": 2, "text": "The material is not durable and the space feels small.", "theme_cn": "质量与空间"},
+            ],
+        }
+
+        payload = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        term_relation_counts = Counter()
+        for item in payload["relations"]:
+            if item["confidence"] == "低":
+                continue
+            for term in set(item["terms"]):
+                term_relation_counts[term] += 1
+
+        overused = {term: count for term, count in term_relation_counts.items() if count > 2}
+        self.assertEqual(overused, {})
+
+    def test_report_readiness_view_downgrades_partial_supply_claims(self):
+        readiness = {
+            "acceptance_ready": False,
+            "partial_report_ready": True,
+            "supply_conclusion_blocked": True,
+            "blocking_gaps": [
+                {
+                    "module": "supplier_quote_relevance",
+                    "reason": "严格相关 1688 成品报价不足 50 条",
+                    "impact": "不能输出毛利率和供应链可控结论",
+                    "next_step": "继续用相关中文词补采 1688",
+                }
+            ],
+        }
+        view = renderer.report_readiness_view(readiness, {"overall_score": 0.93, "grade": "A"}, "Go")
+
+        self.assertEqual(view["delivery_state"], "诊断交付")
+        self.assertEqual(view["decision"], "Watch")
+        self.assertEqual(view["evidence_strength"], "中 / 诊断交付")
+        self.assertTrue(view["supply_blocked"])
+        forbidden = "证据充分 供应链可控度较高 50+ 可打样 毛利率可测算".split()
+        self.assertFalse(any(term in json.dumps(view, ensure_ascii=False) for term in forbidden))
+
+    def test_lifecycle_supplier_matching_rejects_generic_tent_noise(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": f"B0HUNT{idx:04d}",
+                    "title": f"See Through Pop Up Hunting Blind {idx}",
+                    "title_cn": f"FUNHORUN 透视弹出式地面盲棚 {idx}",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视弹出式地面盲棚",
+                    "price": 79.99 + idx,
+                    "rating": 4.5,
+                    "review_count": 1000 + idx,
+                    "estimated_monthly_sales": 300 + idx,
+                }
+                for idx in range(12)
+            ],
+            "keywords": [
+                {"keyword": "hunting blind", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "see through blind", "keyword_cn": "透视盲棚"},
+            ],
+            "suppliers": [
+                {
+                    "title": "跨境户外270度单向透视迷彩打猎狩猎帐篷",
+                    "price_rmb": 168,
+                    "seed_keyword": "狩猎盲棚",
+                    "url": "https://detail.1688.com/offer/good.html",
+                },
+                {
+                    "title": "儿童帐篷室内游戏屋亲子露营帐篷",
+                    "price_rmb": 45,
+                    "seed_keyword": "户外帐篷",
+                    "url": "https://detail.1688.com/offer/bad-kids.html",
+                },
+                {
+                    "title": "吊床吊篮降落伞布吊床带蚊帐户外帐篷",
+                    "price_rmb": 32,
+                    "seed_keyword": "户外帐篷",
+                    "url": "https://detail.1688.com/offer/bad-hammock.html",
+                },
+                {
+                    "title": "急救帐篷一次性帐篷野外自救保温",
+                    "price_rmb": 12,
+                    "seed_keyword": "户外帐篷",
+                    "url": "https://detail.1688.com/offer/bad-emergency.html",
+                },
+            ],
+        }
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_test")
+        serialized = json.dumps(lifecycle, ensure_ascii=False)
+        self.assertIn("透视迷彩打猎狩猎帐篷", serialized)
+        self.assertNotIn("儿童帐篷", serialized)
+        self.assertNotIn("吊床", serialized)
+        self.assertNotIn("急救帐篷", serialized)
+        self.assertNotIn("拓品路径C", serialized)
+
     def test_renderer_writes_index_and_three_child_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -282,7 +916,11 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn("战略结论", lifecycle_html)
             for name in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
                 child_html = (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
-                self.assertNotIn("site-nav", child_html)
+                self.assertIn("site-nav", child_html)
+                self.assertIn('href="report.html"', child_html)
+                self.assertIn('href="market-depth-report.html"', child_html)
+                self.assertIn('href="lifecycle-strategy-report.html"', child_html)
+                self.assertIn('href="demand-gap-report.html"', child_html)
                 self.assertNotIn("<style", child_html)
                 self.assertIn('href="assets/report.css"', child_html)
                 self.assertIn('src="assets/report.js"', child_html)
@@ -336,6 +974,8 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn("src_001", report_md)
 
             delivery = json.loads((report_dir / "output" / "delivery_result.json").read_text(encoding="utf-8"))
+            self.assertIn(delivery["decision"], {"Go", "Watch", "No-Go"})
+            self.assertIsNotNone(delivery["decision"])
             self.assertEqual(delivery["html_bundle_dir"], "output/html_reports")
             self.assertEqual(delivery["html_reports"]["index"], "output/html_reports/report.html")
             self.assertEqual(delivery["html_reports"]["compat_index"], "output/report.html")
@@ -425,6 +1065,44 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
             self.assertFalse(readiness["acceptance_ready"])
             self.assertEqual(readiness["sample_class"], "non_acceptance_sample")
+            cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+            self.assertTrue(cosmo_path.exists(), "diagnostic bundle must keep COSMO artifact for validator parity")
+            cosmo = json.loads(cosmo_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(cosmo["relations"]), 15)
+            delivery_path = report_dir / "output" / "delivery_result.json"
+            self.assertTrue(delivery_path.exists(), "diagnostic bundle must keep delivery metadata")
+            delivery = json.loads(delivery_path.read_text(encoding="utf-8"))
+            self.assertIn(delivery.get("decision"), {"Watch", "No-Go"})
+            self.assertEqual(delivery.get("cosmo_alexa_tags", {}).get("path"), "analysis/cosmo_alexa_tags.json")
+            self.assertEqual(delivery.get("cosmo_alexa_tags", {}).get("relation_total"), 15)
+            self.assertEqual(delivery.get("status"), "blocked")
+            self.assertIs(delivery.get("critic_review", {}).get("pass"), False)
+            self.assertEqual(delivery.get("critic_review", {}).get("score"), 0)
+            invocation_statuses = {
+                entry.get("status")
+                for entry in (delivery.get("child_skill_invocations") or {}).values()
+            }
+            self.assertEqual(invocation_statuses, {"diagnostic_template"})
+            diagnostic_html = (report_dir / "output" / "html_reports" / "report.html").read_text(encoding="utf-8")
+            compat_html = (report_dir / "output" / "report.html").read_text(encoding="utf-8")
+            self.assertIn("三合一市场研究报告", diagnostic_html)
+            for href in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                self.assertIn(href, diagnostic_html)
+                self.assertIn(f"html_reports/{href}", compat_html)
+            for client_term in ["证据强度", "数据覆盖", "数据缺口", "建议动作", "置信等级"]:
+                self.assertIn(client_term, diagnostic_html)
+            self.assertIn("补齐门禁后重新渲染", diagnostic_html)
+            self.assertNotIn("collect_", diagnostic_html)
+            self.assertNotIn("sorftime", diagnostic_html.casefold())
+            child_expectations = {
+                "market-depth-report.html": ["template-market", "大盘仪表盘 · Market Dashboard", "COSMO + Alexa 标签识别"],
+                "lifecycle-strategy-report.html": ["template-lifecycle", "四维拓品生态", "SKU 优先级"],
+                "demand-gap-report.html": ["template-demand", "市场痛点全景图（需求主题）", "用户原声"],
+            }
+            for filename, expected_terms in child_expectations.items():
+                child_html = (report_dir / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                for expected_term in expected_terms:
+                    self.assertIn(expected_term, child_html, f"{filename} must keep the standard diagnostic template slot {expected_term}")
 
     def test_renderer_writes_partial_report_when_only_1688_quotes_are_under_50(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -446,7 +1124,48 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertEqual(readiness["supplier_quote_gate"]["required"], 50)
             delivery = json.loads((report_dir / "output" / "delivery_result.json").read_text(encoding="utf-8"))
             self.assertEqual(delivery["status"], "partial")
+            self.assertEqual(delivery["decision"], "Watch")
             self.assertTrue(delivery["data_readiness"]["partial_report_ready"])
+            combined_html = "\n".join(
+                (report_dir / "output" / "html_reports" / name).read_text(encoding="utf-8")
+                for name in [
+                    "report.html",
+                    "market-depth-report.html",
+                    "lifecycle-strategy-report.html",
+                    "demand-gap-report.html",
+                ]
+            )
+            self.assertIn("供应链测算未达门槛", combined_html)
+            self.assertIn("诊断交付", combined_html)
+            for forbidden in ["证据充分", "供应链可控度较高", "50+ 条成品报价可进入打样复核", "毛利率可测算"]:
+                self.assertNotIn(forbidden, combined_html)
+
+    def test_lifecycle_sku_table_defaults_to_top_window_and_folds_full_pool(self):
+        skus = [
+            {
+                "id": f"SKU-{idx:03d}",
+                "type": "A" if idx % 4 == 0 else "B" if idx % 4 == 1 else "C" if idx % 4 == 2 else "D",
+                "phase": "P1",
+                "name": f"候选方案 {idx}",
+                "target_segment": "核心赛道",
+                "reference_asin": f"B0SKU{idx:05d}",
+                "reference_competitor": "标杆竞品",
+                "price": "$39-$59",
+                "supply": "仅竞品/VOC 候选，供应链待核实",
+                "priority": 100 - idx,
+                "source_id": "src_001",
+            }
+            for idx in range(1, 81)
+        ]
+
+        html = renderer.render_sku_execution_table(skus, "src_001")
+
+        self.assertIn("默认展示 Top", html)
+        self.assertIn("完整候选池", html)
+        self.assertIn("<details", html)
+        self.assertLessEqual(html.split('id="skuBody"', 1)[1].split("</tbody>", 1)[0].count("<tr"), 15)
+        self.assertIn("仅竞品/VOC 候选", html)
+        self.assertNotIn("Type A", html)
 
     def test_renderer_stops_when_critic_still_fails_after_refinement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -575,11 +1294,11 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             }
         ]
         keywords = [
-            {"asin": "B0LIGHT001", "keyword": "under cabinet lighting", "monthly_search_volume": 1000},
-            {"asin": "B0LIGHT001", "keyword": "kitchen cabinet lights", "keyword_cn": "未映射关键词：kitchen cabinet lights", "monthly_search_volume": 900},
+            {"asin": "B0LIGHT001", "keyword": "under cabinet lighting", "customer_label_cn": "橱柜灯", "monthly_search_volume": 1000},
+            {"asin": "B0LIGHT001", "keyword": "kitchen cabinet lights", "customer_label_cn": "橱柜灯", "keyword_cn": "未映射关键词：kitchen cabinet lights", "monthly_search_volume": 900},
             {"asin": "B0LIGHT001", "keyword": "ring camera", "monthly_search_volume": 800},
-            {"asin": "B0LIGHT001", "keyword": "motion sensor light", "monthly_search_volume": 700},
-            {"asin": "B0LIGHT001", "keyword": "flashlight", "keyword_cn": "未映射关键词：flashlight", "monthly_search_volume": 600},
+            {"asin": "B0LIGHT001", "keyword": "motion sensor light", "customer_label_cn": "感应灯", "monthly_search_volume": 700},
+            {"asin": "B0LIGHT001", "keyword": "flashlight", "customer_label_cn": "户外便携灯", "keyword_cn": "未映射关键词：flashlight", "monthly_search_volume": 600},
         ]
 
         html = renderer.render_product_deep_dives(products, keywords)
@@ -594,7 +1313,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertNotIn("定位标签：<span", html)
 
     def test_supply_uses_passing_segment_bucket_when_global_prices_are_mixed(self):
-        products = competitor_rows(30)
+        products = [
+            {**product, "segment_cn": "橱柜感应灯", "title_cn": "厨房橱柜感应灯"}
+            for product in competitor_rows(30)
+        ]
         stable_suppliers = [
             {
                 "title": f"厨房橱柜感应灯工厂款 {idx}",
@@ -619,7 +1341,12 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             }
             for idx in range(8)
         ]
-        data_pack = {"products": products, "suppliers": stable_suppliers + mixed_outliers}
+        data_pack = {
+            "research_object": {"type": "keyword", "value": "橱柜感应灯"},
+            "products": products,
+            "keywords": [{"keyword_cn": "橱柜感应灯", "keyword": "under cabinet light"}],
+            "suppliers": stable_suppliers + mixed_outliers,
+        }
 
         html = renderer.render_supply(data_pack, {})
 
@@ -743,6 +1470,14 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('id="prompt"', prompt_html)
         self.assertNotIn("清洗数据", pricing_html + prompt_html)
         self.assertNotIn("清洗后", pricing_html + prompt_html)
+        prompt_texts = re.findall(r'<div class="prompt-text">(.*?)</div>', prompt_html)
+        self.assertEqual(len(prompt_texts), 3)
+        self.assertEqual(len(set(prompt_texts)), 3)
+        self.assertRegex(prompt_texts[0], r"低价|首图")
+        self.assertRegex(prompt_texts[1], r"差异|对比")
+        self.assertRegex(prompt_texts[2], r"套装|溢价")
+        for text in prompt_texts:
+            self.assertNotRegex(text, r"Product concept|traffic validation|with the product|differentiated comparison|premium bundle")
 
     def test_market_visual_and_prompt_template_slots_match_reference_structure(self):
         html = renderer.render_visual_direction({"opportunities": [{"name": "橱柜感应灯 场景化主图"}]})
@@ -756,8 +1491,29 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         for text in ["Prompt 01", "Prompt 02", "Prompt 03"]:
             self.assertIn(text, html)
 
+    def test_market_prompt_body_carries_current_opportunity_context(self):
+        html = renderer.render_visual_direction(
+            {
+                "opportunities": [
+                    {"name": "透视地面盲棚 入门验证款"},
+                    {"name": "透视地面盲棚 差异化主力款"},
+                    {"name": "透视地面盲棚 高溢价套装款"},
+                ]
+            }
+        )
+
+        prompt_texts = re.findall(r'<div class="prompt-text">(.*?)</div>', html)
+
+        self.assertEqual(len(prompt_texts), 3)
+        self.assertIn("透视地面盲棚 入门验证款", prompt_texts[0])
+        self.assertIn("透视地面盲棚 差异化主力款", prompt_texts[1])
+        self.assertIn("透视地面盲棚 高溢价套装款", prompt_texts[2])
+
     def test_market_supply_uses_reference_order_and_no_free_floating_cost_metrics(self):
-        products = competitor_rows(30)
+        products = [
+            {**product, "segment_cn": "橱柜感应灯", "title_cn": "厨房橱柜感应灯"}
+            for product in competitor_rows(30)
+        ]
         suppliers = [
             {
                 "title": f"成品橱柜感应灯套装 {idx}",
@@ -771,7 +1527,15 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             for idx in range(60)
         ]
 
-        html = renderer.render_supply({"products": products, "suppliers": suppliers}, {})
+        html = renderer.render_supply(
+            {
+                "research_object": {"type": "keyword", "value": "橱柜感应灯"},
+                "products": products,
+                "keywords": [{"keyword_cn": "橱柜感应灯", "keyword": "under cabinet light"}],
+                "suppliers": suppliers,
+            },
+            {},
+        )
 
         self.assertEqual(html.count('class="supply-card'), 4)
         self.assertLess(html.find("supply-grid"), html.find('id="marginChart"'))
@@ -780,6 +1544,34 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertNotIn("P25采购成本", html)
         self.assertIn("1688 成本分位数", html)
         self.assertIn("供应链核心结论", html)
+
+    def test_market_supply_blocked_uses_diagnostic_chart_not_profit_series(self):
+        suppliers = [
+            {
+                "title": f"狩猎盲棚供应记录 {idx}",
+                "supplier_name": f"供应商 {idx}",
+                "url": f"https://detail.1688.com/offer/{idx}.html",
+                "price_rmb": 120 + idx,
+                "seed_keyword": "狩猎盲棚",
+            }
+            for idx in range(9)
+        ]
+
+        html = renderer.render_supply(
+            {
+                "research_object": {"type": "asin", "value": "B0BR4QYGS7"},
+                "products": competitor_rows(30),
+                "suppliers": suppliers,
+            },
+            {},
+        )
+
+        self.assertIn('id="marginChart"', html)
+        self.assertIn('data-chart-disabled="true"', html)
+        self.assertIn("diagnostic-chart-item", html)
+        self.assertIn("供应链测算未达门槛", html)
+        self.assertNotIn('data-chart-source="marginChartRows"', html)
+        self.assertNotIn("毛利率测算 · 各定价方案对比", html)
 
     def test_market_dashboard_copy_uses_customer_ready_data_terms(self):
         html = renderer.render_market({"products": competitor_rows(30), "categories": [{}]}, {})
@@ -794,6 +1586,77 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("<th>ASIN</th>", table_html)
         self.assertIn('data-allow-asin="competitor-table"', table_html)
         self.assertRegex(table_html, r"B0P\d{7}")
+
+    def test_competitor_modules_render_product_images_when_available(self):
+        products = competitor_rows(30)
+        products[-1]["image_url"] = "https://images-na.ssl-images-amazon.com/images/I/example-a.jpg"
+        products[-2]["main_image"] = "https://m.media-amazon.com/images/I/example-b.jpg"
+        products[-3]["images"] = ["https://m.media-amazon.com/images/I/example-c.jpg"]
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        self.assertIn('class="comp-product-thumb"', table_html)
+        self.assertIn('src="https://images-na.ssl-images-amazon.com/images/I/example-a.jpg"', table_html)
+        self.assertIn('src="https://m.media-amazon.com/images/I/example-b.jpg"', table_html)
+        self.assertIn('src="https://m.media-amazon.com/images/I/example-c.jpg"', deep_html)
+        self.assertIn('class="comp-image-strip"', cards_html)
+        self.assertNotIn("src=\"\"", table_html + cards_html + deep_html)
+
+    def test_competitor_modules_do_not_render_broken_images_when_image_urls_missing(self):
+        table_html, cards_html, filtered = renderer.render_competitors({"products": competitor_rows(30)})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        self.assertNotIn("<img", table_html + cards_html + deep_html)
+        self.assertNotIn("src=\"\"", table_html + cards_html + deep_html)
+        self.assertIn("图片维度未返回可展示 URL", cards_html)
+        self.assertNotIn("image_url", cards_html)
+        self.assertNotIn("main_image", cards_html)
+        self.assertNotIn("photo 字段", cards_html)
+        self.assertIn("商品主图链接或可展示图片", cards_html)
+
+    def test_competitor_modules_render_product_detail_enrichment_images(self):
+        products = competitor_rows(30)
+        products[-1]["sorftime_enrichment"] = {
+            "detail_image_url": "https://m.media-amazon.com/images/I/detail-image.jpg"
+        }
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        self.assertIn('src="https://m.media-amazon.com/images/I/detail-image.jpg"', table_html + cards_html + deep_html)
+        self.assertIn('class="comp-product-thumb"', table_html)
+
+    def test_competitor_modules_reject_1688_supplier_images_as_amazon_competitor_images(self):
+        products = competitor_rows(30)
+        products[-1]["image_url"] = "https://cbu01.alicdn.com/img/ibank/example.jpg"
+        products[-2]["main_image"] = "https://detail.1688.com/offer/123456.html"
+        products[-3]["sorftime_enrichment"] = {
+            "detail_image_url": "https://img.alicdn.com/imgextra/example.jpg"
+        }
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        combined = table_html + cards_html + deep_html
+        self.assertNotIn("alicdn.com", combined)
+        self.assertNotIn("detail.1688.com", combined)
+        self.assertNotIn("<img", combined)
+        self.assertIn("图片维度未返回可展示 URL", cards_html)
+
+    def test_competitor_modules_reject_non_amazon_external_images(self):
+        products = competitor_rows(30)
+        products[-1]["image_url"] = "https://cdn.example-shop.com/product/example.jpg"
+        products[-2]["main_image"] = "https://images.example.com/competitor.jpg"
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        combined = table_html + cards_html + deep_html
+        self.assertNotIn("cdn.example-shop.com", combined)
+        self.assertNotIn("images.example.com", combined)
+        self.assertNotIn("<img", combined)
+        self.assertIn("图片维度未返回可展示 URL", cards_html)
 
     def test_lifecycle_default_skus_are_segment_bound_real_sku_strategy(self):
         products = [
@@ -852,6 +1715,149 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertNotIn("信任说明卡", names)
         self.assertNotIn("1688 相似供应端机会", names)
 
+    def test_lifecycle_skus_preserve_and_render_reference_competitor_images(self):
+        products = [
+            {
+                "asin": "B0BLINDIMG1",
+                "title": "Pop Up Hunting Blind See Through Ground Blind",
+                "brand": "FUNHORUN",
+                "segment_cn": "透视地面盲棚",
+                "price": 87.98,
+                "estimated_monthly_sales": 349,
+                "rating": 4.5,
+                "review_count": 1087,
+                "image_url": "https://m.media-amazon.com/images/I/blind-main.jpg",
+            },
+            {
+                "asin": "B0SUPPLYIMG",
+                "title": "Portable Hunting Blind Ground Blind",
+                "brand": "SupplierLeak",
+                "segment_cn": "弹出式地面盲棚",
+                "price": 76.49,
+                "estimated_monthly_sales": 320,
+                "rating": 4.4,
+                "review_count": 900,
+                "image_url": "https://cbu01.alicdn.com/img/ibank/supplier.jpg",
+            },
+        ]
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis({"products": products}, {}, "src_img")
+        html = renderer.render_sku_execution_table(lifecycle["sku_candidate_pool"], "src_img")
+
+        self.assertEqual(lifecycle["sku_candidate_pool"][0]["reference_image_url"], "https://m.media-amazon.com/images/I/blind-main.jpg")
+        self.assertIn('class="sku-reference-thumb"', html)
+        self.assertIn('src="https://m.media-amazon.com/images/I/blind-main.jpg"', html)
+        self.assertNotIn("cbu01.alicdn.com", html)
+        self.assertNotIn('src=""', html)
+
+    def test_lifecycle_supplier_matching_caches_effective_product_context(self):
+        data_pack = {
+            "research_object": {"value": "hunting blind"},
+            "products": [
+                {
+                    "asin": "B0BLIND001",
+                    "title_cn": "透视弹出式地面盲棚",
+                    "segment_cn": "弹出式地面盲棚",
+                    "relevance_status": "passed",
+                }
+            ],
+            "keywords": [],
+        }
+        suppliers = [
+            {"title": "透视弹出式地面盲棚 加厚防水款", "price_rmb": 88},
+            {"title": "多人狩猎地面盲棚 迷彩款", "price_rmb": 128},
+        ]
+        calls = {"products": 0}
+
+        def counted_effective_products(pack):
+            calls["products"] += 1
+            return pack["products"]
+
+        with patch.object(renderer, "effective_products", side_effect=counted_effective_products):
+            for _ in range(5):
+                for supplier in suppliers:
+                    self.assertTrue(renderer.supplier_matches_lifecycle_context(supplier, data_pack, "弹出式地面盲棚"))
+
+        self.assertEqual(calls["products"], 1)
+
+    def test_lifecycle_strategy_uses_analysis_plan_type_labels_for_generic_categories(self):
+        data_pack = {
+            "research_object": {"value": "smart cat water fountain"},
+            "products": [
+                {
+                    "asin": f"B0PETWAT{i:02d}",
+                    "title": f"Smart Cat Water Fountain Quiet Pump Stainless Steel {i}",
+                    "title_cn": f"宠物饮水机 静音循环水泵 {i}",
+                    "brand": "PetFlow",
+                    "segment_cn": "宠物饮水机",
+                    "price": 29.99 + i,
+                    "rating": 4.3 + (i % 3) * 0.1,
+                    "review_count": 800 + i * 120,
+                    "estimated_monthly_sales": 2200 - i * 20,
+                }
+                for i in range(12)
+            ],
+            "suppliers": [
+                {
+                    "title": "宠物饮水机静音循环水泵不锈钢猫咪自动饮水器",
+                    "price_rmb": 38,
+                    "supplier_name": "宠物用品工厂",
+                    "url": "https://detail.1688.com/offer/123.html",
+                }
+            ],
+        }
+        analysis_plan = {
+            "report_label_profile": {
+                "lifecycle_type_labels": {
+                    "A": "主饮水验证",
+                    "B": "静音升级",
+                    "C": "滤芯配件",
+                    "D": "维护复购",
+                }
+            }
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, analysis_plan, "src_pet")
+        skus = renderer.lifecycle_skus(data_pack, lifecycle, "src_pet")
+        ecosystem_html = renderer.render_ecosystem(data_pack, skus, "src_pet")
+        sku_names = " ".join(str(sku.get("name")) for sku in skus)
+
+        for expected in ["主饮水验证", "静音升级", "滤芯配件", "维护复购"]:
+            self.assertIn(expected, sku_names + ecosystem_html)
+        for forbidden in ["橱柜感应灯", "RGB 灯带", "户外感应灯", "Type A", "Type B", "未命名竞品"]:
+            self.assertNotIn(forbidden, sku_names + ecosystem_html)
+        self.assertGreater(len(lifecycle["sku_candidate_pool"]), 5)
+        strategy_keys = {sku.get("strategy_type_key") for sku in lifecycle["sku_candidate_pool"]}
+        self.assertGreaterEqual(len(strategy_keys), 4)
+        self.assertIn("core_validation", strategy_keys)
+        self.assertNotIn("A", strategy_keys)
+
+    def test_lifecycle_sku_table_uses_semantic_strategy_filters(self):
+        skus = [
+            {
+                "name": "透视地面盲棚 主盲棚验证款",
+                "stage": "首发验证",
+                "type": "A",
+                "strategy_type_key": "core_validation",
+                "type_label_cn": "主盲棚验证款",
+                "price": "$89.99",
+                "supply": "1688 成品报价复核",
+                "phase": "P1",
+                "priority": 88,
+                "pain": "验证视野和搭建稳定性",
+                "target_segment": "透视地面盲棚",
+                "reference_competitor": "TIDEWE 透视地面盲棚",
+            }
+        ]
+
+        html = renderer.render_sku_execution_table(skus, "src_001")
+
+        self.assertIn('data-filter="core_validation"', html)
+        self.assertIn('data-type="core_validation"', html)
+        self.assertIn('data-filter="scenario_upgrade"', html)
+        self.assertNotIn('data-filter="A"', html)
+        self.assertNotIn('data-type="a"', html)
+
     def test_lifecycle_sku_section_renders_strategy_cards_before_table(self):
         skus = [
             {
@@ -883,18 +1889,29 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
     def test_lifecycle_ecosystem_uses_two_chart_reference_layout(self):
         skus = [
-            {"name": "橱柜感应灯 基础款", "type": "A", "priority": 92},
-            {"name": "RGB 灯带 升级款", "type": "B", "priority": 86},
-            {"name": "户外感应灯 配件款", "type": "C", "priority": 74},
-            {"name": "智能灯泡 维护款", "type": "D", "priority": 68},
+            {"name": "透视地面盲棚 基础款", "type": "A", "priority": 92, "ecosystem_path": "关联度", "ecosystem_segment": "地面盲棚"},
+            {"name": "弹出式地面盲棚 升级款", "type": "B", "priority": 86, "ecosystem_path": "场景", "ecosystem_segment": "弹出式盲棚"},
+            {"name": "塔式狩猎盲棚 配件款", "type": "C", "priority": 74, "ecosystem_path": "消耗", "ecosystem_segment": "塔式盲棚"},
+            {"name": "透视盲棚 维护款", "type": "D", "priority": 68, "ecosystem_path": "维护", "ecosystem_segment": "维护复购"},
         ]
 
         html = renderer.render_ecosystem({}, skus, "src_001")
         sku_html = renderer.render_sku_execution_table(skus, "src_001")
 
         self.assertIn("四维拓品生态 · 4D Ecosystem", html)
+        self.assertIn("SKU 候选池总数：4", html)
         self.assertIn('id="sunburst"', html)
         self.assertIn('id="priorityChart"', html)
+        self.assertIn("研究对象 → 四维路径 → 赛道/场景 → SKU 候选", html)
+        self.assertIn("Top SKU 优先级评分", html)
+        for label in ["基础款", "升级款", "配件款", "维护款"]:
+            self.assertIn(label, html)
+            self.assertIn(label, sku_html)
+        self.assertIn('data-ecosystem-path="关联度"', sku_html)
+        self.assertIn('data-segment="地面盲棚"', sku_html)
+        for label in ["Type A", "Type B", "Type C", "Type D"]:
+            self.assertNotIn(label, html)
+            self.assertNotIn(label, sku_html)
         self.assertEqual(html.count("chart-container"), 2)
         self.assertNotIn('id="priorityChart"', sku_html)
 
@@ -952,7 +1969,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertEqual(html.count('class="bundle-card'), 4)
         self.assertLess(html.find("bundle-grid"), html.find('id="aovChart"'))
         self.assertLess(html.find('id="aovChart"'), html.find("Bundle 策略核心"))
-        for text in ["新手启航套装", "豪华礼品套装", "STEM 探索套装", "续航补给包"]:
+        for text in ["入门验证套装", "高配场景套装", "场景补位包", "维护替换包"]:
             self.assertIn(text, html)
         for cls in ["bundle-header", "bundle-target", "bundle-items", "bundle-pricing", "orig", "final", "save"]:
             self.assertIn(cls, html)
@@ -965,6 +1982,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertEqual(html.count('class="filter-btn'), 7)
         self.assertIn('data-filter="ext"', html)
         self.assertIn('data-filter="P1"', html)
+        self.assertIn('data-filter="core_validation"', html)
+        self.assertIn("基础款", html)
+        self.assertNotIn("Type A", html)
+        self.assertNotIn('data-filter="A"', html)
         self.assertIn("供应链验证", html)
         self.assertIn("P1 立即启动", html)
 

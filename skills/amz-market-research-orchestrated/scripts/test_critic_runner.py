@@ -122,6 +122,42 @@ class CriticRunnerTest(unittest.TestCase):
         self.assertTrue(review["pass"])
         self.assertNotIn("F-customer-html-leak", review["remaining_findings"])
 
+    def test_critic_allows_supply_only_fixed_template_diagnostic(self):
+        data_pack = {
+            "task_id": "supply_diagnostic_case",
+            "reviews": [{"rating": 5, "text": "Enough review row"} for _ in range(90)],
+            "data_gaps": [],
+            "quality": {"overall_score": 0.82, "grade": "B"},
+            "normalization": {"cross_validated_counts": {"keywords": 1000, "products": 30, "reviews": 90}},
+        }
+        required_terms = "证据强度 数据覆盖 数据缺口 置信等级 建议动作 成本 毛利 FBA"
+        rendered_docs = {
+            "market_depth": f"<html><body>{required_terms} 供应链状态 需补采 当前数据不能进入毛利率测算</body></html>",
+            "lifecycle_strategy": f"<html><body>{required_terms}</body></html>",
+            "demand_gap": f"<html><body>{required_terms}</body></html>",
+        }
+
+        review = critic_runner.build_critic_review(
+            data_pack,
+            {"limitations": []},
+            {
+                "status": "partial",
+                "decision": "Watch",
+                "data_readiness": {
+                    "acceptance_ready": False,
+                    "partial_report_ready": True,
+                    "supply_conclusion_blocked": True,
+                    "blocking_gaps": [{"module": "supplier_quote_relevance"}],
+                },
+            },
+            "Watch",
+            rendered_docs=rendered_docs,
+        )
+
+        self.assertTrue(review["pass"])
+        self.assertIn("F-readiness-diagnostic", [item["id"] for item in review["findings"]])
+        self.assertNotIn("F-readiness-gate", review["remaining_findings"])
+
     def test_critic_fails_grade_d_even_without_other_blockers(self):
         data_pack = {
             "task_id": "low_score_case",

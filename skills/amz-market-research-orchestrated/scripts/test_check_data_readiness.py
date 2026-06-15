@@ -20,7 +20,7 @@ def write_json(path, data):
 def supplier_rows(count=50):
     return [
         {
-            "title": f"1688 supplier product {idx}",
+            "title": f"橱柜感应灯成品供应端 {idx}",
             "supplier_name": f"Supplier {idx}",
             "url": f"https://detail.1688.com/offer/{idx}.html",
             "price_rmb": 10 + idx,
@@ -186,6 +186,35 @@ class DataReadinessTest(unittest.TestCase):
             self.assertFalse(report["supplier_quote_gate"]["passed"])
             self.assertIn("non_finished_filtered", report["supplier_quote_gate"])
             self.assertEqual(report["supplier_quote_gate"]["non_finished_filtered"], 30)
+
+    def test_supplier_gate_blocks_when_finished_quotes_are_not_research_relevant(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suppliers = [
+                {
+                    "title": f"儿童帐篷 吊床 急救帐篷 无关货源 {idx}",
+                    "supplier_name": f"帐篷工厂 {idx}",
+                    "url": f"https://detail.1688.com/offer/noise-{idx}.html",
+                    "price_rmb": 20 + (idx % 8),
+                    "sales_30d": 200 + idx,
+                    "seed_keyword": "橱柜感应灯",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(60)
+            ]
+            write_json(root / "data" / "data_pack.json", base_pack(suppliers=suppliers))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertTrue(report["partial_report_ready"])
+            modules = {item["module"] for item in report["blocking_gaps"]}
+            self.assertIn("supplier_quote_relevance", modules)
+            self.assertEqual(report["supplier_quote_gate"]["raw_finished_valid_quotes"], 60)
+            self.assertEqual(report["supplier_quote_gate"]["actual"], 0)
+            self.assertEqual(report["supplier_quality_gate"]["strict_relevant_valid_quotes"], 0)
+            self.assertFalse(report["supplier_quality_gate"]["customer_visible_passed"])
 
     def test_deep_pack_uses_higher_review_recommendation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -377,10 +406,11 @@ class DataReadinessTest(unittest.TestCase):
 
             self.assertTrue(report["acceptance_ready"])
             self.assertFalse(any(item["module"] == "supplier_quote_price_spread" for item in report["blocking_gaps"]))
-            self.assertFalse(report["supplier_quality_gate"]["price_spread_passed"])
+            self.assertTrue(report["supplier_quality_gate"]["price_spread_passed"])
+            self.assertFalse(report["supplier_quality_gate"]["raw_quality_gate"]["price_spread_passed"])
             self.assertTrue(report["supplier_quality_gate"]["same_search_bucket_gate"]["passed"])
             self.assertEqual(report["supplier_quality_gate"]["same_search_bucket_gate"]["bucket"], "橱柜感应灯")
-            self.assertTrue(any(item["module"] == "supplier_quote_price_spread_global" for item in report["warnings"]))
+            self.assertFalse(any(item["module"] == "supplier_quote_price_spread_global" for item in report["warnings"]))
 
 
 if __name__ == "__main__":

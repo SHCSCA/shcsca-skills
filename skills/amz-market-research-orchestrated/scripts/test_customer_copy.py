@@ -2,6 +2,7 @@
 import unittest
 
 from customer_copy import customer_product_position, customer_review_summary, review_theme_labels
+from customer_safety import client_safe_view_payload, customer_safe_asset_text
 
 
 class CustomerCopyTest(unittest.TestCase):
@@ -31,6 +32,20 @@ class CustomerCopyTest(unittest.TestCase):
         self.assertNotIn("没有达到预期", summary)
         self.assertIn("正向反馈", summary)
 
+    def test_positive_hunting_review_does_not_treat_lightweight_as_lighting(self):
+        review = {
+            "rating": 5,
+            "title": "Nice blind",
+            "text": "Nice blind. Good quality, size is nice, light weight easy to set up and carry.",
+        }
+
+        summary = customer_review_summary(review)
+
+        self.assertIn("轻便和携带体验获得正向反馈", summary)
+        self.assertIn("安装和上手体验获得正向反馈", summary)
+        self.assertNotIn("亮度", summary)
+        self.assertNotIn("灯效", summary)
+
     def test_uses_customer_visible_product_positioning(self):
         product = {"segment": "premium", "price": 89, "rating": 4.5, "review_count": 500}
 
@@ -40,9 +55,35 @@ class CustomerCopyTest(unittest.TestCase):
         self.assertIn("$89.00", position)
         self.assertIn("评论 500", position)
 
+    def test_hunting_blind_context_ignores_lighting_positioning_pollution(self):
+        product = {
+            "title": "FUNHORUN Hunting Blind 270/360 Degree See Through Ground Blind",
+            "title_cn": "透视弹出式地面盲棚",
+            "segment_cn": "透视弹出式地面盲棚",
+            "positioning_cn": "户外感应灯",
+        }
+
+        position = customer_product_position(product)
+
+        self.assertEqual(position, "透视弹出式地面盲棚")
+        self.assertNotIn("户外感应灯", position)
+
     def test_maps_theme_labels_to_chinese_copy(self):
         self.assertEqual(review_theme_labels({"themes": ["privacy"]}), ["隐私与信任"])
         self.assertEqual(review_theme_labels({}), ["其他体验问题"])
+
+    def test_customer_assets_translate_technical_no_rows_errors(self):
+        raw = "Sorftime Amazon ASIN enrichment tools returned no rows for: product_detail, product_trend, product_variations after retrying 12 ASINs."
+
+        safe = customer_safe_asset_text(raw)
+        view = client_safe_view_payload(raw)
+
+        for text in [safe, view]:
+            self.assertIn("产品详情维度", text)
+            self.assertIn("未返回可验证结果", text)
+            self.assertNotIn("returned no rows", text)
+            self.assertNotIn("product_detail", text)
+            self.assertNotIn("ASIN", text)
 
 
 if __name__ == "__main__":
