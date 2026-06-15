@@ -1578,6 +1578,12 @@ def cosmo_action_copy(relation_type: str, label_cn: str, terms: list[str], dimen
     }
 
 
+def cosmo_low_coverage_hint(label_cn: Any) -> str:
+    label = clean(label_cn).replace(" / ", "与").replace("/", "与")
+    label = re.sub(r"\s+", "", label)
+    return f"需补强：{label or '该关系'}证据"
+
+
 def generate_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> dict[str, Any]:
     records = cosmo_text_records(data_pack)
     relation_items = []
@@ -1722,6 +1728,11 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
 
     def matrix_cell(item: dict[str, Any]) -> str:
         marker = "产品" if item.get("dimension") == "产品标签" else "用户"
+        terms = list((item.get("terms") or [])[:4])
+        if item.get("confidence") == "低":
+            hint = cosmo_low_coverage_hint(item.get("label_cn"))
+            if hint not in terms:
+                terms.append(hint)
         return (
             "<article class=\"cosmo-tag-card cosmo-matrix-cell\" "
             + f"data-cosmo-relation=\"{esc(item.get('slot_id'))}\" data-confidence=\"{esc(item.get('confidence'))}\" data-dimension=\"{esc(item.get('dimension'))}\">"
@@ -1735,8 +1746,7 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
             + f"<span class=\"cosmo-confidence-pill\">{esc(item.get('confidence'))}置信</span></div>"
             + f"<p class=\"cosmo-relation-meta\">{esc(item.get('dimension'))} · {esc(item.get('coverage_status'))}</p>"
             + "<div class=\"cosmo-tag-terms\">"
-            + "".join(f"<span>{esc(term)}</span>" for term in (item.get("terms") or [])[:4])
-            + ("<span>低覆盖诊断</span>" if not item.get("terms") or item.get("confidence") == "低" else "")
+            + "".join(f"<span>{esc(term)}</span>" for term in terms)
             + "</div>"
             + f"<div class=\"cosmo-evidence-strip\"><span>证据</span><b>{esc(item.get('evidence_count'))}</b></div>"
             + f"<p class=\"cosmo-business-meaning\"><b>业务解释：</b>{esc(item.get('business_meaning'))}</p>"

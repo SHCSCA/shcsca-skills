@@ -435,6 +435,31 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("产品标签", visible_text)
         self.assertIn("用户标签", visible_text)
 
+    def test_cosmo_low_coverage_slots_use_relation_specific_chinese_diagnostics(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": [
+                {
+                    "asin": "B0BR4QYGS7",
+                    "title": "Pop Up Hunting Blind See Through Ground Blind",
+                    "title_cn": "透视地面盲棚",
+                    "brand": "FUNHORUN",
+                    "segment_cn": "透视地面盲棚",
+                }
+            ],
+            "keywords": [{"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"}],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+        visible_text = re.sub(r"<[^>]+>", " ", html)
+
+        self.assertNotIn("低覆盖诊断", visible_text)
+        self.assertIn("需补强：功能与用途证据", visible_text)
+        self.assertIn("需补强：身体部位证据", visible_text)
+        self.assertIn("需补强：用户想要达成证据", visible_text)
+        self.assertNotRegex(visible_text, r"\b(?:USED_[A-Z_]+|CAPABLE_OF|IS_A|xWANT|xIs_A|xINTERSTED_IN)\b")
+        self.assertGreaterEqual(len(set(re.findall(r"需补强：[^\s<]+证据", visible_text))), 8)
+
     def test_cosmo_renderer_does_not_fill_action_relations_with_generic_product_names(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
