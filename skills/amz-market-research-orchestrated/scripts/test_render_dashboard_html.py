@@ -348,6 +348,31 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertRegex(html, r"<b>\d+/9</b>")
         self.assertLess(html.index('class="cosmo-summary-strip"'), html.index('class="cosmo-layout"'))
 
+    def test_cosmo_renderer_uses_stacked_three_column_matrix_layout(self):
+        data_pack = {
+            "research_object": {"value": "hunting blinds"},
+            "products": competitor_rows(30),
+            "keywords": [
+                {"keyword": "hunting blinds", "keyword_cn": "狩猎盲棚"},
+                {"keyword": "deer blind", "keyword_cn": "鹿猎盲棚"},
+                {"keyword": "ground blind", "keyword_cn": "地面盲棚"},
+            ],
+            "reviews": [
+                {"rating": 5, "text": "Easy to set up and keeps me concealed.", "theme_cn": "安装与隐蔽"},
+                {"rating": 2, "text": "The fabric is not durable enough.", "theme_cn": "质量与耐用"},
+            ],
+        }
+
+        html = renderer.render_cosmo_alexa_tags(data_pack, {})
+
+        self.assertIn('class="cosmo-layout cosmo-layout-stacked"', html)
+        self.assertIn('class="cosmo-submodule-grid"', html)
+        self.assertIn('class="cosmo-panel cosmo-top-list cosmo-submodule"', html)
+        self.assertIn('class="cosmo-panel cosmo-gap-panel cosmo-submodule"', html)
+        self.assertEqual(html.count('data-cosmo-relation="'), 15)
+        self.assertLess(html.index('class="cosmo-panel cosmo-matrix"'), html.index('class="cosmo-submodule-grid"'))
+        self.assertLess(html.index('class="cosmo-submodule-grid"'), html.index('class="cosmo-panel cosmo-action-board"'))
+
     def test_cosmo_renderer_shows_customer_safe_evidence_sources_per_relation(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
@@ -1913,8 +1938,13 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         deep_html = renderer.render_product_deep_dives(filtered, [])
         combined = table_html + cards_html + deep_html
 
-        self.assertIn('onerror="this.hidden=true;this.nextElementSibling.hidden=false;"', combined)
+        self.assertIn(
+            'onerror="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add',
+            combined,
+        )
         self.assertIn('class="image-load-fallback"', combined)
+        self.assertIn('class="image-load-fallback" hidden>', combined)
+        self.assertNotIn("display:inline-flex", combined)
         self.assertIn("图片加载失败", combined)
         self.assertNotIn("broken image", combined.lower())
 
@@ -1956,8 +1986,13 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         )
 
         self.assertIn('class="sku-reference-thumb"', html)
-        self.assertIn('onerror="this.hidden=true;this.nextElementSibling.hidden=false;"', html)
+        self.assertIn(
+            'onerror="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add',
+            html,
+        )
         self.assertIn('class="image-load-fallback"', html)
+        self.assertIn('class="image-load-fallback" hidden>', html)
+        self.assertNotIn("display:inline-flex", html)
         self.assertIn("图片加载失败", html)
 
     def test_competitor_modules_reject_1688_supplier_images_as_amazon_competitor_images(self):

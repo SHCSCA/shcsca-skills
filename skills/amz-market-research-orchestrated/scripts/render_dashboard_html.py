@@ -734,10 +734,8 @@ def image_with_load_fallback_html(url: str, class_name: str, alt: str, fallback_
         "<span class=\"image-frame\">"
         f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" "
         "loading=\"lazy\" decoding=\"async\" "
-        "onerror=\"this.hidden=true;this.nextElementSibling.hidden=false;\">"
-        "<span class=\"image-load-fallback\" hidden "
-        "style=\"display:inline-flex;align-items:center;justify-content:center;min-width:72px;min-height:72px;"
-        "padding:8px;border:1px solid #d9dee8;background:#f7f9fc;color:#6f8198;font-size:12px;text-align:center;\">"
+        "onerror=\"this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add('is-visible');\">"
+        "<span class=\"image-load-fallback\" hidden>"
         f"{esc(fallback_label)}加载失败</span>"
         "</span>"
     )
@@ -2081,18 +2079,20 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
         + "".join(cards)
         + "</div>"
         + summary_strip
-        + "<div class=\"cosmo-layout\">"
+        + "<div class=\"cosmo-layout cosmo-layout-stacked\">"
         + "<section class=\"cosmo-panel cosmo-matrix\"><div class=\"cosmo-panel-title\">15 标签矩阵</div>"
         + matrix_lanes
         + "</section>"
-        + "<section class=\"cosmo-panel cosmo-top-list\"><div class=\"cosmo-panel-title\">高置信标签排行</div><ol>"
+        + "<div class=\"cosmo-submodule-grid\">"
+        + "<section class=\"cosmo-panel cosmo-top-list cosmo-submodule\"><div class=\"cosmo-panel-title\">高置信标签排行</div><ol>"
         + top_rows
         + "</ol></section>"
-        + "<section class=\"cosmo-panel cosmo-gap-panel\"><div class=\"cosmo-panel-title\">产品标签 / 用户标签缺口</div><p>"
+        + "<section class=\"cosmo-panel cosmo-gap-panel cosmo-submodule\"><div class=\"cosmo-panel-title\">产品标签 / 用户标签缺口</div><p>"
         + esc(gap_text)
         + "</p><ul>"
         + (gap_rows or "<li><span>OK</span><strong>关键标签已覆盖</strong><em>继续用评论和 QA 压实表达</em></li>")
         + "</ul></section>"
+        + "</div>"
         + "<section class=\"cosmo-panel cosmo-action-board\"><div class=\"cosmo-panel-title\">Listing / QA / 广告动作</div><div class=\"cosmo-action-grid\">"
         + action_cards
         + "</div></section>"

@@ -162,6 +162,10 @@ class SiteAssetsTest(unittest.TestCase):
         self.assertIn(".cosmo-matrix-lane.user-lane", REPORT_CSS)
         self.assertIn(".cosmo-lane-title", REPORT_CSS)
         self.assertIn(".cosmo-lane-grid", REPORT_CSS)
+        self.assertIn(".cosmo-layout-stacked", REPORT_CSS)
+        self.assertIn(".cosmo-submodule-grid", REPORT_CSS)
+        self.assertIn("grid-template-columns:repeat(3,minmax(0,1fr))", REPORT_CSS)
+        self.assertNotIn("grid-template-columns:minmax(0,1.55fr) minmax(320px,.65fr)", REPORT_CSS)
         self.assertIn(".cosmo-matrix-cell[data-dimension=\"用户标签\"]", REPORT_CSS)
         self.assertIn(".cosmo-matrix-cell[data-dimension=\"产品标签\"]", REPORT_CSS)
         self.assertNotIn("min-height:214px", REPORT_CSS)
@@ -173,6 +177,9 @@ class SiteAssetsTest(unittest.TestCase):
         self.assertIn(".cosmo-action-direction", REPORT_CSS)
         self.assertIn(".cosmo-business-meaning{margin:0!important", REPORT_CSS)
         self.assertIn(".comp-image-diagnostic-card", REPORT_CSS)
+        self.assertIn(".image-load-fallback[hidden]{display:none!important}", REPORT_CSS)
+        self.assertIn("fallback.classList.add('is-visible')", REPORT_JS)
+        self.assertIn("if(img.complete&&img.naturalWidth===0)showImageFallback(img)", REPORT_JS)
 
     def test_renderer_writes_shared_assets_and_html_uses_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
