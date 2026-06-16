@@ -46,9 +46,6 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 |---|---|---|
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
 | `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研主控，使用 Sorftime MCP + Firecrawl 生成可审计静态站点三报告 |
-| `amz-market-depth-report` | 内置报告模块 | 市场深度调研报告：大盘、COSMO + Alexa 15 标签、竞品、VOC、TikTok、1688、风险行动 |
-| `amz-lifecycle-strategy-report` | 内置报告模块 | 产品全生命周期拓品战略报告：SKU 候选池、Bundle、路线图、风险矩阵 |
-| `amz-demand-gap-report` | 内置报告模块 | 用户心智断层与需求机会报告：Pain/Joy、KANO × JTBD、用户原声、优先级 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
@@ -61,7 +58,9 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 Amazon / 电商市场调研主控 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链、清洗去重和交互式静态站点交付规范的市场研究报告。
 
-v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的静态站点包，不是 Markdown 套壳：`output/html_reports/` 内含入口页、三份子报告和共享 `assets/report.css`、`assets/report.js`、`assets/report-data.json`；`output/report.html` 只保留为兼容入口。主控先生成唯一 `data/normalized/normalized_data_pack.json`，完成全局清洗、去重、中文映射和质量评分，再由三个内置报告模块按只读数据口径生成各自报告。`validate_market_research_deliverables.py` 校验数据血缘、方法链、静态站点资产、HTML 深度、交互声明和关键质量规则。
+v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。`amz-market-research-orchestrated` 是唯一对外触发入口；市场深度、生命周期、需求断层和 critic 都是它目录内的 `child_skills/` 模块，不作为同级 skill 单独安装或触发。
+
+默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的静态站点包，不是 Markdown 套壳：`output/html_reports/` 内含入口页、三份子报告和共享 `assets/report.css`、`assets/report.js`、`assets/report-data.json`；`output/report.html` 只保留为兼容入口。主控先生成唯一 `data/normalized/normalized_data_pack.json`，完成全局清洗、去重、中文映射和质量评分，再由内部报告模块按只读数据口径生成各自报告。`validate_market_research_deliverables.py` 校验数据血缘、方法链、静态站点资产、HTML 深度、交互声明和关键质量规则。
 
 当前标准化报告模板已固定为四页静态站点：
 
@@ -74,14 +73,15 @@ v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orch
 
 模板采用“完整模板诊断模式”：章节、卡片、图表容器和表格槽位保持稳定；当竞品池、1688 供应链、评论或 TikTok 信号未达可决策门槛时，客户页显示中文诊断和补采动作，不生成伪结论。
 
-职责拆分：
+内部模块职责：
 
-| Skill | 职责 |
+| 模块 | 职责 |
 |---|---|
 | `amz-market-research-orchestrated` | 主控：确认、采集、全局清洗去重、质量评分、调度三子报告、整合交付 |
-| `amz-market-depth-report` | 市场深度：大盘、需求结构、竞品、VOC、标杆打法、TikTok、1688、风险行动 |
-| `amz-lifecycle-strategy-report` | 生命周期：用户画像、SKU、Bundle、30/60/90 路线图、风险矩阵 |
-| `amz-demand-gap-report` | 需求断层：$APPEALS、满意度鸿沟、KANO × JTBD、用户原声和优先级 |
+| `child_skills/market-depth-report` | 市场深度：大盘、COSMO + Alexa 15 标签、竞品、VOC、标杆打法、TikTok、1688、风险行动 |
+| `child_skills/lifecycle-strategy-report` | 生命周期：SKU 候选池、推荐 SKU、Bundle、30/60/90 路线图、风险矩阵 |
+| `child_skills/demand-gap-report` | 需求断层：Pain/Joy、KANO × JTBD、用户原声、未满足点和优先级 |
+| `child_skills/market-research-critic` | 证据强度、结论一致性、数据门禁和客户安全语义评审 |
 
 计划覆盖的调研任务：
 
@@ -202,7 +202,7 @@ Amazon 主图、辅图、A+ 视觉需求稿生成 Skill。
 | Agent 记忆 | 跨会话需要保留的项目事实和流程 |
 | 项目 README | 给团队成员看的最新使用说明 |
 
-触发方式：`/neat`、`整理一下`、`同步一下`、`sync up`。
+触发方式：`/neat`、`整理一下`、`同步一下`、`sync up`。本仓库当前没有独立 `docs/` 目录，收尾时优先同步根 `README.md`、项目根 `AGENTS.md` 和各 skill 的 `SKILL.md` / `references/`。
 
 ### `mattpocock/*`
 
@@ -220,15 +220,17 @@ Amazon 主图、辅图、A+ 视觉需求稿生成 Skill。
 ```text
 shcsca-skills/
 ├── README.md
+├── AGENTS.md
 └── skills/
     ├── amz-create-image/                  # 自建 · Amazon 图片需求稿
     │   ├── SKILL.md
     │   ├── references/
     │   └── templates/
     ├── amz-market-research-orchestrated/  # 自建 · 可执行 v2 · Amazon 市场研究总控
-    ├── amz-market-depth-report/           # 自建 · 市场深度调研子报告
-    ├── amz-lifecycle-strategy-report/     # 自建 · 生命周期拓品战略子报告
-    ├── amz-demand-gap-report/             # 自建 · 需求断层与机会子报告
+    │   ├── child_skills/                  # 内部报告模块和 critic，不作为同级 skill 暴露
+    │   ├── references/
+    │   ├── scripts/
+    │   └── assets/
     ├── zach-feature-demand-validator/     # 自建 · 功能需求验证
     ├── hv-analysis/                       # khazix · 横纵分析法
     ├── khazix-writer/                     # khazix · 长文写作
