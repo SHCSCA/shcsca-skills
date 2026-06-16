@@ -99,6 +99,13 @@ The `COSMO + Alexa 标签识别` section must follow the reference template rhyt
 
 AI-generated label profiles are input candidates only. Every customer-visible COSMO term in a high/medium-confidence relation must be supported by the current relation evidence excerpt or effective data text. Unsupported profile terms must not be shown as chips; the slot should remain a low-coverage Chinese diagnostic instead of displaying cross-category labels.
 
+COSMO visual rules are part of the market template contract:
+
+- The 15-tag matrix is a dense decision module, not a debug table. Matrix cards must avoid heavy nested borders; use status-color top/left accents and light separators only.
+- `cosmo-summary-item`, `cosmo-panel`, and `cosmo-matrix-cell` padding must be restored after importing canonical template CSS. The `143101` reference CSS includes a broad `body.template-market * { margin: 0; padding: 0; box-sizing: border-box }` reset, so shared assets must include final `body.template-market #cosmo-alexa-tags ...` overrides in `REPORT_POST_REFERENCE_CSS`.
+- `cosmo-top-list` and `cosmo-gap-panel` must not render as narrow vertical sidebars. They sit under the matrix as full-width submodules; their rows render as horizontal card flows with responsive `auto-fit` columns.
+- At PC widths 1366 and 1440, the COSMO module must show no left-edge clipping, no horizontal overflow, no collapsed padding, and no customer-visible raw relation codes.
+
 When `supply_conclusion_blocked=true`, the market dashboard must place the supply-chain diagnostic immediately after the KPI dashboard and before cost/profit interpretation.
 
 ### 产品全生命周期拓品战略报告

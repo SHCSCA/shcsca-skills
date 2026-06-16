@@ -57,6 +57,7 @@ Required components:
 
 - `report-header`, `header-meta`, `kpi-grid`, `kpi-card`.
 - `cosmo-layout` with four fixed zones: `cosmo-matrix`, `cosmo-top-list`, `cosmo-gap-panel`, and `cosmo-action-board`. The matrix must render all 15 COSMO + Alexa relation slots with `data-cosmo-relation`, evidence coverage, confidence status, and Listing / QA / ad actions.
+- COSMO visual parity requires `cosmo-matrix` cards to use light separators instead of table-like heavy borders. `cosmo-top-list` and `cosmo-gap-panel` must render below the matrix as full-width horizontal card flows, not as narrow vertical sidebars. Because the reference market CSS resets all element padding, final shared assets must include post-reference `body.template-market #cosmo-alexa-tags ...` overrides that restore KPI, summary, panel, and matrix-card spacing.
 - `chart-container`, `mini-chart`, radar/bar/bubble fallback semantics.
 - `comp-table` or equivalent competitor evidence table.
 - `voc-grid`, `deep-dive-grid`, `comp-deep-card`.

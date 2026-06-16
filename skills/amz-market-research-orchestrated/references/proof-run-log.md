@@ -2,6 +2,46 @@
 
 This file records local proof runs that are relevant to the `amz-market-research-orchestrated` 100-point scorecard. It is a pointer log, not a replacement for the generated proof JSON files.
 
+## 2026-06-16
+
+### COSMO Template Visual Fix
+
+Scope:
+
+- Fixed the `COSMO + Alexa 标签识别` market-depth module after canonical `143101` CSS reset removed COSMO padding.
+- Kept data-expression logic unchanged; this run only changed shared CSS/post-reference overrides and CSS contract tests.
+- Verified that the 15-tag matrix keeps low-border cards, `cosmo-top-list` and `cosmo-gap-panel` render as horizontal full-width submodules, and PC rendering has no left clipping or horizontal overflow.
+
+Rendered sample:
+
+```bash
+python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py --dir reports/wall_lighting_us_20260615 --no-recover
+```
+
+Visual audit evidence:
+
+- Chrome 1440px rendered `reports/wall_lighting_us_20260615/output/html_reports/market-depth-report.html`.
+- DOM/computed-style checks after render:
+  - `summaryPadding = 18px 18px 18px 22px`
+  - `cellPadding = 14px`
+  - `panelPadding = 18px`
+  - `horizontalOverflow = false`
+  - `cosmo-top-list` card width around `262px` at 1440px, no narrow sidebar layout
+
+Regression commands:
+
+```bash
+python -m unittest -v test_site_assets test_site_interactions test_validate_market_research_deliverables
+python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/wall_lighting_us_20260615
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/wall_lighting_us_20260615 --depth deep --reference-visual --download-root C:\Users\wz\Downloads\downloadpage
+```
+
+Result:
+
+- `test_site_assets + test_site_interactions + test_validate_market_research_deliverables`: 74 tests passed
+- `validate_market_research_deliverables.py`: `validate_ok`
+- `run_acceptance_proof.py`: `overall_pass=true`, `delivery_mode=full_acceptance`, `full_acceptance_pass=true`
+
 ## 2026-06-03
 
 ### Template Parity

@@ -46,9 +46,9 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 |---|---|---|
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
 | `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研主控，使用 Sorftime MCP + Firecrawl 生成可审计静态站点三报告 |
-| `amz-market-depth-report` | 自建 · 子 Skill | 市场深度调研报告：大盘、需求结构、竞品、VOC、TikTok、1688、风险行动 |
-| `amz-lifecycle-strategy-report` | 自建 · 子 Skill | 产品全生命周期拓品战略报告：SKU、Bundle、路线图、风险矩阵 |
-| `amz-demand-gap-report` | 自建 · 子 Skill | 用户心智断层与需求机会报告：$APPEALS、KANO × JTBD、用户原声、优先级 |
+| `amz-market-depth-report` | 内置报告模块 | 市场深度调研报告：大盘、COSMO + Alexa 15 标签、竞品、VOC、TikTok、1688、风险行动 |
+| `amz-lifecycle-strategy-report` | 内置报告模块 | 产品全生命周期拓品战略报告：SKU 候选池、Bundle、路线图、风险矩阵 |
+| `amz-demand-gap-report` | 内置报告模块 | 用户心智断层与需求机会报告：Pain/Joy、KANO × JTBD、用户原声、优先级 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
@@ -61,7 +61,18 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 Amazon / 电商市场调研主控 Skill，用 Sorftime MCP 做主数据源，Firecrawl 做公开网页补充，生成带数据血缘、方法链、清洗去重和交互式静态站点交付规范的市场研究报告。
 
-v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的静态站点包，不是 Markdown 套壳：`output/html_reports/` 内含入口页、三份子报告和共享 `assets/report.css`、`assets/report.js`、`assets/report-data.json`；`output/report.html` 只保留为兼容入口。主控先生成唯一 `data/normalized/normalized_data_pack.json`，完成全局清洗、去重、中文映射和质量评分，再由三个子 Skill 按只读数据口径生成各自报告。`validate_market_research_deliverables.py` 校验数据血缘、方法链、静态站点资产、HTML 深度、交互声明和关键质量规则。
+v2 已内置最小可执行流程，不再依赖未随仓库提供的外部 orchestrator。默认输出 `HTML + Markdown + Data Pack`，其中 HTML 是离线可打开的静态站点包，不是 Markdown 套壳：`output/html_reports/` 内含入口页、三份子报告和共享 `assets/report.css`、`assets/report.js`、`assets/report-data.json`；`output/report.html` 只保留为兼容入口。主控先生成唯一 `data/normalized/normalized_data_pack.json`，完成全局清洗、去重、中文映射和质量评分，再由三个内置报告模块按只读数据口径生成各自报告。`validate_market_research_deliverables.py` 校验数据血缘、方法链、静态站点资产、HTML 深度、交互声明和关键质量规则。
+
+当前标准化报告模板已固定为四页静态站点：
+
+| 文件 | 用途 |
+|---|---|
+| `output/html_reports/report.html` | PC 决策驾驶舱：核心判断、可用结论、阻断项、数据完整度、三份报告入口 |
+| `output/html_reports/market-depth-report.html` | 市场深度页：COSMO + Alexa 15 标签、竞品全景、VOC、TikTok、1688 供应链诊断 |
+| `output/html_reports/lifecycle-strategy-report.html` | 生命周期页：真实 SKU 候选池、推荐 SKU、拓品生态、Bundle 和阶段路线 |
+| `output/html_reports/demand-gap-report.html` | 需求断层页：正负评论分栏、中文洞察、未满足点和可执行动作 |
+
+模板采用“完整模板诊断模式”：章节、卡片、图表容器和表格槽位保持稳定；当竞品池、1688 供应链、评论或 TikTok 信号未达可决策门槛时，客户页显示中文诊断和补采动作，不生成伪结论。
 
 职责拆分：
 
@@ -91,6 +102,24 @@ v2 主要数据源：
 | TikTok Shop 商品 / 趋势 / 视频 / 达人 | Sorftime MCP |
 | 1688 相似货源和采购成本代理 | Sorftime MCP |
 | 行业报告 / 品牌站 / 测评 / 法规 / 召回 | Firecrawl MCP |
+
+质量门禁：
+
+| 门禁 | 规则 |
+|---|---|
+| 竞品池 | 有效竞品不足标准门槛时，不输出完整市场结论，改为补采诊断 |
+| 相关性 | 非当前研究对象的产品、关键词、评论和供应记录不得进入客户 view model |
+| 1688 供应链 | 去重有效报价、标题/链接覆盖率、赛道匹配和价格分布同时达标后才允许毛利率测算 |
+| COSMO + Alexa 15 标签 | 15 类关系必须全部存在；客户页展示中文标签、证据覆盖、置信度、业务解释和 Listing / QA / 广告动作 |
+| 客户安全 | 客户 HTML 禁止展示 `source_id`、`provider`、`raw_path`、技术错误和占位字段 |
+
+常用验证命令：
+
+```bash
+python -m unittest -v test_site_assets test_site_interactions test_validate_market_research_deliverables
+python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/<report_dir>
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<report_dir> --depth deep --reference-visual --download-root C:\Users\wz\Downloads\downloadpage
+```
 
 ### `amz-create-image`
 
