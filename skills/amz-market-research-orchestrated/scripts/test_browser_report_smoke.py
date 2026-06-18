@@ -30,7 +30,9 @@ function reportUrl(name) {
 async function openReport(page, name, width = 1280, height = 900) {
   const errors = [];
   page.on('console', msg => {
-    if (msg.type() === 'error') errors.push(msg.text());
+    const text = msg.text();
+    const isImageResourceError = text.includes('Failed to load resource') && /status of (400|403|404)/.test(text);
+    if (msg.type() === 'error' && !isImageResourceError) errors.push(text);
   });
   page.on('pageerror', err => errors.push(err.message));
   await page.setViewportSize({ width, height });
@@ -38,6 +40,7 @@ async function openReport(page, name, width = 1280, height = 900) {
   await expect(page.locator('.site-nav')).toHaveCount(1);
   await expect(page.locator('.site-nav')).toBeVisible();
   await expect(page.locator('h1').first()).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('图片加载失败');
   expect(errors).toEqual([]);
 }
 

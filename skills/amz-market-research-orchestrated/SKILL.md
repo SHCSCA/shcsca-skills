@@ -169,7 +169,7 @@ Fail-closed 恢复与停止规则：
 - TikTok 验证：跑 `collect_sorftime_tiktok_signals.py`，内部按 Sorftime schema 调用 `tiktok_similar_product(searchName,page,site)`、`tiktok_product_detail(productId,site)`、`tiktok_product_trend(productId,site)`、`tiktok_product_video(productId,page,site)`、`tiktok_product_video_author(productId,site)`。
 - 供应链验证：跑 `collect_sorftime_1688_suppliers.py`，内部按 Sorftime 官方文档调用 `ali1688_similar_product(searchName,page)`，并记录每页实际返回字段；1688 官方 16 字段覆盖率写入 `documented_field_coverage`，`Url/url` 只作为 `URL` 别名处理。若 MCP 实际响应缺少 `Title` / `URL`，必须阻断供应链毛利率结论并写入诊断。
 - 竞品池补采：跑 `collect_sorftime_products.py`，内部优先按 Amazon schema 调用 `product_search`，必要时回退到 `keyword_search_results`，不得复用 TikTok 或 1688 参数结构。
-- Amazon 竞品主图：`collect_sorftime_products.py` 必须统计 `image_url_coverage`。若有效竞品池图片覆盖不足，必须写入 `data_gaps.type=competitor_image_coverage` 并继续用 `collect_sorftime_product_enrichment.py` 对核心 ASIN 调用 `product_detail` 补采图片字段；竞品全景扫描、竞品表、标杆竞品狙击拆解、生命周期 SKU 卡和 SKU 表只能展示 Amazon 竞品主图或 ASIN 详情图，不能使用 1688 货源图冒充 Amazon 竞品图。所有远程竞品图必须带本地静态 `report.js` 加载失败兜底，远程媒体被阻断或超时时显示中文图片诊断，不允许客户页出现浏览器破图。生命周期候选池应把参考竞品图写入 `reference_image_url`；若 Sorftime 没返回图片，保留 SKU 槽位并显示数据诊断，不造图、不借用供应端图片。
+- Amazon 竞品主图：`collect_sorftime_products.py` 必须统计 `image_url_coverage`。若有效竞品池图片覆盖不足，必须写入 `data_gaps.type=competitor_image_coverage` 并继续用 `collect_sorftime_product_enrichment.py` 对核心 ASIN 调用 `product_detail` 补采图片字段；竞品全景扫描、竞品表、标杆竞品狙击拆解、生命周期 SKU 卡和 SKU 表只能展示 Amazon 竞品主图或 ASIN 详情图，不能使用 1688 货源图冒充 Amazon 竞品图。所有远程竞品图必须带本地静态 `report.js` 加载失败兜底；若 Sorftime 没返回图片 URL，保留图片槽位并显示中文数据诊断；若已有 Amazon 图片 URL 但浏览器运行时被远端阻断或超时，保留稳定图片框并静默切换为中性占位，不允许客户页出现浏览器破图或 `图片加载失败`、`竞品图片未返回`、`参考竞品图片未返回` 等失败文案。生命周期候选池应把参考竞品图写入 `reference_image_url`；若 Sorftime 没返回图片，保留 SKU 槽位并显示数据诊断，不造图、不借用供应端图片。
 - Amazon 竞品增强：跑 `collect_sorftime_product_enrichment.py`，对已入池 ASIN 调用 `product_detail`、`product_trend`、`product_variations`、`product_traffic_terms`、`competitor_product_keywords`。可用维度必须写回 Data Pack；返回空的维度必须进入 `data_gaps`，不能写成已验证事实。若某个维度对首个 ASIN 返回 0 行，必须换其他已入池 ASIN 继续复测；多 ASIN 仍为空时才写成当前 Sorftime 维度缺口。
 - MCP 字段审计：当用户质疑官方字段与实际结果不一致，或采集字段缺失时，跑 `audit_sorftime_mcp_contracts.py`，保存 Amazon / TikTok / 1688 的 schema、实际参数、返回行数和实际字段集合。`tools/list` 只能证明入参 schema；出参字段覆盖率必须来自真实 `tools/call` 抽样。Amazon / TikTok 没有官方固定 16 字段清单时，以本 skill 的标准化维度覆盖率审计；1688 按官方 16 字段审计。
 
@@ -508,7 +508,7 @@ python skills/amz-market-research-orchestrated/scripts/render_dashboard_html.py 
 python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/{task_id} --depth standard
 ```
 
-只有 proof 输出 `overall_pass=true`，且其中 validator 步骤为通过，才能宣称交付完成。单独的 `delivery_result.status=complete` 或 `critic_review.pass=true` 都不是完成证明。
+只有 proof 输出 `overall_pass=true`、`delivery_mode=full_acceptance`、`full_acceptance_pass=true`，且 validator 步骤通过，才能宣称完整市场研究交付完成。若 proof 输出 `overall_pass=false`、`delivery_mode=diagnostic_delivery`、`diagnostic_delivery_pass=true`，只能交付“完整模板诊断报告”：四页模板必须完整，客户页只能展示中文诊断和补采动作，不得宣称完整市场结论或毛利率可测算。单独的 `delivery_result.status=complete` 或 `critic_review.pass=true` 都不是完成证明。
 
 ## 报告质量规则
 

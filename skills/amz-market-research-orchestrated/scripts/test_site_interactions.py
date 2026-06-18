@@ -128,7 +128,7 @@ const imageFrame = root.appendChild(new Element('span', 'image-frame'));
 const image = imageFrame.appendChild(new Element('img', 'comp-product-thumb'));
 image.complete = true;
 image.naturalWidth = 0;
-const imageFallback = imageFrame.appendChild(new Element('span', 'image-load-fallback', '图片加载失败'));
+const imageFallback = imageFrame.appendChild(new Element('span', 'image-load-fallback', '图片未返回'));
 imageFallback.hidden = true;
 image.nextElementSibling = imageFallback;
 

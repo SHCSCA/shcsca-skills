@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,25 @@ def write_json(path: Path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def write_text(path: Path, text: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 class RunAcceptanceProofTest(unittest.TestCase):
+    def test_run_step_times_out_instead_of_hanging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            step = proof_runner.run_step(
+                "slow_step",
+                [sys.executable, "-c", "import time; time.sleep(2)"],
+                Path(tmp),
+                timeout_seconds=1,
+            )
+
+        self.assertFalse(step["pass"])
+        self.assertEqual(step["returncode"], 124)
+        self.assertIn("timed out", step["stderr"])
+
     def test_run_proof_writes_json_and_markdown_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -74,6 +93,7 @@ class RunAcceptanceProofTest(unittest.TestCase):
             self.assertIsNone(proof["delivery_status"])
             self.assertIsNone(proof["critic_pass"])
             self.assertTrue(proof["stale_delivery_ignored"])
+            self.assertEqual(proof["decision"], "No-Go")
             self.assertEqual([step["name"] for step in proof["steps"]], ["template_parity", "readiness", "readiness_recovery", "readiness_after_recovery"])
 
     def test_partial_diagnostic_delivery_can_pass_without_full_acceptance(self):
@@ -108,13 +128,62 @@ class RunAcceptanceProofTest(unittest.TestCase):
             with patch.object(proof_runner, "run_step", side_effect=fake_step):
                 proof = proof_runner.run_proof(report_dir, "deep")
 
-            self.assertTrue(proof["overall_pass"])
+            self.assertFalse(proof["overall_pass"])
             self.assertFalse(proof["full_acceptance_pass"])
             self.assertTrue(proof["diagnostic_delivery_pass"])
             self.assertEqual(proof["delivery_mode"], "diagnostic_delivery")
+            delivery = json.loads((report_dir / "output" / "delivery_result.json").read_text(encoding="utf-8"))
+            self.assertEqual(delivery["delivery_mode"], "diagnostic_delivery")
+            self.assertFalse(delivery["overall_pass"])
+            self.assertFalse(delivery["full_acceptance_pass"])
+            self.assertTrue(delivery["diagnostic_delivery_pass"])
             markdown = (report_dir / "output" / "acceptance_proof.md").read_text(encoding="utf-8")
             self.assertIn("Delivery mode: `diagnostic_delivery`", markdown)
             self.assertIn("full_acceptance_pass: `False`", markdown)
+
+    def test_skip_render_uses_existing_diagnostic_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            for name in ["report.html", "market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                write_text(report_dir / "output" / "html_reports" / name, "<!doctype html><html><body>诊断</body></html>")
+            write_json(report_dir / "output" / "delivery_result.json", {"status": "diagnostic", "decision": "No-Go"})
+            write_json(report_dir / "analysis" / "critic_review.json", {"pass": False, "score": 0, "grade": "D"})
+            write_text(
+                report_dir / "output" / "report.md",
+                "# Report\n\n- readiness: acceptance_ready=true\n- decision: Watch\n- final_decision: Watch\n- rationale: 样本达到标准版门槛\n",
+            )
+
+            def fake_step(name, _command, _cwd):
+                if name in {"readiness", "readiness_after_recovery"}:
+                    write_json(
+                        report_dir / "data" / "normalized" / "data_readiness_report.json",
+                        {
+                            "acceptance_ready": False,
+                            "partial_report_ready": False,
+                            "sample_class": "non_acceptance_sample",
+                            "blocking_gaps": [{"module": "keyword_sample_depth"}],
+                            "warnings": [],
+                        },
+                    )
+                    return {"name": name, "command": [], "returncode": 2, "stdout": "", "stderr": "", "pass": False}
+                if name == "readiness_recovery":
+                    return {"name": name, "command": [], "returncode": 124, "stdout": "", "stderr": "step timed out", "pass": False}
+                return {"name": name, "command": [], "returncode": 0, "stdout": "", "stderr": "", "pass": True}
+
+            with patch.object(proof_runner, "run_step", side_effect=fake_step):
+                proof = proof_runner.run_proof(report_dir, "deep", skip_render=True)
+
+            self.assertFalse(proof["overall_pass"])
+            self.assertTrue(proof["diagnostic_delivery_pass"])
+            self.assertEqual(proof["delivery_mode"], "diagnostic_delivery")
+            self.assertIn("existing_rendered_artifacts", [step["name"] for step in proof["steps"]])
+            self.assertIn("validate", [step["name"] for step in proof["steps"]])
+            report_md = (report_dir / "output" / "report.md").read_text(encoding="utf-8")
+            self.assertIn("overall_pass: false", report_md)
+            self.assertIn("final_decision: No-Go", report_md)
+            self.assertIn("Go / Watch / No-Go", report_md)
+            self.assertNotIn("acceptance_ready=true", report_md)
+            self.assertNotIn("样本达到标准版门槛", report_md)
 
     def test_critic_failure_blocks_overall_pass_even_when_steps_succeed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,6 +210,33 @@ class RunAcceptanceProofTest(unittest.TestCase):
             self.assertFalse(proof["overall_pass"])
             self.assertFalse(proof["critic_pass"])
             self.assertTrue(proof["readiness"]["acceptance_ready"])
+
+    def test_low_score_or_c_grade_critic_blocks_overall_pass_even_if_pass_true(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(report_dir / "output" / "delivery_result.json", {"status": "complete", "decision": "Watch"})
+            write_json(report_dir / "analysis" / "critic_review.json", {"pass": True, "score": 68, "grade": "C"})
+
+            def fake_step(name, _command, _cwd):
+                if name in {"readiness", "readiness_after_recovery"}:
+                    write_json(
+                        report_dir / "data" / "normalized" / "data_readiness_report.json",
+                        {
+                            "acceptance_ready": True,
+                            "sample_class": "acceptance_sample",
+                            "blocking_gaps": [],
+                            "warnings": [],
+                        },
+                    )
+                return {"name": name, "command": [], "returncode": 0, "stdout": "", "stderr": "", "pass": True}
+
+            with patch.object(proof_runner, "run_step", side_effect=fake_step):
+                proof = proof_runner.run_proof(report_dir, "standard")
+
+            self.assertFalse(proof["overall_pass"])
+            self.assertFalse(proof["critic_pass"])
+            self.assertEqual(proof["critic_score"], 68)
+            self.assertEqual(proof["critic_grade"], "C")
 
     def test_reference_visual_compare_can_be_added_to_acceptance_proof(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,6 +277,78 @@ class RunAcceptanceProofTest(unittest.TestCase):
             markdown = (report_dir / "output" / "acceptance_proof.md").read_text(encoding="utf-8")
             self.assertIn("Template Reference Visual Compare", markdown)
             self.assertIn("template_reference_visual_compare.json", markdown)
+
+    def test_reference_visual_compare_records_skip_for_diagnostic_delivery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            for name in ["report.html", "market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                write_text(report_dir / "output" / "html_reports" / name, "<!doctype html><html><body>诊断</body></html>")
+            write_json(report_dir / "output" / "delivery_result.json", {"status": "diagnostic", "decision": "No-Go"})
+            write_json(report_dir / "analysis" / "critic_review.json", {"pass": False, "score": 0, "grade": "D"})
+
+            def fake_step(name, _command, _cwd):
+                if name in {"readiness", "readiness_after_recovery"}:
+                    write_json(
+                        report_dir / "data" / "normalized" / "data_readiness_report.json",
+                        {
+                            "acceptance_ready": False,
+                            "partial_report_ready": False,
+                            "sample_class": "non_acceptance_sample",
+                            "blocking_gaps": [{"module": "keyword_sample_depth"}],
+                            "warnings": [],
+                        },
+                    )
+                    return {"name": name, "command": [], "returncode": 2, "stdout": "", "stderr": "", "pass": False}
+                if name == "readiness_recovery":
+                    return {"name": name, "command": [], "returncode": 124, "stdout": "", "stderr": "step timed out", "pass": False}
+                return {"name": name, "command": [], "returncode": 0, "stdout": "", "stderr": "", "pass": True}
+
+            with patch.object(proof_runner, "run_step", side_effect=fake_step):
+                proof = proof_runner.run_proof(report_dir, "deep", skip_render=True, reference_visual=True)
+
+            self.assertFalse(proof["overall_pass"])
+            self.assertTrue(proof["reference_visual_skipped_reason"])
+            self.assertIn("reference_visual_compare_skipped", [step["name"] for step in proof["steps"]])
+            markdown = (report_dir / "output" / "acceptance_proof.md").read_text(encoding="utf-8")
+            self.assertIn("skipped", markdown)
+
+    def test_sync_delivery_result_updates_public_site_data_without_audit_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "output" / "delivery_result.json",
+                {
+                    "status": "blocked",
+                    "decision": "Watch",
+                    "critic_review": {"path": "analysis/critic_review.json"},
+                    "data_readiness": {
+                        "decision": "No-Go",
+                        "delivery_mode": "diagnostic_delivery",
+                        "evidence_grade": "D",
+                        "score": 41,
+                        "acceptance_ready": False,
+                        "path": "data/normalized/data_readiness_report.json",
+                    },
+                },
+            )
+            write_json(report_dir / "output" / "html_reports" / "assets" / "report-data.json", {"decision": "Watch"})
+            proof = {
+                "decision": "No-Go",
+                "delivery_mode": "diagnostic_delivery",
+                "overall_pass": False,
+                "full_acceptance_pass": False,
+                "diagnostic_delivery_pass": True,
+            }
+
+            proof_runner.sync_delivery_result_with_proof(report_dir, proof, can_trust_delivery=True)
+
+            site_data = json.loads((report_dir / "output" / "html_reports" / "assets" / "report-data.json").read_text(encoding="utf-8"))
+            payload = json.dumps(site_data["delivery_result"], ensure_ascii=False)
+            self.assertEqual(site_data["decision"], "No-Go")
+            self.assertEqual(site_data["delivery_result"]["delivery_mode"], "diagnostic_delivery")
+            self.assertTrue(site_data["delivery_result"]["diagnostic_delivery_pass"])
+            self.assertNotIn("critic_review", payload)
+            self.assertNotIn("path", payload)
 
 
 if __name__ == "__main__":

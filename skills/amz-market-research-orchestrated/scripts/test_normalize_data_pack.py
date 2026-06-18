@@ -159,6 +159,326 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertNotIn("儿童陪伴", summary)
             self.assertTrue(any(token in summary for token in ["轻便", "安装", "使用满意度", "场景匹配"]))
 
+    def test_cupping_reviews_remap_stale_installation_theme_to_therapy_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "category": "Health & Household",
+                        "seed_keywords": ["electric cupping massager", "cupping therapy", "red light cupping"],
+                    },
+                    "products": [],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [
+                        {
+                            "asin": "B0CUPPING1",
+                            "rating": 5,
+                            "title": "Works great for my back pain. Easy to use",
+                            "text": "It has multiple settings for temperature and pressure levels. I am getting a lot of use and relief.",
+                            "themes_cn": ["安装与固定"],
+                        }
+                    ],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            review = data_pack["reviews"][0]
+            self.assertNotIn("安装与固定", review["themes_cn"])
+            self.assertTrue(any(token in review["themes_cn"] for token in ["性能与效果", "易用性"]))
+            self.assertNotIn("安装", review["summary_cn"])
+            self.assertIn(review["sentiment"], ["positive", "neutral", "negative"])
+
+    def test_cupping_reviews_clean_stale_normalized_installation_summary_on_rerun(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "seed_keywords": ["electric cupping massager", "cupping therapy"],
+                    },
+                    "products": [],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [
+                        {
+                            "asin": "B0CUPPING2",
+                            "rating": 5,
+                            "title": "Easy to use",
+                            "text": "First use. Easy and comfortable to use. Stay tuned for expected results.",
+                            "themes": ["installation_mounting"],
+                            "themes_cn": ["安装与固定"],
+                            "summary_cn": "安装和上手体验获得正向反馈",
+                        }
+                    ],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            review = data_pack["reviews"][0]
+            self.assertEqual(review["themes_cn"], ["易用性"])
+            self.assertNotIn("安装", review["summary_cn"])
+            self.assertIn("操作", review["summary_cn"])
+
+    def test_cupping_keywords_are_mapped_and_effective_products_are_segmented(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "category": "Health & Household",
+                        "seed_keywords": ["electric cupping massager", "cupping therapy", "red light cupping"],
+                    },
+                    "products": [
+                        {
+                            "asin": "B0CUPSEG01",
+                            "title": "Electric Cupping Massager with Heat and Red Light Therapy for Back Pain",
+                            "brand": "TheraCup",
+                            "category": "Health & Household",
+                            "segment": "未分层",
+                            "source_id": "src_cupping",
+                            "provider": "sorftime",
+                        }
+                    ],
+                    "keywords": [
+                        {"keyword": "cupping", "monthly_search_volume": 65629, "source_id": "src_kw"},
+                        {"keyword": "back massager", "monthly_search_volume": 181086, "source_id": "src_kw"},
+                        {"keyword": "body sculpting machine", "monthly_search_volume": 54152, "source_id": "src_kw"},
+                    ],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            effective_keywords = {item["keyword"]: item for item in data_pack["effective_keywords"]}
+            self.assertEqual(effective_keywords["cupping"]["keyword_cn"], "拔罐")
+            self.assertEqual(effective_keywords["back massager"]["keyword_cn"], "背部按摩器")
+            self.assertEqual(effective_keywords["body sculpting machine"]["keyword_cn"], "塑形理疗仪")
+            product = data_pack["effective_products"][0]
+            self.assertNotEqual(product.get("segment"), "未分层")
+            self.assertIn(product.get("segment_cn"), {"热敷红光电动拔罐器", "单杯智能电动拔罐器", "电动拔罐按摩器"})
+
+    def test_cupping_normalization_rebuilds_customer_fields_and_aliases_from_current_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "seed_keywords": ["electric cupping massager", "red light cupping"],
+                    },
+                    "products": [
+                        {
+                            "asin": "B0CUPALIAS",
+                            "title": "Smart Electric Cupping Massager with Heat Red Light and 12 Suction Levels",
+                            "title_cn": "户外感应灯",
+                            "segment": "户外感应灯",
+                            "segment_cn": "户外感应灯",
+                            "estimated_monthly_sales": 2862,
+                            "source_id": "src_cupping",
+                            "provider": "sorftime",
+                        }
+                    ],
+                    "keywords": [{"keyword": "electric cupping massager", "keyword_cn": "电动拔罐按摩器"}],
+                    "categories": [],
+                    "reviews": [
+                        {
+                            "asin": "B0CUPALIAS",
+                            "rating": 5,
+                            "title": "Works well",
+                            "text": "The heat and suction levels help my back recover after workouts.",
+                        }
+                    ],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [
+                        {
+                            "title": "电动拔罐器刮痧仪跨境新款",
+                            "supplier_name": "温州供应商",
+                            "price_rmb": 32,
+                            "url": "https://detail.1688.com/offer/1.html",
+                            "seed_keyword": "电动拔罐器",
+                        }
+                    ],
+                    "web_documents": [],
+                    "data_gaps": [
+                        {
+                            "module": "market_segment_split",
+                            "reason": "Amazon赛道拆分不足：当前赛道分布 {'户外感应灯': 6, '氛围灯': 1}。",
+                        }
+                    ],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            product = data_pack["effective_products"][0]
+            self.assertEqual(product["monthly_sales"], 2862)
+            self.assertEqual(product["market_segment"], product["segment_cn"])
+            self.assertNotIn(product["segment_cn"], {"户外感应灯", "氛围灯"})
+            self.assertNotIn(product["title_cn"], {"户外感应灯", "氛围灯"})
+            self.assertEqual(data_pack["effective_suppliers"][0]["price"], 32)
+            self.assertEqual(data_pack["effective_reviews"][0]["review_text"], data_pack["effective_reviews"][0]["text"])
+            self.assertFalse(
+                any("户外感应灯" in json.dumps(gap, ensure_ascii=False) for gap in data_pack["data_gaps"]),
+                data_pack["data_gaps"],
+            )
+
+    def test_cupping_effective_products_exclude_manual_cups_gua_sha_and_generic_massagers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "sources": [],
+                    "research_object": {
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "category": "Health & Household",
+                        "seed_keywords": ["electric cupping massager", "smart cupping therapy"],
+                    },
+                    "products": [
+                        {
+                            "asin": "B0VALIDCUP1",
+                            "title": "Smart Electric Cupping Massager with Heat Red Light and Adjustable Suction",
+                            "brand": "TheraCup",
+                            "price": 49.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0MANUALCUP",
+                            "title": "Silicone Cupping Therapy Sets Anti Cellulite Vacuum Suction Cups",
+                            "brand": "ManualCup",
+                            "price": 9.99,
+                            "segment_cn": "套装型电动拔罐器",
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0GUASHATOOL",
+                            "title": "Gua Sha Jade Stone Massage Tool for Face and Body Skin Massage",
+                            "brand": "StoneTool",
+                            "price": 6.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0WOODTOOLS",
+                            "title": "Wood Therapy Massage Tools Maderoterapia Lymphatic Drainage Massager Kit",
+                            "brand": "WoodKit",
+                            "price": 24.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0DEEPMASS",
+                            "title": "Deep Tissue Back Massager for Pain Relief Body Massager",
+                            "brand": "CoreMassager",
+                            "price": 129.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0PUMPSET",
+                            "title": "Cupping Kit with Pump and Magnetics Professional Chinese Cupping Set",
+                            "brand": "ManualPump",
+                            "price": 23.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0MANUALPUMP",
+                            "title": "Professional Vacuum Cupping Set for Cellulite Reduction Muscle Pain Relief with Manual Pump",
+                            "brand": "PumpCup",
+                            "price": 18.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0HOTGUASHA",
+                            "title": "Electric Heated Gua Sha Facial Sculpting Tool with Vibration and Red Light",
+                            "brand": "GuaHeat",
+                            "price": 49.99,
+                            "source_id": "src_product",
+                        },
+                        {
+                            "asin": "B0SCULPTCUP",
+                            "title": "5-in-1 Body Sculpting Machine – Gua Sha & Cupping Vacuum Massage Device, Lymphatic Drainage Massage, Anti-Cellulite Tool",
+                            "brand": "SculptTool",
+                            "price": 119.99,
+                            "segment_cn": "美体/淋巴引流负压仪",
+                            "source_id": "src_product",
+                        },
+                    ],
+                    "keywords": [{"keyword": "electric cupping massager", "keyword_cn": "电动拔罐按摩器"}],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            result = self.run_normalizer(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            effective_asins = {product.get("asin") for product in data_pack["effective_products"]}
+            self.assertEqual(effective_asins, {"B0VALIDCUP1"})
+            removed = {product.get("asin"): (product.get("research_relevance") or {}).get("reason") for product in data_pack["products"]}
+            self.assertEqual(removed["B0MANUALCUP"], "non_electric_manual_cupping_accessory")
+            self.assertEqual(removed["B0GUASHATOOL"], "non_electric_manual_cupping_accessory")
+            self.assertEqual(removed["B0WOODTOOLS"], "non_electric_manual_cupping_accessory")
+            self.assertEqual(removed["B0DEEPMASS"], "non_electric_manual_cupping_accessory")
+            self.assertEqual(removed["B0PUMPSET"], "non_cupping_accessory_or_noise")
+            self.assertEqual(removed["B0MANUALPUMP"], "non_cupping_accessory_or_noise")
+            self.assertEqual(removed["B0HOTGUASHA"], "missing_cupping_signal")
+            self.assertEqual(removed["B0SCULPTCUP"], "non_electric_manual_cupping_accessory")
+
     def test_dedupes_keywords_and_adds_chinese_mapping(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -404,6 +724,10 @@ class NormalizeDataPackTest(unittest.TestCase):
             self.assertEqual([kw["keyword"].casefold() for kw in data_pack["effective_keywords"]], ["under cabinet lighting"])
             self.assertEqual(data_pack["research_relevance"]["removed_counts"]["products"], 1)
             self.assertEqual(data_pack["research_relevance"]["removed_counts"]["keywords"], 1)
+            self.assertEqual(data_pack["effective_counts"], data_pack["research_relevance"]["effective_counts"])
+            self.assertEqual(data_pack["effective_counts"]["products"], 1)
+            self.assertEqual(data_pack["effective_counts"]["keywords"], 1)
+            self.assertEqual(data_pack["effective_counts"]["reviews"], 1)
             self.assertTrue(data_pack["categories"])
             self.assertEqual(data_pack["categories"][0]["product_count"], 1)
 
@@ -449,6 +773,66 @@ class NormalizeDataPackTest(unittest.TestCase):
             ]
             self.assertEqual(len(enrichment_gaps), 1)
             self.assertEqual(sum(1 for gap in data_pack["data_gaps"] if gap == "同一文本缺口"), 1)
+
+    def test_normalizes_supplier_search_keyword_for_traceability(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "research_object": {"value": "electric cupping massager", "seed_keywords": ["electric cupping massager"]},
+                    "products": [],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [
+                        {
+                            "title": "电动拔罐器刮痧仪跨境新款",
+                            "supplier_name": "温州供应商",
+                            "price_rmb": 32,
+                            "url": "https://detail.1688.com/offer/1.html",
+                            "seed_keyword": "电动拔罐器",
+                        }
+                    ],
+                    "web_documents": [],
+                    "data_gaps": [],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            self.run_normalizer(report_dir)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(data_pack["effective_suppliers"][0]["search_keyword"], "电动拔罐器")
+
+    def test_backfills_empty_data_gap_reason_and_next_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "data" / "data_pack.json",
+                {
+                    "research_object": {"value": "electric cupping massager", "seed_keywords": ["electric cupping massager"]},
+                    "products": [],
+                    "keywords": [],
+                    "categories": [],
+                    "reviews": [],
+                    "tiktok_products": [],
+                    "tiktok_videos": [],
+                    "suppliers": [],
+                    "web_documents": [],
+                    "data_gaps": [{"module": "tiktok_signal_depth"}, {"type": "amazon_product_enrichment_empty_dimensions"}],
+                    "quality": {"overall_score": 0.8, "grade": "B"},
+                },
+            )
+
+            self.run_normalizer(report_dir)
+            data_pack = json.loads((report_dir / "data" / "data_pack.json").read_text(encoding="utf-8"))
+            dict_gaps = [gap for gap in data_pack["data_gaps"] if isinstance(gap, dict)]
+
+            self.assertTrue(all(gap.get("reason") for gap in dict_gaps))
+            self.assertTrue(all(gap.get("next_step") for gap in dict_gaps))
 
     def test_removes_stale_keyword_and_review_gaps_when_counts_recover(self):
         with tempfile.TemporaryDirectory() as tmp:

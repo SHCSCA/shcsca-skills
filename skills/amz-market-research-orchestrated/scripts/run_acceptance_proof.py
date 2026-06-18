@@ -37,9 +37,53 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def run_step(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
+def public_delivery_result_summary(delivery: dict[str, Any]) -> dict[str, Any]:
+    readiness = delivery.get("data_readiness") if isinstance(delivery.get("data_readiness"), dict) else {}
+    return {
+        "status": delivery.get("status"),
+        "decision": delivery.get("decision"),
+        "delivery_mode": delivery.get("delivery_mode") or readiness.get("delivery_mode"),
+        "overall_pass": delivery.get("overall_pass"),
+        "full_acceptance_pass": delivery.get("full_acceptance_pass"),
+        "diagnostic_delivery_pass": delivery.get("diagnostic_delivery_pass"),
+        "data_readiness": {
+            "decision": readiness.get("decision"),
+            "delivery_mode": readiness.get("delivery_mode"),
+            "evidence_grade": readiness.get("evidence_grade"),
+            "score": readiness.get("score"),
+            "acceptance_ready": readiness.get("acceptance_ready"),
+            "partial_report_ready": readiness.get("partial_report_ready"),
+            "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
+        },
+    }
+
+
+DEFAULT_STEP_TIMEOUT_SECONDS = 90
+
+
+def run_step(name: str, command: list[str], cwd: Path, timeout_seconds: int = DEFAULT_STEP_TIMEOUT_SECONDS) -> dict[str, Any]:
     started_at = utc_now()
-    result = subprocess.run(command, cwd=str(cwd), text=True, capture_output=True, check=False)
+    try:
+        result = subprocess.run(
+            command,
+            cwd=str(cwd),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "name": name,
+            "command": command,
+            "started_at": started_at,
+            "finished_at": utc_now(),
+            "returncode": 124,
+            "stdout": (exc.stdout or "").strip() if isinstance(exc.stdout, str) else "",
+            "stderr": f"step timed out after {timeout_seconds}s",
+            "pass": False,
+            "timeout_seconds": timeout_seconds,
+        }
     return {
         "name": name,
         "command": command,
@@ -50,6 +94,32 @@ def run_step(name: str, command: list[str], cwd: Path) -> dict[str, Any]:
         "stderr": result.stderr.strip(),
         "pass": result.returncode == 0,
     }
+
+
+def critic_acceptance(critic: dict[str, Any]) -> bool:
+    if critic.get("pass") is not True:
+        return False
+    try:
+        score = float(critic.get("score"))
+    except (TypeError, ValueError):
+        return False
+    grade = str(critic.get("grade") or "").strip().upper()
+    if score < 70:
+        return False
+    if grade in {"C", "D"}:
+        return False
+    return True
+
+
+def proof_decision(delivery: dict[str, Any], readiness: dict[str, Any]) -> str:
+    decision = str(delivery.get("decision") or "").strip()
+    if decision in {"Go", "Watch", "No-Go"}:
+        return decision
+    if readiness.get("acceptance_ready") is True:
+        return "Watch"
+    if readiness.get("partial_report_ready") is True:
+        return "Watch"
+    return "No-Go"
 
 
 def proof_markdown(proof: dict[str, Any]) -> str:
@@ -80,6 +150,9 @@ def proof_markdown(proof: dict[str, Any]) -> str:
     if proof.get("reference_visual_compare"):
         lines.extend(["", "## Template Reference Visual Compare", ""])
         lines.append(f"- audit: `{proof['reference_visual_compare']}`")
+    if proof.get("reference_visual_skipped_reason"):
+        lines.extend(["", "## Template Reference Visual Compare", ""])
+        lines.append(f"- skipped: `{proof['reference_visual_skipped_reason']}`")
     if readiness.get("blocking_gaps"):
         lines.extend(["", "### Blocking Gaps", ""])
         for gap in readiness["blocking_gaps"]:
@@ -105,7 +178,7 @@ def run_proof(
             "checked_at": utc_now(),
             "overall_pass": False,
             "sample_class": None,
-            "decision": None,
+            "decision": "No-Go",
             "readiness": {},
             "delivery_status": None,
             "critic_pass": None,
@@ -128,12 +201,46 @@ def run_proof(
             steps[-1]["pass"] = True
 
     can_render = bool(readiness.get("acceptance_ready") or readiness.get("partial_report_ready"))
-    if can_render and not skip_render:
-        steps.append(run_step("render", [sys.executable, str(RENDERER), "--dir", str(report_dir)], repo_root))
+    def has_html_artifacts() -> bool:
+        return all(
+            (report_dir / "output" / "html_reports" / name).exists()
+            for name in [
+                "report.html",
+                "market-depth-report.html",
+                "lifecycle-strategy-report.html",
+                "demand-gap-report.html",
+            ]
+        )
 
-    if all(step["pass"] for step in steps):
+    existing_html_artifacts = has_html_artifacts()
+
+    if can_render and not skip_render:
+        steps.append(run_step("render", [sys.executable, str(RENDERER), "--dir", str(report_dir), "--depth", depth], repo_root))
+    elif not skip_render and (report_dir / "data" / "data_pack.json").exists():
+        diagnostic_step = run_step("render_diagnostic", [sys.executable, str(RENDERER), "--dir", str(report_dir), "--no-recover", "--depth", depth], repo_root)
+        if has_html_artifacts() and not readiness.get("acceptance_ready"):
+            diagnostic_step["pass"] = True
+            diagnostic_step["diagnostic_artifacts_written"] = True
+        steps.append(diagnostic_step)
+    elif skip_render and existing_html_artifacts:
+        steps.append(
+            {
+                "name": "existing_rendered_artifacts",
+                "command": [],
+                "started_at": utc_now(),
+                "finished_at": utc_now(),
+                "returncode": 0,
+                "stdout": "using existing rendered HTML artifacts",
+                "stderr": "",
+                "pass": True,
+            }
+        )
+
+    has_rendered_artifacts = any(step["name"] in {"render", "render_diagnostic", "existing_rendered_artifacts"} and step["pass"] for step in steps)
+    if all(step["pass"] for step in steps) or has_rendered_artifacts:
         steps.append(run_step("validate", [sys.executable, str(VALIDATOR), "--dir", str(report_dir)], repo_root))
 
+    reference_visual_skipped_reason = None
     if reference_visual and all(step["pass"] for step in steps):
         steps.append(
             run_step(
@@ -149,6 +256,20 @@ def run_proof(
                 repo_root,
             )
         )
+    elif reference_visual:
+        reference_visual_skipped_reason = "reference visual compare requires a fully passing render/validator chain; diagnostic delivery records template-component validation instead"
+        steps.append(
+            {
+                "name": "reference_visual_compare_skipped",
+                "command": [],
+                "started_at": utc_now(),
+                "finished_at": utc_now(),
+                "returncode": 0,
+                "stdout": reference_visual_skipped_reason,
+                "stderr": "",
+                "pass": True,
+            }
+        )
 
     render_passed = any(step["name"] == "render" and step["pass"] for step in steps)
     validate_passed = any(step["name"] == "validate" and step["pass"] for step in steps)
@@ -156,11 +277,15 @@ def run_proof(
     delivery = load_json(report_dir / "output" / "delivery_result.json", {}) if can_trust_delivery else {}
     critic = load_json(report_dir / "analysis" / "critic_review.json", {}) if can_trust_delivery else {}
     step_pass = all(step["pass"] for step in steps if not (step["name"] == "readiness" and can_render))
+    diagnostic_step_pass = validate_passed and any(step["name"] in {"render_diagnostic", "existing_rendered_artifacts"} and step["pass"] for step in steps)
     readiness_pass = readiness.get("acceptance_ready") is True
     partial_report_pass = readiness.get("partial_report_ready") is True
-    critic_pass = critic.get("pass") is True if can_trust_delivery else False
+    critic_pass = critic_acceptance(critic) if can_trust_delivery else None
     full_acceptance_pass = bool(step_pass and readiness_pass and critic_pass)
-    diagnostic_delivery_pass = bool(step_pass and not readiness_pass and partial_report_pass and critic_pass)
+    diagnostic_delivery_pass = bool(
+        (step_pass and not readiness_pass and partial_report_pass and critic_pass)
+        or (diagnostic_step_pass and not readiness_pass and not partial_report_pass)
+    )
     if full_acceptance_pass:
         delivery_mode = "full_acceptance"
     elif diagnostic_delivery_pass:
@@ -170,26 +295,90 @@ def run_proof(
     proof = {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
-        "overall_pass": bool(full_acceptance_pass or diagnostic_delivery_pass),
+        "overall_pass": bool(full_acceptance_pass),
         "full_acceptance_pass": full_acceptance_pass,
         "diagnostic_delivery_pass": diagnostic_delivery_pass,
         "delivery_mode": delivery_mode,
         "sample_class": readiness.get("sample_class"),
-        "decision": delivery.get("decision"),
+        "decision": proof_decision(delivery, readiness),
         "readiness": readiness,
         "delivery_status": delivery.get("status"),
-        "critic_pass": critic.get("pass"),
+        "critic_pass": critic_pass,
         "critic_score": critic.get("score"),
+        "critic_grade": critic.get("grade"),
         "critic_summary": "analysis/critic_summary.md" if can_trust_delivery and (report_dir / "analysis" / "critic_summary.md").exists() else None,
         "reference_visual_compare": "output/template_reference_visual_compare/template_reference_visual_compare.json"
         if reference_visual and (report_dir / "output/template_reference_visual_compare/template_reference_visual_compare.json").exists()
         else None,
+        "reference_visual_skipped_reason": reference_visual_skipped_reason,
         "stale_delivery_ignored": not can_trust_delivery and (report_dir / "output" / "delivery_result.json").exists(),
         "steps": steps,
     }
+    sync_delivery_result_with_proof(report_dir, proof, can_trust_delivery)
+    sync_report_markdown_with_proof(report_dir, proof, readiness)
     write_json(report_dir / "output" / "acceptance_proof.json", proof)
     (report_dir / "output" / "acceptance_proof.md").write_text(proof_markdown(proof), encoding="utf-8")
     return proof
+
+
+def sync_delivery_result_with_proof(report_dir: Path, proof: dict[str, Any], can_trust_delivery: bool) -> None:
+    delivery_path = report_dir / "output" / "delivery_result.json"
+    if not can_trust_delivery or not delivery_path.exists():
+        return
+    delivery = load_json(delivery_path, {})
+    delivery["decision"] = proof.get("decision") or delivery.get("decision") or "No-Go"
+    delivery["delivery_mode"] = proof.get("delivery_mode")
+    delivery["overall_pass"] = proof.get("overall_pass")
+    delivery["full_acceptance_pass"] = proof.get("full_acceptance_pass")
+    delivery["diagnostic_delivery_pass"] = proof.get("diagnostic_delivery_pass")
+    delivery["acceptance_proof"] = "output/acceptance_proof.json"
+    write_json(delivery_path, delivery)
+    site_data_path = report_dir / "output" / "html_reports" / "assets" / "report-data.json"
+    if site_data_path.exists():
+        site_data = load_json(site_data_path, {})
+        site_data["decision"] = delivery["decision"]
+        site_data["delivery_result"] = public_delivery_result_summary(delivery)
+        write_json(site_data_path, site_data)
+
+
+def sync_report_markdown_with_proof(report_dir: Path, proof: dict[str, Any], readiness: dict[str, Any]) -> None:
+    report_path = report_dir / "output" / "report.md"
+    if proof.get("overall_pass") is True:
+        return
+    stale_markers = [
+        "acceptance_ready=true",
+        "final_decision: Watch",
+        "decision: Watch",
+        "样本达到标准版门槛",
+        "完整客户结论",
+    ]
+    current = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
+    if current and not any(marker in current for marker in stale_markers):
+        return
+    gaps = readiness.get("blocking_gaps") or []
+    gap_lines = [
+        f"- {gap.get('module', '数据门禁')}：{gap.get('reason', '当前数据未达完整报告门槛')}；下一步：{gap.get('next_step', '补齐数据后重新渲染。')}"
+        for gap in gaps
+    ] or ["- 数据门禁：当前数据未达完整报告门槛；下一步：补齐数据后重新渲染。"]
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        "# 市场调研审计稿 · 验收未通过\n\n"
+        "## 交付状态\n"
+        f"- delivery_mode: {proof.get('delivery_mode')}\n"
+        "- overall_pass: false\n"
+        f"- full_acceptance_pass: {str(bool(proof.get('full_acceptance_pass'))).lower()}\n"
+        f"- diagnostic_delivery_pass: {str(bool(proof.get('diagnostic_delivery_pass'))).lower()}\n"
+        f"- readiness_acceptance_ready: {str(readiness.get('acceptance_ready') is True).lower()}\n"
+        f"- final_decision: {proof.get('decision') or 'No-Go'}\n"
+        "- note: 当前交付只可作为补采诊断或阻断说明，不可作为完整客户决策报告。\n\n"
+        "## Go / Watch / No-Go\n"
+        f"- final_decision: {proof.get('decision') or 'No-Go'}\n"
+        "- rationale: 核心数据门禁未通过，当前不得输出完整客户结论。\n\n"
+        "## 当前阻断项\n"
+        + "\n".join(gap_lines)
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

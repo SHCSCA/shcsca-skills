@@ -55,7 +55,15 @@ def base_pack(**overrides):
     data = {
         "sources": [{"source_id": "src_001", "provider": "sorftime", "fetched_at": "2026-05-26T10:00:00Z", "confidence": "high"}],
         "products": competitor_rows(30),
-        "keywords": [{"keyword": f"neck massager keyword {idx}", "source_id": "src_001", "provider": "sorftime"} for idx in range(1000)],
+        "keywords": [
+            {
+                "keyword": f"neck massager keyword {idx}",
+                "keyword_cn": f"颈部按摩器关键词 {idx}",
+                "source_id": "src_001",
+                "provider": "sorftime",
+            }
+            for idx in range(1000)
+        ],
         "categories": [],
         "reviews": [],
         "tiktok_products": [],
@@ -85,6 +93,93 @@ class DataReadinessTest(unittest.TestCase):
             review_warning = next(item for item in report["warnings"] if item["module"] == "review_sample_depth")
             self.assertEqual(review_warning["recommended"], 80)
 
+    def test_blocked_readiness_exposes_customer_delivery_state_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=[]))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertEqual(report["delivery_mode"], "diagnostic_delivery")
+            self.assertEqual(report["decision"], "No-Go")
+            self.assertEqual(report["evidence_grade"], "阻断交付")
+            self.assertGreater(report["score"], 0)
+            self.assertEqual(report["data_gaps"], report["blocking_gaps"])
+
+    def test_keyword_gap_next_step_mentions_effective_deduped_shortfall_when_raw_collection_is_large(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw_keywords = [
+                {"keyword": f"electric cupping massager duplicate {idx % 600}", "keyword_cn": f"电动拔罐按摩器关键词 {idx % 600}"}
+                for idx in range(1300)
+            ]
+            effective_keywords = [
+                {"keyword": f"electric cupping massager valid {idx}", "keyword_cn": f"电动拔罐按摩器有效词 {idx}"}
+                for idx in range(500)
+            ]
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=raw_keywords, effective_keywords=effective_keywords))
+
+            report = assess(root, "standard")
+            keyword_gap = next(item for item in report["blocking_gaps"] if item["module"] == "keyword_sample_depth")
+
+            self.assertEqual(keyword_gap["current"], 500)
+            self.assertIn("有效去重关键词", keyword_gap["next_step"])
+            self.assertNotIn("补到 1200 条采集目标", keyword_gap["next_step"])
+
+    def test_effective_keyword_duplicates_block_even_when_source_type_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            duplicated_keywords = [
+                {
+                    "keyword": "electric cupping massager",
+                    "keyword_cn": "电动拔罐按摩器",
+                    "source_bucket": "market",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for _ in range(40)
+            ] + [
+                {
+                    "keyword": f"electric cupping therapy keyword {idx}",
+                    "keyword_cn": f"电动拔罐理疗关键词 {idx}",
+                    "source_bucket": "market",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(960)
+            ]
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=duplicated_keywords, effective_keywords=duplicated_keywords))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertGreater(report["keyword_duplicate_gate"]["duplicate_extra"], 0)
+            self.assertFalse(report["keyword_duplicate_gate"]["passed"])
+            self.assertTrue(any(item["module"] == "keyword_duplicate_ratio" for item in report["blocking_gaps"]))
+
+    def test_customer_keyword_intent_duplicates_block_even_when_raw_keywords_are_unique(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            keywords = [
+                {
+                    "keyword": f"electric cupping long tail unique {idx}",
+                    "keyword_cn": "电动拔罐按摩器" if idx < 700 else "红光理疗拔罐",
+                    "source_bucket": "market",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(1000)
+            ]
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=keywords, effective_keywords=keywords))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertFalse(report["keyword_customer_intent_gate"]["passed"])
+            self.assertGreater(report["keyword_customer_intent_gate"]["duplicate_ratio"], 0.3)
+            self.assertIn("keyword_customer_intent_duplicate_ratio", {item["module"] for item in report["blocking_gaps"]})
+
     def test_user_authorized_keyword_floor_waiver_is_run_specific(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -105,7 +200,12 @@ class DataReadinessTest(unittest.TestCase):
                 base_pack(
                     products=competitor_rows(60),
                     keywords=[
-                        {"keyword": f"motion sensor wall light keyword {idx}", "source_id": "src_001", "provider": "sorftime"}
+                        {
+                            "keyword": f"motion sensor wall light keyword {idx}",
+                            "keyword_cn": f"感应壁灯关键词 {idx}",
+                            "source_id": "src_001",
+                            "provider": "sorftime",
+                        }
                         for idx in range(998)
                     ]
                 ),
@@ -117,6 +217,69 @@ class DataReadinessTest(unittest.TestCase):
             self.assertEqual(report["counts"]["keywords"], 998)
             self.assertEqual(report["applied_waivers"][0]["authorized_required"], 998)
             self.assertTrue(any(item["module"] == "keyword_sample_depth_waiver" for item in report["warnings"]))
+
+    def test_standard_report_blocks_segments_with_less_than_ten_competitors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            products = competitor_rows(30, segment_count=2)
+            products.extend(
+                {
+                    "asin": f"B0SMALL{idx:04d}",
+                    "title": f"Small segment cupping competitor {idx}",
+                    "brand": f"SmallBrand {idx}",
+                    "price": 29.99 + idx,
+                    "rating": 4.3,
+                    "review_count": 200 + idx,
+                    "estimated_monthly_sales": 300 + idx,
+                    "segment_cn": "单杯智能电动拔罐器",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(2)
+            )
+            write_json(root / "data" / "data_pack.json", base_pack(products=products))
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertFalse(report["competitor_gate"]["passed"])
+            self.assertFalse(report["segment_gate"]["passed"])
+            self.assertEqual(report["segment_gate"]["underfilled_segments"]["单杯智能电动拔罐器"], 2)
+            self.assertTrue(any(item["module"] == "market_segment_depth" for item in report["blocking_gaps"]))
+
+    def test_segment_split_next_step_is_not_hardcoded_to_lighting_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            products = competitor_rows(30, segment_count=2)
+            products.extend(
+                {
+                    "asin": f"B0CUPSMALL{idx:04d}",
+                    "title": f"Small cupping competitor {idx}",
+                    "brand": f"CuppingBrand {idx}",
+                    "price": 49.99,
+                    "rating": 4.2,
+                    "review_count": 120,
+                    "estimated_monthly_sales": 200,
+                    "segment_cn": "单杯智能电动拔罐器",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(2)
+            )
+            write_json(
+                root / "data" / "data_pack.json",
+                base_pack(
+                    research_object={"type": "keyword", "value": "electric cupping massager", "seed_keywords": ["electric cupping massager"]},
+                    products=products,
+                ),
+            )
+
+            report = assess(root, "standard")
+            next_steps = " ".join(item["next_step"] for item in report["blocking_gaps"])
+
+            self.assertNotIn("橱柜感应灯", next_steps)
+            self.assertNotIn("户外感应灯", next_steps)
+            self.assertIn("当前研究对象", next_steps)
 
     def test_zero_depth_pack_blocks_standard_rendering(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -300,6 +463,58 @@ class DataReadinessTest(unittest.TestCase):
             self.assertEqual(report["competitor_gate"]["valid_total"], 29)
             modules = {item["module"] for item in report["blocking_gaps"]}
             self.assertIn("competitor_pool_depth", modules)
+
+    def test_research_object_filters_cross_category_segmented_products(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cupping_products = [
+                {
+                    "asin": f"B0CUP{idx:05d}",
+                    "title": f"Electric Cupping Therapy Massager with Red Light Heat {idx}",
+                    "brand": f"CuppingBrand {idx % 5}",
+                    "price": 39.99 + idx,
+                    "rating": 4.3,
+                    "review_count": 300 + idx,
+                    "estimated_monthly_sales": 500 + idx,
+                    "segment_cn": "热敷红光电动拔罐器" if idx < 10 else "套装型电动拔罐器",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(20)
+            ]
+            lighting_noise = [
+                {
+                    "asin": f"B0LIGHT{idx:04d}",
+                    "title": f"Outdoor Motion Sensor Solar Wall Light {idx}",
+                    "brand": "LightingNoise",
+                    "price": 19.99,
+                    "rating": 4.5,
+                    "review_count": 800 + idx,
+                    "estimated_monthly_sales": 900 + idx,
+                    "segment_cn": "户外感应灯",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(10)
+            ]
+            write_json(
+                root / "data" / "data_pack.json",
+                base_pack(
+                    research_object={
+                        "type": "keyword",
+                        "value": "electric cupping massager",
+                        "seed_keywords": ["electric cupping massager", "red light cupping massager"],
+                    },
+                    products=cupping_products + lighting_noise,
+                ),
+            )
+
+            report = assess(root, "standard")
+
+            self.assertFalse(report["acceptance_ready"])
+            self.assertEqual(report["competitor_gate"]["valid_total"], 20)
+            self.assertNotIn("户外感应灯", report["competitor_gate"]["segments"])
+            self.assertIn("competitor_pool_depth", {item["module"] for item in report["blocking_gaps"]})
 
     def test_deep_pack_requires_60_competitors(self):
         with tempfile.TemporaryDirectory() as tmp:

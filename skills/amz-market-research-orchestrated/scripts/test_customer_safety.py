@@ -178,6 +178,22 @@ class CustomerSafetyTest(unittest.TestCase):
         self.assertNotIn("sf_评论_under", safe["nested"][0]["summary"])
         self.assertIn("高相关评论", safe["nested"][0]["summary"])
 
+    def test_client_safe_view_payload_preserves_allowed_reference_asin_only(self):
+        payload = {
+            "asin": "B0RAW12345",
+            "reference_asin": "B0REF12345",
+            "summary": "参考 B0RAW12345 的页面表现。",
+            "nested": [{"reference_asin": "B0NEST1234", "asin": "B0DROP1234"}],
+        }
+
+        safe = client_safe_view_payload(payload)
+
+        self.assertNotIn("asin", safe)
+        self.assertEqual(safe["reference_asin"], "B0REF12345")
+        self.assertEqual(safe["nested"][0]["reference_asin"], "B0NEST1234")
+        self.assertNotIn("asin", safe["nested"][0])
+        self.assertNotIn("B0RAW12345", safe["summary"])
+
     def test_customer_safe_asset_text_converts_internal_status_labels(self):
         text = "ready_for_normalization warning success amz-market-research-orchestrated three-report-index-v2 ProductId StoreName Price Photo"
 
@@ -186,6 +202,15 @@ class CustomerSafetyTest(unittest.TestCase):
         for leaked in ["ready_for_normalization", "warning", "success", "amz-market-research-orchestrated", "three-report-index-v2", "ProductId", "StoreName", "Price", "Photo"]:
             self.assertNotIn(leaked, safe)
         self.assertIn("可用于方向判断", safe)
+
+    def test_customer_safe_redaction_does_not_rewrite_image_prompt_words(self):
+        html = "<div>Photorealistic Amazon product photography</div><div>Photo Price StoreName</div>"
+
+        redacted = redact_customer_html(html, {})
+
+        self.assertIn("Photorealistic Amazon product photography", redacted)
+        self.assertNotIn(">Photo Price StoreName<", redacted)
+        self.assertIn("图片记录", redacted)
 
 
 if __name__ == "__main__":

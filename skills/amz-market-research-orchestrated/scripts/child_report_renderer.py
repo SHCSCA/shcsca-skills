@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,11 @@ def body_from_view(title: str, view: dict[str, Any]) -> str:
 
 def render_child_report(report_dir: Path, module_dir: Path, view_file: str, output_file: str, title: str, title_token: str, body_token: str) -> Path:
     report_key = REPORT_KEY_BY_OUTPUT.get(output_file)
+    output_path = report_dir / "output" / "html_reports" / output_file
+    if os.environ.get("AMZ_REUSE_CANONICAL_CHILD_HTML") == "1" and output_path.exists():
+        write_basic_site_assets(report_dir)
+        return output_path
+
     html_doc = ""
     if report_key:
         try:
@@ -123,7 +129,6 @@ def render_child_report(report_dir: Path, module_dir: Path, view_file: str, outp
         html_doc = template.replace(title_token, esc(title)).replace(body_token, body_from_view(title, view))
         html_doc = attach_site_chrome(html_doc)
     write_basic_site_assets(report_dir)
-    output_path = report_dir / "output" / "html_reports" / output_file
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html_doc, encoding="utf-8")
     return output_path

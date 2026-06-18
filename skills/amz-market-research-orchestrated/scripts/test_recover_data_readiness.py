@@ -59,7 +59,15 @@ def make_report(root: Path):
                 {"source_id": "src_002", "provider": "sorftime", "tool": "ali1688_similar_product"},
             ],
             "products": [],
-            "keywords": [{"keyword": f"smart lighting keyword {idx}", "source_id": "src_001", "provider": "sorftime"} for idx in range(1000)],
+            "keywords": [
+                {
+                    "keyword": f"smart lighting keyword {idx}",
+                    "keyword_cn": f"智能照明关键词 {idx}",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(1000)
+            ],
             "suppliers": supplier_rows(),
             "reviews": [],
             "tiktok_products": [],

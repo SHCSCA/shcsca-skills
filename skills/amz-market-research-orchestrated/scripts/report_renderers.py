@@ -25,6 +25,11 @@ def customer_report_object(data_pack: dict[str, Any], analysis_plan: dict[str, A
         target_value = str(research_object.get("value") or "").upper()
     if target_value and product_labels.get(target_value):
         return product_labels[target_value]
+    raw_target_value = str(research_object.get("value") or "").strip() if isinstance(research_object, dict) else str(research_object or "").strip()
+    # For keyword/category research, the report-level object is the customer scope.
+    # A child segment or the first product must not rename the whole report.
+    if raw_target_value and not raw_target_value.upper().startswith("B0"):
+        return product_labels.get(raw_target_value.upper()) or raw_target_value
     products = call(fns, "effective_products", data_pack)
     for product in products:
         asin = str(product.get("asin") or "").upper()
@@ -100,16 +105,34 @@ def build_report_documents(
     readiness_view = data_pack.get("report_readiness_view") if isinstance(data_pack.get("report_readiness_view"), dict) else {}
     display_decision = str(readiness_view.get("decision") or decision or "Watch")
     confidence_label = str(readiness_view.get("evidence_strength") or call(fns, "confidence_level", data_pack, analysis_plan))
+    top100_units = category.get("top100_estimated_monthly_units")
+    competitor_units = sum(call(fns, "as_float", call(fns, "product_sales", product), 0) for product in products)
+    if top100_units and len(products) >= 100:
+        volume_label = "类目榜单销量"
+        volume_value = call(fns, "num", top100_units)
+        volume_subtext = "第三方类目代理指标"
+    else:
+        volume_label = "当前有效竞品池销量"
+        volume_value = call(fns, "num", int(competitor_units) if competitor_units else None)
+        volume_subtext = f"{len(products)} 个有效竞品汇总"
+    keyword_label = ""
+    if keywords:
+        keyword_label = (
+            keywords[0].get("customer_label_cn")
+            or keywords[0].get("keyword_cn")
+            or keywords[0].get("intent_cn")
+            or "关键词需补采"
+        )
 
     market_kpis = [
         call(fns, "kpi_card", "核心判断", display_decision, readiness_view.get("delivery_state") or "Go / Watch / No-Go", "warning"),
-        call(fns, "kpi_card", "Top100 估算月销量", call(fns, "num", category.get("top100_estimated_monthly_units")), "类目代理指标", "success"),
+        call(fns, "kpi_card", volume_label, volume_value, volume_subtext, "success"),
         call(
             fns,
             "kpi_card",
             "最大关键词月搜索",
             call(fns, "num", keywords[0].get("monthly_search_volume") if keywords else None),
-            keywords[0].get("keyword") if keywords else "keyword gap",
+            keyword_label if keywords else "需增加关键词采集",
         ),
         call(fns, "kpi_card", "相关竞品池", call(fns, "num", len(products)), "过滤泛词噪声后", ""),
     ]
@@ -142,7 +165,7 @@ def build_report_documents(
         "{{TIKTOK_VALIDATION}}": call(fns, "render_tiktok", data_pack),
         "{{SUPPLIER_TABLE_AND_COST_THRESHOLDS}}": call(fns, "render_supply", data_pack, profitability),
         "{{WEB_RISK_SUPPLEMENT}}": call(fns, "render_web_risk", data_pack),
-        "{{CLIENT_ACTION_SUMMARY}}": call(fns, "render_market_conclusion", data_pack, analysis_plan, display_decision, object_value),
+        "{{CLIENT_ACTION_SUMMARY}}": call(fns, "render_seasonality_sales", analysis_plan) + call(fns, "render_market_conclusion", data_pack, analysis_plan, display_decision, object_value),
         "{{PRODUCT_DEFINITION}}": call(fns, "render_opportunities", opportunity),
         "{{VISUAL_DIRECTION}}": call(fns, "render_visual_direction", opportunity),
         "{{OPPORTUNITY_CARDS}}": call(fns, "render_opportunities", opportunity),

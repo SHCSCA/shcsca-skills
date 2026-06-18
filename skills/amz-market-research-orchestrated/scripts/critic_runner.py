@@ -278,7 +278,7 @@ def build_critic_review(
     previous_findings = previous_review.get("findings", []) if previous_review else []
     resolved = [item["id"] for item in previous_findings if item.get("severity") == "blocking" and not blocking]
     critic_score = max(0, min(100, int(score * 100) - len(blocking) * 15 - (len(findings) - len(blocking)) * 5))
-    if critic_score < 60:
+    if critic_score < 70:
         findings.append(
             finding(
                 "F-low-critic-score",
@@ -287,7 +287,7 @@ def build_critic_review(
                 "market_depth",
                 "critic.score",
                 "quality.overall_score",
-                "critic 评分低于 60 或等级为 D，不能标记为通过。",
+                "critic 评分低于 70 或等级为 C/D，不能标记为完整通过。",
                 "keep_decision_watch; render_diagnostic_until_quality_recovers",
             )
         )
@@ -296,7 +296,7 @@ def build_critic_review(
         "pass": not blocking,
         "round_id": round_id,
         "score": critic_score,
-        "grade": "A" if critic_score >= 90 else "B" if critic_score >= 75 else "C" if critic_score >= 60 else "D",
+        "grade": "A" if critic_score >= 90 else "B" if critic_score >= 70 else "C" if critic_score >= 60 else "D",
         "findings": findings,
         "blocking_issues": [item["problem"] for item in blocking],
         "resolved_findings": resolved,

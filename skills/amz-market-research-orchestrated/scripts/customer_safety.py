@@ -10,7 +10,18 @@ from typing import Any
 
 TECHNICAL_DISPLAY_KEYS = {"source_id", "source_ids", "provider", "tool", "raw_path", "path", "asin", "product_id", "video_id"}
 CLIENT_VIEW_BLOCKED_KEYS = {"source_id", "source_ids", "used_source_ids", "provider", "tool", "raw_path", "path", "asin", "product_id", "video_id", "method_id"}
+CLIENT_VIEW_ALLOWED_ASIN_KEYS = {
+    "reference_asin",
+    "reference_asins",
+    "competitor_asin",
+    "competitor_asins",
+    "target_asin",
+    "target_asins",
+    "benchmark_asin",
+    "benchmark_asins",
+}
 REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
+GENERIC_TECHNICAL_VALUES = {"api", "us", "cn", "uk", "eu", "user"}
 
 CUSTOMER_LABEL_REPLACEMENTS = [
     ("ready_for_normalization", "可用于方向判断，需供应链复核"),
@@ -21,6 +32,15 @@ CUSTOMER_LABEL_REPLACEMENTS = [
     ("demand-gap-report-v2", "需求机会报告"),
     ("market-depth-report-v2", "市场深度报告"),
     ("ProductId", "内容商品记录"),
+    ("collect_sorftime_product_enrichment.py", "产品详情补充采集"),
+    ("product_detail", "竞品详情信息"),
+    ("product_trend", "月度趋势数据"),
+    ("category_trend", "类目月度趋势数据"),
+    ("运行 产品详情补充采集 对核心 参考竞品 补充产品详情维度 补充图片数据；若多 参考竞品 仍为空，保留诊断并记录 市场数据 图片维度缺口。", "补充核心竞品主图；若多个参考竞品仍无可展示图片，保留图片缺口诊断。"),
+    ("运行 产品详情补充采集 对核心 参考竞品 补充竞品详情信息 补充图片数据；若多 参考竞品 仍为空，保留诊断并记录 市场数据 图片维度缺口。", "补充核心竞品主图；若多个参考竞品仍无可展示图片，保留图片缺口诊断。"),
+    ("调用 产品详情维度", "补充竞品详情信息"),
+    ("补充产品详情维度 补充图片数据", "补充核心竞品主图数据"),
+    ("补采图片字段", "补充图片数据"),
     ("竞品记录", "竞品"),
     ("StoreName", "供应商名称"),
     ("Photo", "图片记录"),
@@ -122,7 +142,7 @@ def collect_technical_values(value: Any, key: str | None = None) -> set[str]:
             values.update(collect_technical_values(item, key))
     elif key in TECHNICAL_DISPLAY_KEYS and value not in (None, ""):
         text = str(value).strip()
-        if len(text) >= 3:
+        if len(text) >= 3 and text.casefold() not in GENERIC_TECHNICAL_VALUES:
             values.add(text)
     return values
 
@@ -152,14 +172,21 @@ def review_redaction_needles(text: str) -> set[str]:
     return {needle for needle in needles if len(needle) >= 8}
 
 
+def apply_customer_label_replacements(text: str) -> str:
+    for old, new in CUSTOMER_LABEL_REPLACEMENTS:
+        if re.fullmatch(r"[A-Za-z0-9_ /-]+", old):
+            text = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(old)}(?![A-Za-z0-9_])", new, text)
+        else:
+            text = text.replace(old, new)
+    return text
+
+
 def replace_customer_labels_in_text_nodes(html_doc: str) -> str:
     parts = re.split(r"(<[^>]+>)", html_doc)
     for idx, part in enumerate(parts):
         if idx % 2 == 1:
             continue
-        for old, new in CUSTOMER_LABEL_REPLACEMENTS:
-            part = part.replace(old, new)
-        parts[idx] = part
+        parts[idx] = apply_customer_label_replacements(part)
     return "".join(parts)
 
 
@@ -241,6 +268,9 @@ def redact_customer_html(html_doc: str, data_pack: dict[str, Any]) -> str:
     html_doc = html_doc.replace("证据强度： 高", "证据强度：高")
     html_doc = html_doc.replace("数据数据覆盖", "数据覆盖")
     html_doc = html_doc.replace("数据来源", "数据覆盖")
+    # Keep customer-safety text redaction from corrupting structural CSS classes.
+    html_doc = html_doc.replace("cosmo-summary-item 数据覆盖", "cosmo-summary-item user")
+    html_doc = html_doc.replace("cosmo-matrix-lane 数据覆盖-lane", "cosmo-matrix-lane user-lane")
     for token, preserved in preserved_asins.items():
         html_doc = html_doc.replace(token, preserved)
     for token, preserved in preserved_review_excerpts.items():
@@ -255,8 +285,7 @@ def customer_safe_asset_text(value: Any) -> str:
         text = text.replace("MCP returned Unauthorized, so public web evidence was collected with web search and marked separately.", "公开网页补充接口本轮未授权，已改用公开网页搜索结果并单独标注。")
     for old, new in CUSTOMER_TEXT_REPLACEMENTS:
         text = text.replace(old, new)
-    for old, new in CUSTOMER_LABEL_REPLACEMENTS:
-        text = text.replace(old, new)
+    text = apply_customer_label_replacements(text)
     for old, new in STATUS_TEXT_REPLACEMENTS:
         text = re.sub(rf"\b{re.escape(old)}\b", new, text)
     text = text.replace("ASIN", "参考竞品")
@@ -287,22 +316,23 @@ def customer_safe_asset_text(value: Any) -> str:
     return text
 
 
-def client_safe_view_payload(value: Any) -> Any:
+def client_safe_view_payload(value: Any, key: str | None = None) -> Any:
     if isinstance(value, dict):
         return {
-            str(key): client_safe_view_payload(child)
-            for key, child in value.items()
-            if str(key) not in CLIENT_VIEW_BLOCKED_KEYS
+            str(child_key): client_safe_view_payload(child, str(child_key))
+            for child_key, child in value.items()
+            if str(child_key) not in CLIENT_VIEW_BLOCKED_KEYS
         }
     if isinstance(value, list):
-        return [client_safe_view_payload(item) for item in value]
+        return [client_safe_view_payload(item, key) for item in value]
     if isinstance(value, str):
         text = clean(value)
+        if key in CLIENT_VIEW_ALLOWED_ASIN_KEYS:
+            return text
         text = customer_safe_technical_failure_text(text)
         for old, new in CUSTOMER_TEXT_REPLACEMENTS:
             text = text.replace(old, new)
-        for old, new in CUSTOMER_LABEL_REPLACEMENTS:
-            text = text.replace(old, new)
+        text = apply_customer_label_replacements(text)
         for old, new in STATUS_TEXT_REPLACEMENTS:
             text = re.sub(rf"\b{re.escape(old)}\b", new, text)
         text = text.replace("ASIN", "参考竞品")

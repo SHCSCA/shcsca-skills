@@ -251,7 +251,12 @@ def make_valid_report(root):
             ],
             "products": competitor_rows(30),
             "keywords": [
-                {"keyword": f"ai plush keyword {idx}", "source_id": "src_001", "provider": "sorftime"}
+                {
+                    "keyword": f"ai plush keyword {idx}",
+                    "keyword_cn": f"AI毛绒关键词 {idx}",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
                 for idx in range(1000)
             ],
             "categories": [{"node_id": "123", "source_id": "src_001", "provider": "sorftime"}],
@@ -801,6 +806,19 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "Positive|Negative|英文"):
             validator.validate_customer_html("output/html_reports/demand-gap-report.html", html_doc, data_pack)
 
+    def test_customer_html_rejects_legacy_voc_and_prompt_labels(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="legacy-labels">'
+            "<h3>Pain 主要痛点</h3>"
+            "<h3>Joy 主要爽点</h3>"
+            "<article><span>PROMPT 01</span><p>证据强度 高 数据覆盖 已记录 数据缺口 已记录 置信等级 中 建议动作 继续核验</p></article>"
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "Pain|Joy|PROMPT"):
+            validator.validate_customer_html("output/html_reports/market-depth-report.html", html_doc, data_pack)
+
     def test_customer_html_rejects_stale_toy_review_summary_copy(self):
         data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
         html_doc = (
@@ -813,11 +831,25 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "开箱|陪伴|礼品场景"):
             validator.validate_customer_html("output/html_reports/lifecycle-strategy-report.html", html_doc, data_pack)
 
+    def test_customer_html_rejects_stale_generic_diagnostic_copy(self):
+        data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
+        html_doc = (
+            '<section id="diagnostic-copy">'
+            "<p>当前只展示市场数据门禁、阻断原因和补采动作。</p>"
+            "<p>本节只展示可复核的竞品覆盖和补采动作。</p>"
+            "<p>证据强度 高 数据覆盖 已记录 数据缺口 已记录 置信等级 中 建议动作 继续核验</p>"
+            "</section>"
+        )
+
+        with self.assertRaisesRegex(validator.ValidationError, "当前只展示|本节只展示"):
+            validator.validate_customer_html("output/html_reports/market-depth-report.html", html_doc, data_pack)
+
     def test_customer_html_rejects_empty_or_non_http_image_src(self):
         data_pack = {"products": [], "keywords": [], "reviews": [], "suppliers": []}
         broken_images = [
             '<section><img class="comp-product-thumb" src="" alt="竞品图片"></section>',
             '<section><img class="comp-product-thumb" src="data:image/png;base64,abc" alt="竞品图片"></section>',
+            '<section><img class="comp-product-thumb" src="https://m.media-amazon.com/images/I/bad image.jpg" alt="竞品图片"></section>',
         ]
 
         for html_doc in broken_images:
@@ -873,12 +905,12 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
         html_doc = (
             '<section id="market-dashboard"></section>'
             '<section id="cosmo-alexa-tags">'
-            '<div class="cosmo-matrix"><div class="cosmo-matrix-lanes">'
+            '<div class="cosmo-panel cosmo-matrix"><div class="cosmo-matrix-lanes">'
             '<div class="cosmo-matrix-lane product-lane"><div class="cosmo-lane-title"><span>产品标签 · 产品被算法识别为什么</span></div>'
             f"{cosmo_products}</div>"
             '<div class="cosmo-matrix-lane user-lane"><div class="cosmo-lane-title"><span>用户标签 · 用户为什么搜索/购买</span></div>'
             f"{cosmo_users}</div></div></div>"
-            '<div class="cosmo-top-list"></div><div class="cosmo-gap-panel"></div><div class="cosmo-action-board"></div></section>'
+            '<div class="cosmo-panel cosmo-top-list"></div><div class="cosmo-panel cosmo-gap-panel"></div><div class="cosmo-panel cosmo-action-board"></div></section>'
             '<section id="competitor-scan"><table><tr><th>ASIN</th></tr><tr><td data-allow-asin="competitor-table">B0TEST1234</td></tr></table></section>'
             '<section id="voc-deep-dive"></section>'
             '<div id="pricing"></div><div id="prompt"></div>'
@@ -1402,6 +1434,149 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("customer HTML leaks technical identifier", result.stderr + result.stdout)
 
+    def test_diagnostic_child_report_requires_standard_template_components(self):
+        html_doc = """<!doctype html><html lang="zh-CN"><head>
+<link rel="stylesheet" href="assets/report.css"></head>
+<body class="template-market diagnostic-page">
+<main><section><h1>市场深度调研报告 · 补采诊断</h1>
+<p>当前阻断项</p><p>标准报告结构</p><p>未达决策门槛</p>
+<a href="#market-dashboard">大盘</a><a href="#cosmo-alexa-tags">标签</a><a href="#competitor-scan">竞品</a>
+<a href="#voc-deep-dive">VOC</a><a href="#benchmark-sniper">标杆</a><a href="#product-definition">新品</a>
+<a href="#pricing">定价</a><a href="#visual-direction">视觉</a><a href="#tiktok-trends">TikTok</a>
+<a href="#prompt">Prompt</a><a href="#supply-chain">供应链</a>
+<table class="evidence-table insight-table"><tbody><tr><td>检查项</td></tr></tbody></table>
+<div class="cosmo-diagnostic-shell cosmo-layout"></div>
+<div class="market-voc-sentiment-columns"></div>
+<div class="supply-grid"></div>
+<div class="prompt-card"></div>
+<section id="market-dashboard"></section><section id="cosmo-alexa-tags"></section>
+<section id="competitor-scan"></section><section id="voc-deep-dive"></section>
+<section id="benchmark-sniper"></section><section id="product-definition"></section>
+<section id="pricing"></section><section id="visual-direction"></section>
+<section id="tiktok-trends"></section><section id="prompt"></section>
+<section id="supply-chain"></section>
+</section></main><script src="assets/report.js"></script></body></html>"""
+
+        with self.assertRaises(validator.ValidationError) as ctx:
+            validator.validate_diagnostic_child_report(
+                "output/html_reports/market-depth-report.html",
+                html_doc,
+                validator.CHILD_REPORTS["market_depth"],
+                {},
+            )
+
+        self.assertIn("competitor image component", str(ctx.exception))
+
+    def test_diagnostic_child_report_requires_standard_section_anchors(self):
+        html_doc = """<!doctype html><html lang="zh-CN"><head>
+<link rel="stylesheet" href="assets/report.css"></head>
+<body class="template-market diagnostic-page">
+<main>
+<section><h1>市场深度调研报告 · 补采诊断</h1>
+<p>当前阻断项</p><p>标准报告结构</p><p>未达决策门槛</p>
+<table class="evidence-table insight-table"><tbody><tr><td>检查项</td></tr></tbody></table>
+<div class="cosmo-diagnostic-shell cosmo-layout"></div>
+<div class="market-voc-sentiment-columns"></div>
+<div class="supply-grid"></div>
+<div class="prompt-card"></div>
+<div class="comp-image-diagnostic-card"></div>
+</section>
+<section id="diagnostic-slot-01-大盘仪表盘"></section>
+<section id="diagnostic-slot-02-cosmo-alexa-标签识别"></section>
+<section id="diagnostic-slot-03-top-竞品全景扫描"></section>
+<section id="diagnostic-slot-04-voc-体验深潜"></section>
+</main><script src="assets/report.js"></script></body></html>"""
+
+        with self.assertRaises(validator.ValidationError) as ctx:
+            validator.validate_diagnostic_child_report(
+                "output/html_reports/market-depth-report.html",
+                html_doc,
+                validator.CHILD_REPORTS["market_depth"],
+                {},
+            )
+
+        self.assertIn("missing standard diagnostic section id market-dashboard", str(ctx.exception))
+
+    def test_diagnostic_child_report_requires_exact_cosmo_matrix_panel_class(self):
+        html_doc = """<!doctype html><html lang="zh-CN"><head>
+<link rel="stylesheet" href="assets/report.css"></head>
+<body class="template-market diagnostic-page">
+<main><section><h1>市场深度调研报告 · 补采诊断</h1>
+<p>当前阻断项</p><p>标准报告结构</p><p>未达决策门槛</p>
+<a href="#market-dashboard">大盘</a><a href="#cosmo-alexa-tags">标签</a><a href="#competitor-scan">竞品</a>
+<a href="#voc-deep-dive">VOC</a><a href="#benchmark-sniper">标杆</a><a href="#product-definition">新品</a>
+<a href="#pricing">定价</a><a href="#visual-direction">视觉</a><a href="#tiktok-trends">TikTok</a>
+<a href="#prompt">Prompt</a><a href="#supply-chain">供应链</a>
+<table class="evidence-table insight-table"><tbody><tr><td>检查项</td></tr></tbody></table>
+<div class="cosmo-diagnostic-shell cosmo-layout">
+  <div class="cosmo-matrix-lanes">
+    <article class="cosmo-tag-card cosmo-matrix-cell">诊断标签</article>
+  </div>
+  <section class="cosmo-panel cosmo-top-list"></section>
+  <section class="cosmo-panel cosmo-gap-panel"></section>
+  <section class="cosmo-panel cosmo-action-board"></section>
+</div>
+<div class="market-voc-sentiment-columns"></div>
+<div class="supply-grid"></div>
+<div class="prompt-card"></div>
+<div class="comp-image-diagnostic-card"></div>
+<section id="market-dashboard"></section><section id="cosmo-alexa-tags"></section>
+<section id="competitor-scan"></section><section id="voc-deep-dive"></section>
+<section id="benchmark-sniper"></section><section id="product-definition"></section>
+<section id="pricing"></section><section id="visual-direction"></section>
+<section id="tiktok-trends"></section><section id="prompt"></section>
+<section id="supply-chain"></section>
+</section></main><script src="assets/report.js"></script></body></html>"""
+
+        with self.assertRaises(validator.ValidationError) as ctx:
+            validator.validate_diagnostic_child_report(
+                "output/html_reports/market-depth-report.html",
+                html_doc,
+                validator.CHILD_REPORTS["market_depth"],
+                {},
+            )
+
+        self.assertIn("COSMO missing cosmo-matrix", str(ctx.exception))
+
+    def test_diagnostic_lifecycle_report_requires_standard_chart_ids(self):
+        html_doc = """<!doctype html><html lang="zh-CN"><head>
+<link rel="stylesheet" href="assets/report.css"></head>
+<body class="template-lifecycle diagnostic-page">
+<main><section><h1>产品全生命周期拓品战略报告 · 补采诊断</h1>
+<p>当前阻断项</p><p>标准报告结构</p><p>未达决策门槛</p>
+<p>证据强度、数据覆盖、数据缺口、置信等级、建议动作、供应链、竞品、VOC、SKU、Bundle、风险矩阵、路线图、数据完整度、下一步动作。</p>
+<a href="#strategy-dashboard">战略</a><a href="#lifecycle-personas">画像</a>
+<a href="#lifecycle-journey">旅程</a><a href="#lifecycle-ecosystem">生态</a>
+<a href="#sku-strategy-pool">SKU</a><a href="#bundle-strategy">Bundle</a>
+<a href="#roadmap-90">路线图</a><a href="#risk-matrix">风险</a>
+<a href="#market-validation-summary">验证</a>
+<table class="evidence-table insight-table"><tbody><tr><td>检查项</td></tr></tbody></table>
+<div class="lifecycle-ecosystem"><div id="lifecycleSunburst" data-chart-disabled="true"></div></div>
+<div class="sku-priority"></div>
+<table class="sku-pool-table"><tbody><tr><td>SKU</td></tr></tbody></table>
+<div class="bundle-card"></div>
+<section id="strategy-dashboard"></section><section id="lifecycle-personas"></section>
+<section id="lifecycle-journey"></section><section id="lifecycle-ecosystem"></section>
+<section id="sku-strategy-pool"></section><section id="bundle-strategy"></section>
+<section id="roadmap-90"></section><section id="risk-matrix"></section>
+<section id="market-validation-summary"></section>
+</section></main><script src="assets/report.js"></script></body></html>"""
+
+        with self.assertRaises(validator.ValidationError) as ctx:
+            validator.validate_diagnostic_child_report(
+                "output/html_reports/lifecycle-strategy-report.html",
+                html_doc,
+                validator.CHILD_REPORTS["lifecycle_strategy"],
+                {},
+            )
+
+        self.assertIn("missing standard lifecycle diagnostic chart id priorityChart", str(ctx.exception))
+
+    def test_banned_literal_scan_does_not_reject_image_prompt_words(self):
+        self.assertFalse(validator.contains_banned_literal("Photorealistic Amazon product photography", "Photo"))
+        self.assertTrue(validator.contains_banned_literal("Photo", "Photo"))
+        self.assertTrue(validator.contains_banned_literal('{"Photo":"https://example.test/a.jpg"}', "Photo"))
+
     def test_rejects_customer_html_leaking_collector_script_names(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1598,6 +1773,35 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("customer asset leaks technical identifier", result.stderr + result.stdout)
 
+    def test_customer_visible_view_json_allows_whitelisted_reference_asin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            view_path = report_dir / "analysis" / "market_depth_view.json"
+            payload = json.loads(view_path.read_text(encoding="utf-8"))
+            payload.setdefault("tables", {}).setdefault("competitors", []).append(
+                {"reference_asin": "B0VALID1234", "title_cn": "参考竞品", "image_url": "https://m.media-amazon.com/images/I/test.jpg"}
+            )
+            write_json(view_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_customer_visible_view_json_rejects_unscoped_asin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_valid_report(report_dir)
+            view_path = report_dir / "analysis" / "market_depth_view.json"
+            payload = json.loads(view_path.read_text(encoding="utf-8"))
+            payload["leak"] = "客户正文 B0LEAK1234"
+            write_json(view_path, payload)
+
+            result = self.run_validator(report_dir)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("customer asset leaks technical identifier", result.stderr + result.stdout)
+
     def test_rejects_low_sample_high_score_strong_go(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_dir = Path(tmp)
@@ -1619,6 +1823,52 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("review sample depth", result.stderr + result.stdout)
+
+    def test_rejects_passing_critic_with_c_grade_or_low_score(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            write_json(
+                report_dir / "analysis" / "critic_review.json",
+                {
+                    "pass": True,
+                    "score": 68,
+                    "grade": "C",
+                    "round_id": 0,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "resolved_findings": [],
+                    "remaining_findings": [],
+                    "report_issues": {},
+                    "data_confidence": {},
+                    "suggestions": [],
+                    "refinement_targets": [],
+                },
+            )
+            write_json(
+                report_dir / "analysis" / "refinement_plan.json",
+                {
+                    "status": "accepted",
+                    "max_refinement_rounds": 2,
+                    "operations": [],
+                    "refinement_targets": [],
+                },
+            )
+            write_text(
+                report_dir / "analysis" / "critic_summary.md",
+                "# Critic Summary\n"
+                "- readiness: `pass`\n"
+                "- final_pass: `true`\n"
+                "- final_score: `68`\n"
+                "- final_decision: `Watch`\n"
+                "- remaining_findings: `none`\n"
+                "## Guardrails\n"
+                "- Critic refinement must not recollect data.\n"
+                "- Critic refinement must not modify `data/normalized/normalized_data_pack.json`.\n"
+                "- If final_pass is false, the orchestrator must not claim delivery completion.\n",
+            )
+
+            with self.assertRaisesRegex(validator.ValidationError, "score|grade"):
+                validator.validate_critic_outputs(report_dir, {"task_id": "critic_low_score"})
 
     def test_rejects_keyword_samples_below_1000(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1682,7 +1932,7 @@ class ValidateMarketResearchDeliverablesTest(unittest.TestCase):
             result = self.run_validator(report_dir)
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("acceptance_ready or partial_report_ready", result.stderr + result.stdout)
+            self.assertIn("data readiness must pass or be partial-ready", result.stderr + result.stdout)
 
     def test_data_readiness_allows_blocked_diagnostic_delivery(self):
         with tempfile.TemporaryDirectory() as tmp:

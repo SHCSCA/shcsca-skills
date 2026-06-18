@@ -9,6 +9,8 @@ from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
+import check_data_readiness
+import report_renderers
 import render_dashboard_html as renderer
 
 
@@ -43,9 +45,9 @@ def supplier_rows(count=50):
     ]
 
 
-def competitor_rows(count=30):
+def competitor_rows(count=30, include_images=False):
     segments = ["智能陪伴玩具", "语音互动玩具", "儿童礼品玩具"]
-    return [
+    rows = [
         {
             "asin": f"B0P{idx:07d}",
             "product_id": f"internal_product_{idx}",
@@ -61,12 +63,17 @@ def competitor_rows(count=30):
         }
         for idx in range(count)
     ]
+    if include_images:
+        for idx, row in enumerate(rows):
+            row["main_image_url"] = f"https://m.media-amazon.com/images/I/test-competitor-{idx}.jpg"
+    return rows
 
 
 def make_renderable_report(root):
     keywords = [
         {
             "keyword": f"ai plush toy {idx}" if idx >= 5 else f"robot companion {idx}",
+            "keyword_cn": f"AI毛绒玩具 {idx}" if idx >= 5 else f"机器人陪伴玩具 {idx}",
             "monthly_search_volume": 1200 - idx if idx >= 5 else 1500 - idx,
             "source_id": "src_001",
             "provider": "sorftime",
@@ -97,7 +104,7 @@ def make_renderable_report(root):
                     "raw_path": "data/raw/firecrawl_search.json",
                 },
             ],
-            "products": competitor_rows(30),
+            "products": competitor_rows(30, include_images=True),
             "keywords": keywords,
             "categories": [{"node_id": "123", "name": "Plush Toys", "top100_estimated_monthly_units": 10000, "source_id": "src_001", "provider": "sorftime"}],
             "reviews": [
@@ -346,7 +353,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn(label, html)
         self.assertRegex(html, r"<b>\d+/6</b>")
         self.assertRegex(html, r"<b>\d+/9</b>")
-        self.assertLess(html.index('class="cosmo-summary-strip"'), html.index('class="cosmo-layout"'))
+        self.assertLess(html.index('class="cosmo-summary-strip"'), html.index("cosmo-layout"))
 
     def test_cosmo_renderer_uses_stacked_three_column_matrix_layout(self):
         data_pack = {
@@ -372,6 +379,19 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertEqual(html.count('data-cosmo-relation="'), 15)
         self.assertLess(html.index('class="cosmo-panel cosmo-matrix"'), html.index('class="cosmo-submodule-grid"'))
         self.assertLess(html.index('class="cosmo-submodule-grid"'), html.index('class="cosmo-panel cosmo-action-board"'))
+
+    def test_cosmo_diagnostic_skeleton_keeps_standard_matrix_panel(self):
+        html = renderer.render_cosmo_diagnostic_skeleton("关键词 916")
+
+        self.assertIn('class="cosmo-panel cosmo-matrix"', html)
+        self.assertEqual(html.count('class="cosmo-tag-card cosmo-matrix-cell"'), 15)
+        self.assertLess(html.index('class="cosmo-panel cosmo-matrix"'), html.index('class="cosmo-submodule-grid"'))
+        matrix_html = html[
+            html.index('class="cosmo-panel cosmo-matrix"') : html.index('class="cosmo-submodule-grid"')
+        ]
+        self.assertEqual(matrix_html.count('class="cosmo-tag-card cosmo-matrix-cell"'), 15)
+        self.assertIn("产品标签 · 产品被算法识别为什么", matrix_html)
+        self.assertIn("用户标签 · 用户为什么搜索/购买", matrix_html)
 
     def test_cosmo_renderer_shows_customer_safe_evidence_sources_per_relation(self):
         data_pack = {
@@ -435,6 +455,48 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertRegex(html, r'class="cosmo-matrix-lane product-lane".*data-dimension="产品标签"')
         self.assertRegex(html, r'class="cosmo-matrix-lane user-lane".*data-dimension="用户标签"')
         self.assertNotRegex(html, r">\s*(?:P0[1-8]|U0[1-9])\s*<")
+
+    def test_keyword_customer_table_aggregates_duplicate_chinese_intents(self):
+        html = renderer.render_keywords(
+            {
+                "effective_keywords": [
+                    {
+                        "keyword": "electric cupping massager",
+                        "keyword_cn": "电动拔罐按摩器",
+                        "relevance_cn": "高相关",
+                        "monthly_search_volume": 3800,
+                        "weekly_search_volume": 920,
+                        "recommended_cpc": 1.22,
+                        "competitor_count": 1200,
+                        "intent_cn": "用户寻找电动拔罐理疗设备",
+                    },
+                    {
+                        "keyword": "smart cupping therapy massager",
+                        "keyword_cn": "电动拔罐按摩器",
+                        "relevance_cn": "高相关",
+                        "monthly_search_volume": 2600,
+                        "weekly_search_volume": 610,
+                        "recommended_cpc": 1.4,
+                        "competitor_count": 980,
+                        "intent_cn": "用户寻找智能拔罐按摩器",
+                    },
+                    {
+                        "keyword": "red light therapy cupping",
+                        "keyword_cn": "红光理疗拔罐",
+                        "relevance_cn": "高相关",
+                        "monthly_search_volume": 1800,
+                        "weekly_search_volume": 420,
+                        "recommended_cpc": 1.8,
+                        "competitor_count": 740,
+                        "intent_cn": "用户寻找红光热敷拔罐",
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(html.count("<td>电动拔罐按摩器</td>"), 1)
+        self.assertIn("electric cupping massager / smart cupping therapy massager", html)
+        self.assertIn("<td>6,400</td>", html)
 
     def test_cosmo_renderer_outputs_analyzed_chinese_labels_not_raw_fragments(self):
         data_pack = {
@@ -1049,6 +1111,162 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         forbidden = "证据充分 供应链可控度较高 50+ 可打样 毛利率可测算".split()
         self.assertFalse(any(term in json.dumps(view, ensure_ascii=False) for term in forbidden))
 
+    def test_client_trust_copy_respects_blocked_readiness_without_supply_block(self):
+        data_pack = {
+            "report_readiness_view": renderer.report_readiness_view(
+                {
+                    "acceptance_ready": False,
+                    "partial_report_ready": False,
+                    "supply_conclusion_blocked": False,
+                    "blocking_gaps": [
+                        {
+                            "module": "competitor_pool_depth",
+                            "reason": "亚马逊竞品池不足",
+                            "impact": "不能输出完整市场结论",
+                            "next_step": "补采竞品",
+                        }
+                    ],
+                    "counts": {"keywords": 518, "valid_competitors": 31, "reviews": 724, "valid_supplier_quotes": 88},
+                },
+                {"overall_score": 0.93, "grade": "A"},
+                "Go",
+            ),
+            "products": competitor_rows(31),
+            "keywords": [{"keyword": "smart lighting", "keyword_cn": "智能照明"} for _ in range(10)],
+            "reviews": [{"summary_cn": "评论归纳"} for _ in range(8)],
+            "suppliers": supplier_rows(55),
+            "data_gaps": [],
+        }
+        analysis_plan = {}
+
+        trust_html = renderer.client_trust_strip(data_pack, analysis_plan, "No-Go")
+        coverage_html = renderer.render_client_data_coverage(data_pack, analysis_plan, "No-Go")
+
+        self.assertIn("低 / 阻断交付", trust_html + coverage_html)
+        self.assertNotIn("kpi-trend up\">通过", trust_html)
+        self.assertNotIn("当前数据足以支持 Go / Watch / No-Go 方向判断", coverage_html)
+        self.assertIn("核心门禁未通过", coverage_html)
+        self.assertNotIn("<td>数据覆盖</td><td>中高</td>", coverage_html)
+
+    def test_blocked_readiness_does_not_render_supply_gate_as_clean_pass(self):
+        readiness = {
+            "acceptance_ready": False,
+            "partial_report_ready": False,
+            "supply_conclusion_blocked": False,
+            "blocking_gaps": [
+                {
+                    "module": "keyword_sample_depth",
+                    "reason": "有效关键词样本不足",
+                    "impact": "不能输出完整市场结构判断",
+                    "next_step": "补充细分赛道关键词并重新去重",
+                }
+            ],
+            "supplier_quote_gate": {"passed": True},
+            "supplier_quality_gate": {"passed": True, "customer_visible_passed": True},
+        }
+        view = renderer.report_readiness_view(readiness, {"overall_score": 0.91, "grade": "A"}, "Watch")
+        data_pack = {
+            "report_readiness_view": view,
+            "quality": {"overall_score": 0.91, "grade": "A"},
+            "products": competitor_rows(30),
+            "keywords": [{"keyword": "cupping massager", "keyword_cn": "拔罐按摩器"} for _ in range(20)],
+            "reviews": [{"summary_cn": "评论归纳"} for _ in range(6)],
+            "suppliers": supplier_rows(60),
+        }
+
+        cards_html = renderer.render_index_cards("电动拔罐器", "Watch", data_pack)
+
+        self.assertEqual(view["delivery_state"], "阻断交付")
+        self.assertIn("供应链数据通过；完整结论仍受其他门禁阻断", cards_html)
+        self.assertNotIn("供应链测算门禁通过", cards_html)
+        self.assertNotIn("kpi-trend up\">通过", cards_html)
+
+    def test_blocked_trust_strip_uses_core_blocking_gap_count_not_raw_gap_total(self):
+        readiness = {
+            "acceptance_ready": False,
+            "partial_report_ready": False,
+            "blocking_gaps": [
+                {"module": "market_segment_split", "reason": "赛道未拆分", "next_step": "补采赛道"},
+                {"module": "market_segment_depth", "reason": "主赛道不足", "next_step": "补采竞品"},
+                {"module": "keyword_sample_depth", "reason": "关键词不足", "next_step": "补采关键词"},
+            ],
+            "counts": {"keywords": 534, "valid_competitors": 30, "reviews": 320, "suppliers": 201},
+        }
+        view = renderer.report_readiness_view(readiness, {"overall_score": 0.7, "grade": "B"}, "No-Go")
+        data_pack = {
+            "report_readiness": readiness,
+            "report_readiness_view": view,
+            "quality": {"overall_score": 0.7, "grade": "B"},
+            "products": competitor_rows(38),
+            "keywords": [{"keyword": "cupping", "keyword_cn": "拔罐"} for _ in range(20)],
+            "reviews": [{"summary_cn": "评论归纳"} for _ in range(6)],
+            "suppliers": supplier_rows(60),
+            "data_gaps": [f"raw gap {idx}" for idx in range(9)],
+        }
+        analysis_plan = {"limitations": [f"limitation {idx}" for idx in range(5)]}
+
+        html = renderer.client_trust_strip(data_pack, analysis_plan, "No-Go")
+
+        self.assertIn("3 项", html)
+        self.assertNotIn("14 项", html)
+
+    def test_sample_coverage_without_readiness_does_not_claim_qualified_competitors(self):
+        data_pack = {
+            "products": competitor_rows(12),
+            "keywords": [{"keyword": "cupping", "keyword_cn": "拔罐"} for _ in range(3)],
+            "reviews": [{"summary_cn": "评论归纳"}],
+            "suppliers": supplier_rows(4),
+        }
+
+        coverage = renderer.sample_coverage(data_pack)
+
+        self.assertIn("相关产品覆盖 12", coverage)
+        self.assertNotIn("合格竞品 12", coverage)
+
+    def test_diagnostic_child_reports_hide_internal_readiness_file_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+            data_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_path.read_text(encoding="utf-8"))
+            data_pack["keywords"] = data_pack["keywords"][:12]
+            write_json(data_path, data_pack)
+            result = self.run_renderer(report_dir, "--no-recover")
+
+            self.assertNotEqual(result.returncode, 0)
+            for filename in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                html = (report_dir / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                self.assertIn("门禁诊断记录", html)
+                self.assertNotIn("data_readiness_report", html)
+
+    def test_diagnostic_render_rewrites_stale_report_md_decision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_dir = Path(tmp)
+            make_renderable_report(report_dir)
+            stale_report = (
+                "# 旧审计稿\n\n"
+                "## 交付状态\n"
+                "- readiness: acceptance_ready=true\n"
+                "- decision: Watch\n\n"
+                "## Go / Watch / No-Go\n"
+                "- final_decision: Watch\n"
+                "- rationale: 样本达到标准版门槛。\n"
+            )
+            write_text(report_dir / "output" / "report.md", stale_report)
+            data_path = report_dir / "data" / "data_pack.json"
+            data_pack = json.loads(data_path.read_text(encoding="utf-8"))
+            data_pack["keywords"] = data_pack["keywords"][:12]
+            write_json(data_path, data_pack)
+
+            result = self.run_renderer(report_dir, "--no-recover")
+
+            self.assertNotEqual(result.returncode, 0)
+            report_md = (report_dir / "output" / "report.md").read_text(encoding="utf-8")
+            self.assertIn("final_decision: No-Go", report_md)
+            self.assertIn("diagnostic_delivery_pass: true", report_md)
+            self.assertNotIn("acceptance_ready=true", report_md)
+            self.assertNotIn("样本达到标准版门槛", report_md)
+
     def test_lifecycle_supplier_matching_rejects_generic_tent_noise(self):
         data_pack = {
             "research_object": {"value": "hunting blinds"},
@@ -1207,6 +1425,10 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn('class="chart-body chart-h-300"', market_html)
             self.assertIn('class="chart-body chart-h-260"', market_html)
             self.assertIn('class="comp-col-product"', market_html)
+            self.assertIn('class="comp-product-thumb"', market_html)
+            self.assertIn('class="comp-image-thumb"', market_html)
+            self.assertIn('class="comp-deep-image"', market_html)
+            self.assertIn("https://m.media-amazon.com/images/I/test-competitor-", market_html)
             self.assertIn('class="section-header section-header-spaced"', market_html)
             self.assertIn('data-chart-source="marketRows"', market_html)
             self.assertNotIn("<col style=", market_html)
@@ -1229,6 +1451,9 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertIn('body class="template-lifecycle"', rendered_text)
             self.assertIn('body class="template-demand mode-r3"', rendered_text)
             lifecycle_html = (report_dir / "output" / "html_reports" / "lifecycle-strategy-report.html").read_text(encoding="utf-8")
+            self.assertIn('class="sku-reference-image"', lifecycle_html)
+            self.assertIn('class="sku-reference-thumb table-thumb"', lifecycle_html)
+            self.assertIn("https://m.media-amazon.com/images/I/test-competitor-", lifecycle_html)
             self.assertIn("lifecycle-kpi-secondary", lifecycle_html)
             self.assertIn("P1 首发 SKU", lifecycle_html)
             self.assertIn("高优先级 SKU", lifecycle_html)
@@ -1274,7 +1499,8 @@ class RenderDashboardHtmlTest(unittest.TestCase):
             self.assertNotIn("性能/效果", rendered_text)
             self.assertIn('class="metric-tags"', rendered_text)
             self.assertIn('class="metric-tag"><b>1000</b><span>关键词</span></span>', rendered_text)
-            self.assertIn('class="metric-tag"><b>30</b><span>竞品</span></span>', rendered_text)
+            self.assertIn('class="metric-tag"><b>30</b><span>合格竞品</span></span>', rendered_text)
+            self.assertNotIn('class="metric-tag"><b>30</b><span>竞品</span></span>', rendered_text)
             self.assertIn('data-allow-english-review="short"', rendered_text)
             self.assertIn("This toy stopped working after two days", rendered_text)
             self.assertNotIn("privacy issue", rendered_text)
@@ -1411,18 +1637,693 @@ class RenderDashboardHtmlTest(unittest.TestCase):
                 self.assertIn(f"html_reports/{href}", compat_html)
             for client_term in ["证据强度", "数据覆盖", "数据缺口", "建议动作", "置信等级"]:
                 self.assertIn(client_term, diagnostic_html)
-            self.assertIn("补齐门禁后重新渲染", diagnostic_html)
+            self.assertIn("补齐门禁后重新分析", diagnostic_html)
             self.assertNotIn("collect_", diagnostic_html)
             self.assertNotIn("sorftime", diagnostic_html.casefold())
             child_expectations = {
-                "market-depth-report.html": ["template-market", "大盘仪表盘 · Market Dashboard", "COSMO + Alexa 标签识别"],
-                "lifecycle-strategy-report.html": ["template-lifecycle", "四维拓品生态", "SKU 优先级"],
-                "demand-gap-report.html": ["template-demand", "市场痛点全景图（需求主题）", "用户原声"],
+                "market-depth-report.html": ["template-market", "市场深度调研报告", "补采诊断"],
+                "lifecycle-strategy-report.html": ["template-lifecycle", "产品全生命周期拓品战略报告", "补采诊断"],
+                "demand-gap-report.html": ["template-demand", "用户心智断层与需求机会报告", "补采诊断"],
             }
+            forbidden_child_conclusions = [
+                "毛利率测算 · 各定价方案对比",
+                "竞品狙击结论",
+                "SKU 优先级全量榜",
+                "证据充分",
+                "供应链可控度较高",
+            ]
             for filename, expected_terms in child_expectations.items():
                 child_html = (report_dir / "output" / "html_reports" / filename).read_text(encoding="utf-8")
                 for expected_term in expected_terms:
                     self.assertIn(expected_term, child_html, f"{filename} must keep the standard diagnostic template slot {expected_term}")
+                for forbidden in forbidden_child_conclusions:
+                    self.assertNotIn(forbidden, child_html, f"{filename} must not keep stale full-report conclusion {forbidden}")
+
+    def test_cosmo_tags_do_not_use_outdoor_fallbacks_for_cupping_reports(self):
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": [
+                {
+                    "asin": "B0CUPPING01",
+                    "title": "Smart Electric Cupping Therapy Massager with Red Light Heat",
+                    "title_cn": "智能电动拔罐理疗按摩器",
+                    "segment_cn": "热敷红光电动拔罐器",
+                    "brand": "TheraCup",
+                    "price": 49.99,
+                    "rating": 4.5,
+                    "review_count": 320,
+                    "estimated_monthly_sales": 1200,
+                    "source_id": "src_product",
+                }
+            ],
+            "effective_keywords": [
+                {"keyword": "electric cupping massager", "keyword_cn": "电动拔罐按摩器", "source_id": "src_kw"},
+                {"keyword": "red light therapy", "keyword_cn": "红光理疗", "source_id": "src_kw"},
+                {"keyword": "back pain relief", "keyword_cn": "背部疼痛缓解", "source_id": "src_kw"},
+            ],
+            "effective_reviews": [
+                {
+                    "asin": "B0CUPPING01",
+                    "rating": 5,
+                    "title": "Works well on shoulder pain",
+                    "text": "The suction and heat helped my shoulder and back after workouts.",
+                    "themes": ["pain relief", "heat"],
+                    "source_id": "src_review",
+                }
+            ],
+            "effective_suppliers": [
+                {
+                    "title": "电动拔罐器红光热敷负压按摩仪",
+                    "price": 35,
+                    "seed_keyword": "电动拔罐器",
+                    "source_id": "src_supplier",
+                }
+            ],
+        }
+
+        tags = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        tag_text = json.dumps(tags, ensure_ascii=False)
+
+        for polluted in ["快速安装", "快速搭建", "清晨/傍晚观察", "户外活动日", "便携户外使用", "空间更充足"]:
+            self.assertNotIn(polluted, tag_text)
+        for expected in ["电动拔罐按摩器", "红光理疗", "背部疼痛"]:
+            self.assertIn(expected, tag_text)
+
+    def test_cosmo_cupping_context_blocks_setup_and_observation_terms_even_when_source_text_mentions_them(self):
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": [
+                {
+                    "title": "Electric cupping massager with heat suction, easy install charging base",
+                    "title_cn": "电动拔罐按摩器",
+                    "segment_cn": "电动拔罐按摩器",
+                    "brand": "TheraCup",
+                    "source_id": "src_product",
+                }
+            ],
+            "effective_keywords": [
+                {"keyword": "electric cupping massager morning routine", "keyword_cn": "电动拔罐按摩器", "source_id": "src_kw"}
+            ],
+            "effective_reviews": [
+                {
+                    "rating": 5,
+                    "title": "I use it in the morning after workouts",
+                    "text": "The suction and heat help my back and shoulders.",
+                    "source_id": "src_review",
+                }
+            ],
+            "effective_suppliers": [
+                {"title": "电动拔罐器安装底座便携收纳套装", "seed_keyword": "电动拔罐器", "source_id": "src_supplier"}
+            ],
+        }
+
+        tags = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        tag_text = json.dumps(tags, ensure_ascii=False)
+
+        for polluted in ["快速搭建", "快速安装", "清晨/傍晚观察", "户外活动日", "隐蔽观察"]:
+            self.assertNotIn(polluted, tag_text)
+
+    def test_lifecycle_strategy_persists_priority_scores_for_audit(self):
+        products = []
+        for idx in range(12):
+            products.append(
+                {
+                    "asin": f"B0CUP{idx:05d}",
+                    "title": f"Electric Cupping Massager Red Light Therapy {idx}",
+                    "title_cn": f"热敷红光电动拔罐器 {idx}",
+                    "segment_cn": "热敷红光电动拔罐器",
+                    "brand": "TheraCup",
+                    "price": 39.99 + idx,
+                    "rating": 4.4,
+                    "review_count": 200 + idx,
+                    "estimated_monthly_sales": 1000 - idx * 10,
+                    "source_id": f"src_product_{idx}",
+                }
+            )
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": products,
+            "effective_keywords": [{"keyword": "electric cupping massager", "keyword_cn": "电动拔罐按摩器"}],
+            "effective_reviews": [{"rating": 5, "themes": ["pain relief"], "text": "Works for back pain."}],
+            "effective_suppliers": [
+                {"title": "电动拔罐器红光热敷负压按摩仪", "price": 35, "seed_keyword": "电动拔罐器"}
+                for _ in range(60)
+            ],
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_fallback")
+        pool = lifecycle["sku_candidate_pool"]
+
+        self.assertGreaterEqual(len(pool), 12)
+        self.assertTrue(all(isinstance(item.get("priority_score"), int) for item in pool))
+        self.assertTrue(all(0 <= item["priority_score"] <= 100 for item in pool))
+        self.assertTrue(all(item.get("priority_basis") for item in pool))
+
+    def test_lifecycle_strategy_populates_decision_fields_for_recommended_skus(self):
+        products = []
+        for idx in range(12):
+            products.append(
+                {
+                    "asin": f"B0CUP{idx:05d}",
+                    "title": f"Smart Electric Cupping Therapy Massager with Heat Red Light {idx}",
+                    "title_cn": f"热敷红光电动拔罐器 {idx}",
+                    "brand": f"Brand{idx}",
+                    "segment_cn": "热敷红光电动拔罐器",
+                    "price": 29.99 + idx,
+                    "rating": 4.4,
+                    "review_count": 800 + idx,
+                    "estimated_monthly_sales": 1200 - idx,
+                    "source_id": f"src_product_{idx}",
+                }
+            )
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": products,
+            "effective_suppliers": [
+                {"title": f"电动拔罐器红光热敷负压按摩仪 {idx}", "price": 35 + idx, "price_rmb": 35 + idx, "seed_keyword": "电动拔罐器"}
+                for idx in range(60)
+            ],
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_life")
+
+        for sku in lifecycle["recommended_skus"]:
+            self.assertIn(sku.get("strategy_type_key"), renderer.LIFECYCLE_TYPE_ORDER)
+            self.assertTrue(sku.get("type_label_cn"))
+            self.assertTrue(sku.get("price_band"))
+            self.assertTrue(sku.get("supply_chain_status"))
+            self.assertTrue(sku.get("supply_chain_anchor"))
+            self.assertTrue(sku.get("reference_asin") or sku.get("supply_chain_status") == "仅供应端候选")
+
+    def test_lifecycle_strategy_deduplicates_candidate_names_without_hiding_distinct_asins(self):
+        products = []
+        for idx in range(16):
+            products.append(
+                {
+                    "asin": f"B0DUP{idx:05d}",
+                    "title": f"Electric Cupping Massager Red Light Therapy Duplicate Naming Source {idx}",
+                    "title_cn": "电动拔罐按摩器",
+                    "brand": f"Brand{idx}",
+                    "segment_cn": "热敷红光电动拔罐器",
+                    "price": 39.99 + idx,
+                    "rating": 4.4,
+                    "review_count": 800 + idx,
+                    "estimated_monthly_sales": 1200 - idx,
+                    "source_id": f"src_product_{idx}",
+                }
+            )
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": products,
+            "effective_suppliers": [
+                {
+                    "title": f"电动拔罐器红光热敷负压按摩仪 {idx}",
+                    "price": 35 + idx,
+                    "price_rmb": 35 + idx,
+                    "seed_keyword": "电动拔罐器",
+                    "url": f"https://detail.1688.com/offer/{idx}.html",
+                }
+                for idx in range(60)
+            ],
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_life")
+        names = [sku.get("name") for sku in lifecycle["sku_candidate_pool"]]
+
+        self.assertEqual(len(names), len(set(names)))
+        self.assertGreaterEqual(len(lifecycle["sku_candidate_pool"]), 12)
+        self.assertEqual(len({sku.get("reference_asin") for sku in lifecycle["sku_candidate_pool"] if sku.get("reference_asin")}), 16)
+
+    def test_lifecycle_recommended_skus_exclude_underfilled_segments(self):
+        products = []
+        for idx in range(11):
+            products.append(
+                {
+                    "asin": f"B0MAIN{idx:05d}",
+                    "title": f"Main Segment Electric Cupping Massager {idx}",
+                    "title_cn": f"主赛道电动拔罐器 {idx}",
+                    "brand": "MainBrand",
+                    "segment_cn": "主赛道拔罐器",
+                    "price": 39.99,
+                    "rating": 4.5,
+                    "review_count": 900,
+                    "estimated_monthly_sales": 1000 - idx,
+                }
+            )
+        products.append(
+            {
+                "asin": "B0TINY00001",
+                "title": "Tiny Segment Lymphatic Drainage Device",
+                "title_cn": "小样本淋巴引流负压仪",
+                "brand": "TinyBrand",
+                "segment_cn": "小样本淋巴引流负压仪",
+                "price": 89.99,
+                "rating": 4.8,
+                "review_count": 5000,
+                "estimated_monthly_sales": 9999,
+            }
+        )
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "effective_products": products,
+            "effective_suppliers": supplier_rows(60),
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_life")
+        recommended_text = json.dumps(lifecycle["recommended_skus"], ensure_ascii=False)
+        pool_tiny = [sku for sku in lifecycle["sku_candidate_pool"] if sku.get("target_segment") == "小样本淋巴引流负压仪"]
+
+        self.assertNotIn("小样本淋巴引流负压仪", recommended_text)
+        self.assertTrue(pool_tiny)
+        self.assertTrue(all(sku.get("segment_status") == "需验证赛道" for sku in pool_tiny))
+
+    def test_lifecycle_ecosystem_nodes_expand_from_candidate_pool(self):
+        products = [
+            {
+                "asin": f"B0LIFE{idx:04d}",
+                "title": f"Electric Cupping Massager Set {idx}",
+                "title_cn": "热敷红光电动拔罐器",
+                "brand": f"Brand {idx}",
+                "segment_cn": "热敷红光电动拔罐器" if idx < 12 else "套装型电动拔罐器",
+                "price": 39.99 + idx,
+                "rating": 4.4,
+                "review_count": 100 + idx,
+                "estimated_monthly_sales": 900 - idx,
+                "main_image_url": f"https://m.media-amazon.com/images/I/life{idx}.jpg",
+            }
+            for idx in range(24)
+        ]
+        suppliers = [
+            {
+                "title": f"电动拔罐器热敷红光成品 {idx}",
+                "supplier_name": f"供应商 {idx}",
+                "url": f"https://detail.1688.com/offer/{idx}.html",
+                "price_rmb": 20 + idx,
+                "seed_keyword": "电动拔罐器",
+            }
+            for idx in range(30)
+        ]
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(
+            {"research_object": {"value": "electric cupping massager"}, "products": products, "suppliers": suppliers},
+            {},
+            "src_life",
+        )
+
+        ecosystem = lifecycle["ecosystem_nodes"]
+        self.assertGreater(len(ecosystem.get("paths") or []), 1)
+        self.assertGreater(len(ecosystem.get("segments") or []), 3)
+        self.assertIn("children", ecosystem)
+        first_path = ecosystem["children"][0]
+        self.assertIn("children", first_path)
+        self.assertTrue(any((segment.get("children") or []) for segment in first_path["children"]))
+
+    def test_product_image_url_rejects_urls_with_embedded_whitespace_and_uses_valid_alternative(self):
+        product = {
+            "image_url": "https://m.media-amazon.com/images/I/71bad image.jpg",
+            "images": [
+                "https://detail.1688.com/offer/not-amazon.jpg",
+                "https://m.media-amazon.com/images/I/71valid.jpg",
+            ],
+        }
+
+        self.assertEqual(renderer.product_image_url(product), "https://m.media-amazon.com/images/I/71valid.jpg")
+
+    def test_diagnostic_child_reports_keep_standard_slot_density(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(
+                root / "data" / "data_pack.json",
+                {
+                    "research_object": {"value": "electric cupping massager"},
+                    "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                    "products": competitor_rows(30),
+                    "keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(200)],
+                    "reviews": [],
+                    "suppliers": supplier_rows(50),
+                },
+            )
+            write_json(
+                root / "data" / "normalized" / "data_readiness_report.json",
+                {
+                    "acceptance_ready": False,
+                    "blocking_gaps": [
+                        {
+                            "module": "keyword_sample_depth",
+                            "current": 200,
+                            "required": 1000,
+                            "reason": "关键词样本不足。",
+                            "next_step": "补充有效去重关键词。",
+                        }
+                    ],
+                    "counts": {"products": 30, "keywords": 200, "reviews": 0, "suppliers": 50, "valid_supplier_quotes": 50},
+                },
+            )
+            result = self.run_renderer(root, "--no-recover")
+            self.assertNotEqual(result.returncode, 0)
+
+            for filename in ["market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]:
+                html = (root / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                self.assertIn("diagnostic-slot-grid", html)
+                self.assertGreaterEqual(html.count("diagnostic-slot-card"), 6)
+                self.assertIn("diagnostic-slot-status", html)
+                self.assertIn("标准报告结构", html)
+
+    def test_diagnostic_child_reports_keep_full_template_section_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_pack = {
+                "research_object": {"value": "ai plush toy"},
+                "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                "effective_products": competitor_rows(30, include_images=True),
+                "effective_keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(611)],
+                "effective_reviews": [],
+                "effective_suppliers": supplier_rows(50),
+                "quality": {"overall_score": 0.4, "grade": "D"},
+            }
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [
+                    {
+                        "module": "market_segment_depth",
+                        "reason": "部分细分赛道有效竞品不足 10 个。",
+                        "next_step": "补采低样本赛道竞品。",
+                    }
+                ],
+                "counts": {"valid_competitors": 30, "market_segments": 4, "keywords": 611, "reviews": 0, "suppliers": 50, "valid_supplier_quotes": 50},
+                "competitor_gate": {"minimum_total": 30, "minimum_per_primary_segment": 10, "passed": False},
+                "segment_gate": {"minimum_per_primary_segment": 10, "passed": False},
+                "supplier_quote_gate": {"required": 50, "passed": True},
+                "supplier_quality_gate": {"title_coverage_pct": 100, "field_quality_passed": True},
+            }
+
+            renderer.write_readiness_diagnostic_bundle(root, data_pack, {}, readiness)
+
+            expectations = {
+                "market-depth-report.html": ["大盘仪表盘", "COSMO + Alexa 标签识别", "Top 竞品全景扫描", "VOC 体验深潜", "TikTok 趋势信号", "供应链成本估算"],
+                "lifecycle-strategy-report.html": ["战略仪表盘", "四维拓品生态", "拓品方案池", "Bundle 策略", "风险矩阵"],
+                "demand-gap-report.html": ["目标ASIN锚点", "决策看板", "市场痛点全景图", "KANO × JTBD", "用户原声"],
+            }
+            for filename, labels in expectations.items():
+                html = (root / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                self.assertGreaterEqual(html.count("<section"), len(labels))
+                for label in labels:
+                    self.assertIn(label, html)
+                self.assertIn('id="', html)
+                self.assertGreaterEqual(html.count('class="nav-link"'), 3)
+
+    def test_diagnostic_child_reports_keep_standard_section_anchors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_pack = {
+                "research_object": {"value": "electric cupping massager"},
+                "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                "effective_products": competitor_rows(30, include_images=True),
+                "effective_keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(611)],
+                "effective_reviews": [{"summary_cn": "评论归纳"} for _ in range(80)],
+                "effective_suppliers": supplier_rows(55),
+                "quality": {"overall_score": 0.4, "grade": "D"},
+            }
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [
+                    {
+                        "module": "market_segment_depth",
+                        "reason": "部分细分赛道有效竞品不足 10 个。",
+                        "next_step": "补采低样本赛道竞品。",
+                    }
+                ],
+                "counts": {"valid_competitors": 30, "keywords": 611, "reviews": 80, "suppliers": 55, "valid_supplier_quotes": 55},
+            }
+
+            renderer.write_readiness_diagnostic_bundle(root, data_pack, {}, readiness)
+
+            expected_anchors = {
+                "market-depth-report.html": [
+                    "market-dashboard",
+                    "cosmo-alexa-tags",
+                    "competitor-scan",
+                    "voc-deep-dive",
+                    "benchmark-sniper",
+                    "product-definition",
+                    "pricing",
+                    "visual-direction",
+                    "prompt",
+                    "tiktok-trends",
+                    "supply-chain",
+                ],
+                "lifecycle-strategy-report.html": [
+                    "strategy-dashboard",
+                    "lifecycle-personas",
+                    "lifecycle-journey",
+                    "lifecycle-ecosystem",
+                    "sku-strategy-pool",
+                    "bundle-strategy",
+                    "risk-matrix",
+                ],
+                "demand-gap-report.html": [
+                    "target-anchor",
+                    "decision-board",
+                    "appeals-map",
+                    "gap-analysis",
+                    "kano-jtbd",
+                    "voice-theater",
+                    "priority-table",
+                ],
+            }
+            for filename, anchors in expected_anchors.items():
+                html = (root / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(f'id="{anchor}"', html, f"{filename} should preserve standard anchor {anchor}")
+                    self.assertIn(f'href="#{anchor}"', html, f"{filename} slot grid should link to standard anchor {anchor}")
+                self.assertNotIn('id="diagnostic-slot-02-cosmo-alexa-标签识别"', html)
+
+    def test_diagnostic_child_reports_keep_component_skeletons_not_only_slot_cards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_pack = {
+                "research_object": {"value": "ai plush toy"},
+                "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                "effective_products": competitor_rows(30, include_images=True),
+                "effective_keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(611)],
+                "effective_reviews": [{"summary_cn": "评论归纳"} for _ in range(80)],
+                "effective_suppliers": supplier_rows(55),
+                "quality": {"overall_score": 0.4, "grade": "D"},
+            }
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [
+                    {
+                        "module": "market_segment_depth",
+                        "reason": "部分细分赛道有效竞品不足 10 个。",
+                        "next_step": "补采低样本赛道竞品。",
+                    }
+                ],
+                "counts": {"valid_competitors": 30, "market_segments": 4, "keywords": 611, "reviews": 80, "suppliers": 55, "valid_supplier_quotes": 55},
+                "competitor_gate": {"minimum_total": 30, "minimum_per_primary_segment": 10, "passed": False},
+                "segment_gate": {"minimum_per_primary_segment": 10, "passed": False},
+                "supplier_quote_gate": {"required": 50, "passed": True},
+                "supplier_quality_gate": {"title_coverage_pct": 100, "field_quality_passed": True, "customer_visible_passed": True, "passed": True},
+            }
+
+            renderer.write_readiness_diagnostic_bundle(root, data_pack, {}, readiness)
+
+            market_html = (root / "output" / "html_reports" / "market-depth-report.html").read_text(encoding="utf-8")
+            lifecycle_html = (root / "output" / "html_reports" / "lifecycle-strategy-report.html").read_text(encoding="utf-8")
+            demand_html = (root / "output" / "html_reports" / "demand-gap-report.html").read_text(encoding="utf-8")
+
+            for token in [
+                "cosmo-diagnostic-shell",
+                "comp-image-strip-card",
+                "market-voc-sentiment-columns",
+                "tiktok-diagnostic-card",
+                "supply-grid",
+                "prompt-card",
+            ]:
+                self.assertIn(token, market_html)
+            self.assertEqual(market_html.count("cosmo-matrix-cell"), 15)
+            self.assertIn("产品标签 · 产品被算法识别为什么", market_html)
+            self.assertIn("用户标签 · 用户为什么搜索/购买", market_html)
+            for raw_relation in ["USED_FOR_FUNC", "CAPABLE_OF", "USED_IN_LOC", "xWANT", "xINTERSTED_IN"]:
+                self.assertNotIn(raw_relation, market_html)
+            self.assertIn("<img", market_html)
+            self.assertIn("test-competitor-", market_html)
+            for placeholder in ["待验证", "待补", "暂无"]:
+                self.assertNotIn(placeholder, market_html)
+            for token in ["lifecycle-ecosystem", "sku-priority", "sku-pool-table", "bundle-card"]:
+                self.assertIn(token, lifecycle_html)
+            self.assertIn('id="lifecycleSunburst"', lifecycle_html)
+            self.assertIn('id="priorityChart"', lifecycle_html)
+            self.assertIn('data-chart-disabled="true"', lifecycle_html)
+            self.assertIn("补齐门禁后输出候选池评分", lifecycle_html)
+            for token in ["demand-evidence", "voice-card", "kano-jtbd-grid", "demand-priority-grid"]:
+                self.assertIn(token, demand_html)
+            self.assertGreater(market_html.count("diagnostic-slot-card"), 0)
+            self.assertNotIn("图片加载失败", market_html + lifecycle_html + demand_html)
+
+    def test_diagnostic_pages_use_readiness_competitor_counts_without_ambiguous_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            products = competitor_rows(30)
+            products.extend(
+                {
+                    "asin": f"B0PARTIAL{idx:02d}",
+                    "title": f"Electric cupping partial competitor {idx}",
+                    "title_cn": "电动拔罐器相关产品",
+                    "brand": "PartialBrand",
+                    "segment_cn": "热敷红光电动拔罐器",
+                    "price": 29.99,
+                    "rating": 0,
+                    "review_count": 0,
+                    "estimated_monthly_sales": 5,
+                }
+                for idx in range(8)
+            )
+            data_pack = {
+                "research_object": {"value": "electric cupping massager"},
+                "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                "effective_products": products,
+                "effective_keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(534)],
+                "effective_reviews": [{"summary_cn": "评论归纳"} for _ in range(320)],
+                "effective_suppliers": supplier_rows(201),
+                "quality": {"overall_score": 0.72, "grade": "B"},
+            }
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [
+                    {
+                        "module": "market_segment_depth",
+                        "reason": "部分细分赛道有效竞品不足 10 个。",
+                        "next_step": "补采低数据记录赛道竞品。",
+                    }
+                ],
+                "counts": {
+                    "keywords": 534,
+                    "valid_competitors": 30,
+                    "market_segments": 4,
+                    "reviews": 320,
+                    "suppliers": 201,
+                    "valid_supplier_quotes": 199,
+                },
+                "competitor_gate": {"minimum_total": 30, "passed": False},
+                "segment_gate": {"minimum_per_primary_segment": 10, "passed": False},
+                "supplier_quote_gate": {"required": 50, "passed": True},
+                "supplier_quality_gate": {"title_coverage_pct": 100, "field_quality_passed": True},
+            }
+
+            renderer.write_readiness_diagnostic_bundle(root, data_pack, {}, readiness)
+
+            combined_html = "\n".join(
+                (root / "output" / "html_reports" / filename).read_text(encoding="utf-8")
+                for filename in ["report.html", "market-depth-report.html", "lifecycle-strategy-report.html", "demand-gap-report.html"]
+            )
+            self.assertIn("合格竞品 30", combined_html)
+            self.assertIn("相关产品覆盖 8", combined_html)
+            self.assertNotIn("相关产品覆盖 38", combined_html)
+            self.assertNotIn("竞品 38", combined_html)
+            self.assertIn("每个主赛道≥10", combined_html)
+            self.assertNotIn("<td>细分赛道</td><td>4</td><td>0</td>", combined_html)
+            self.assertIn("数量通过；完整结论受其他门禁阻断", combined_html)
+            self.assertIn("字段通过；完整结论受其他门禁阻断", combined_html)
+            self.assertNotIn("局部通过", combined_html)
+            self.assertNotIn("<td>1688有效报价</td><td>199</td><td>50</td><td>通过</td>", combined_html)
+
+    def test_diagnostic_slots_use_module_specific_metrics_and_copy(self):
+        def section(html: str, title: str) -> str:
+            marker = f'<h2 class="section-title">{title}</h2>'
+            start = html.index(marker)
+            next_start = html.find('<section id="diagnostic-slot-', start + len(marker))
+            return html[start:] if next_start == -1 else html[start:next_start]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            readiness = {
+                "acceptance_ready": False,
+                "partial_report_ready": False,
+                "sample_class": "non_acceptance_sample",
+                "blocking_gaps": [
+                    {
+                        "module": "competitor_pool_depth",
+                        "reason": "有效竞品池不足。",
+                        "next_step": "补采同类竞品。",
+                    }
+                ],
+                "counts": {
+                    "valid_competitors": 32,
+                    "keywords": 916,
+                    "reviews": 214,
+                    "valid_supplier_quotes": 9,
+                    "tiktok_products": 7,
+                    "sku_candidates": 18,
+                },
+            }
+            data_pack = {
+                "research_object": {"value": "generic product"},
+                "effective_products": competitor_rows(32, include_images=True),
+                "effective_keywords": [{"keyword": f"term {idx}", "keyword_cn": f"中文词 {idx}"} for idx in range(20)],
+                "effective_reviews": [{"summary_cn": "评论归纳"} for _ in range(12)],
+                "effective_suppliers": supplier_rows(9),
+                "quality": {"overall_score": 0.55, "grade": "D"},
+            }
+
+            renderer.write_readiness_diagnostic_bundle(root, data_pack, {}, readiness)
+
+            market_html = (root / "output" / "html_reports" / "market-depth-report.html").read_text(encoding="utf-8")
+            lifecycle_html = (root / "output" / "html_reports" / "lifecycle-strategy-report.html").read_text(encoding="utf-8")
+            demand_html = (root / "output" / "html_reports" / "demand-gap-report.html").read_text(encoding="utf-8")
+            index_html = (root / "output" / "html_reports" / "report.html").read_text(encoding="utf-8")
+            combined_html = index_html + market_html + lifecycle_html + demand_html
+
+            self.assertIn('<div class="diagnostic-slot-metric">合格竞品 32</div>', section(market_html, "Top 竞品全景扫描"))
+            self.assertIn('<div class="diagnostic-slot-metric">关键词 916</div>', section(market_html, "COSMO + Alexa 标签识别"))
+            self.assertIn('<div class="diagnostic-slot-metric">评论 214</div>', section(market_html, "VOC 体验深潜"))
+            self.assertIn('<div class="diagnostic-slot-metric">有效报价 9</div>', section(market_html, "供应链成本估算"))
+            self.assertIn('<div class="diagnostic-slot-metric">TikTok信号 7</div>', section(market_html, "TikTok 趋势信号"))
+            self.assertIn('<div class="diagnostic-slot-metric">SKU候选 18</div>', section(lifecycle_html, "拓品方案池"))
+            self.assertIn('<div class="diagnostic-slot-metric">评论 214</div>', section(demand_html, "用户原声"))
+            self.assertNotIn("当前只展示门禁状态、可用数据覆盖和补采动作，暂不输出结论。", combined_html)
+            self.assertNotIn("补齐阻断项后重新分析，并在本模块输出图表、表格和结论", combined_html)
+            self.assertNotIn("本节保留标准版结构，只展示当前门禁状态和下一步动作。", combined_html)
+            self.assertNotIn("当前数据未达决策门槛，本模块只显示诊断和补采动作。", combined_html)
+            self.assertNotIn("Pain 主要痛点", combined_html)
+            self.assertNotIn("Joy 主要爽点", combined_html)
+            self.assertNotIn("PROMPT 01", combined_html)
+            self.assertNotIn("PROMPT 02", combined_html)
+            self.assertNotIn("PROMPT 03", combined_html)
+            self.assertNotIn("当前只展示", combined_html)
+            self.assertNotIn("本节只展示", combined_html)
+
+    def test_blocked_diagnostic_overwrites_stale_critic_decision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(
+                root / "data" / "data_pack.json",
+                {
+                    "research_object": {"value": "electric cupping massager"},
+                    "sources": [{"source_id": "src_001", "provider": "sorftime"}],
+                    "products": competitor_rows(30),
+                    "keywords": [{"keyword": f"cupping {idx}", "keyword_cn": f"拔罐 {idx}"} for idx in range(200)],
+                    "reviews": [],
+                    "suppliers": supplier_rows(50),
+                },
+            )
+            write_json(root / "analysis" / "critic_decision.json", {"decision": "Watch", "pass": True, "score": 88})
+
+            result = self.run_renderer(root, "--no-recover")
+
+            self.assertNotEqual(result.returncode, 0)
+            critic_decision = json.loads((root / "analysis" / "critic_decision.json").read_text(encoding="utf-8"))
+            self.assertEqual(critic_decision["decision"], "No-Go")
+            self.assertFalse(critic_decision["pass"])
+            self.assertEqual(critic_decision["status"], "not_run_data_readiness_blocked")
 
     def test_demand_template_uses_shared_report_header_structure(self):
         template = (renderer.SKILL_DIR / "assets" / "demand-gap-template.html").read_text(encoding="utf-8")
@@ -1770,6 +2671,30 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertNotIn("发光二极管", html)
         self.assertNotIn("¥0.05", html)
 
+    def test_data_readiness_blocks_low_keyword_chinese_mapping_coverage(self):
+        keywords = [
+            {"keyword": f"electric cupping keyword {idx}", "keyword_cn": f"未映射关键词：electric cupping keyword {idx}"}
+            for idx in range(100)
+        ]
+
+        gate = check_data_readiness.keyword_mapping_quality(keywords)
+
+        self.assertFalse(gate["passed"])
+        self.assertLess(gate["mapping_coverage_pct"], gate["required_mapping_coverage_pct"])
+
+    def test_data_readiness_filters_cupping_accessories_from_finished_supplier_quotes(self):
+        bad_rows = [
+            {"title": "拔罐器抽气枪双色拔罐枪硅胶大号配件", "price_rmb": 10, "supplier_name": "配件厂"},
+            {"title": "硅胶面部拔罐器小儿吸湿拨罐器", "price_rmb": 0.68, "supplier_name": "美容工具厂"},
+            {"title": "玻璃火罐家用拔罐器散装", "price_rmb": 1.2, "supplier_name": "火罐厂"},
+        ]
+        good_row = {"title": "电动拔罐器红光热敷负压按摩器成品套装", "price_rmb": 32, "supplier_name": "成品厂"}
+
+        self.assertTrue(check_data_readiness.is_finished_supplier_quote(good_row))
+        for row in bad_rows:
+            with self.subTest(row=row["title"]):
+                self.assertFalse(check_data_readiness.is_finished_supplier_quote(row))
+
     def test_market_pricing_and_prompt_sections_always_render_three_cards(self):
         opportunity = {
             "opportunities": [
@@ -1800,11 +2725,12 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         prompt_texts = re.findall(r'<div class="prompt-text">(.*?)</div>', prompt_html)
         self.assertEqual(len(prompt_texts), 3)
         self.assertEqual(len(set(prompt_texts)), 3)
-        self.assertRegex(prompt_texts[0], r"低价|首图")
-        self.assertRegex(prompt_texts[1], r"差异|对比")
-        self.assertRegex(prompt_texts[2], r"套装|溢价")
+        self.assertRegex(prompt_texts[0], r"Photorealistic Amazon product photography")
+        self.assertRegex(prompt_texts[1], r"realistic lifestyle scene|visible selling point")
+        self.assertRegex(prompt_texts[2], r"premium bundle scene|organized unboxing")
         for text in prompt_texts:
-            self.assertNotRegex(text, r"Product concept|traffic validation|with the product|differentiated comparison|premium bundle")
+            self.assertRegex(text, r"scene:|composition:|no text|no watermark|no distorted product")
+            self.assertNotRegex(text, r"生成一张|商品方向：|把该机会写入")
 
     def test_market_visual_and_prompt_template_slots_match_reference_structure(self):
         html = renderer.render_visual_direction({"opportunities": [{"name": "橱柜感应灯 场景化主图"}]})
@@ -1930,7 +2856,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('class="comp-image-strip"', cards_html)
         self.assertNotIn("src=\"\"", table_html + cards_html + deep_html)
 
-    def test_competitor_images_have_customer_visible_load_failure_fallback(self):
+    def test_competitor_images_have_silent_load_failure_fallback(self):
         products = competitor_rows(30)
         products[-1]["image_url"] = "https://m.media-amazon.com/images/I/example-a.jpg"
 
@@ -1938,14 +2864,14 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         deep_html = renderer.render_product_deep_dives(filtered, [])
         combined = table_html + cards_html + deep_html
 
-        self.assertIn(
-            'onerror="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add',
-            combined,
-        )
+        self.assertIn("this.parentElement.classList.add('image-frame-missing')", combined)
+        self.assertIn('role="img" aria-label="竞品图片槽位"', combined)
         self.assertIn('class="image-load-fallback"', combined)
-        self.assertIn('class="image-load-fallback" hidden>', combined)
+        self.assertIn('class="image-load-fallback" hidden></span>', combined)
         self.assertNotIn("display:inline-flex", combined)
-        self.assertIn("图片加载失败", combined)
+        self.assertNotIn("竞品图片未返回", combined)
+        self.assertNotIn("参考竞品图片未返回", combined)
+        self.assertNotIn("图片加载失败", combined)
         self.assertNotIn("broken image", combined.lower())
 
     def test_competitor_modules_do_not_render_broken_images_when_image_urls_missing(self):
@@ -1976,6 +2902,18 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn('src="https://m.media-amazon.com/images/I/detail-image.jpg"', table_html + cards_html + deep_html)
         self.assertIn('class="comp-product-thumb"', table_html)
 
+    def test_competitor_modules_reject_whitespace_corrupted_amazon_image_urls(self):
+        products = competitor_rows(30)
+        products[-1]["image_url"] = "https://m.media-amazon.com/images/I/bad image.jpg"
+
+        table_html, cards_html, filtered = renderer.render_competitors({"products": products})
+        deep_html = renderer.render_product_deep_dives(filtered, [])
+
+        combined = table_html + cards_html + deep_html
+        self.assertNotIn("bad image.jpg", combined)
+        self.assertNotIn("<img", combined)
+        self.assertIn("图片维度未返回可展示 URL", cards_html)
+
     def test_lifecycle_reference_images_have_load_failure_fallback(self):
         html = renderer.sku_reference_image_html(
             {
@@ -1987,13 +2925,16 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
         self.assertIn('class="sku-reference-thumb"', html)
         self.assertIn(
-            'onerror="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add',
+            "this.parentElement.classList.add('image-frame-missing')",
             html,
         )
         self.assertIn('class="image-load-fallback"', html)
         self.assertIn('class="image-load-fallback" hidden>', html)
+        self.assertIn('aria-label="参考竞品图片槽位"', html)
         self.assertNotIn("display:inline-flex", html)
-        self.assertIn("图片加载失败", html)
+        self.assertNotIn("参考竞品图片未返回", html)
+        self.assertNotIn("未返回</span>", html)
+        self.assertNotIn("图片加载失败", html)
 
     def test_competitor_modules_reject_1688_supplier_images_as_amazon_competitor_images(self):
         products = competitor_rows(30)
@@ -2113,7 +3054,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         html = renderer.render_sku_execution_table(lifecycle["sku_candidate_pool"], "src_img")
 
         self.assertEqual(lifecycle["sku_candidate_pool"][0]["reference_image_url"], "https://m.media-amazon.com/images/I/blind-main.jpg")
-        self.assertIn('class="sku-reference-thumb"', html)
+        self.assertIn('class="sku-reference-thumb table-thumb"', html)
         self.assertIn('src="https://m.media-amazon.com/images/I/blind-main.jpg"', html)
         self.assertNotIn("cbu01.alicdn.com", html)
         self.assertNotIn('src=""', html)
@@ -2200,6 +3141,134 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn("core_validation", strategy_keys)
         self.assertNotIn("A", strategy_keys)
 
+    def test_lifecycle_candidate_names_do_not_embed_analysis_sentences_or_unsegmented_labels(self):
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "products": [
+                {
+                    "asin": "B0CUP001",
+                    "title": "Electric Cupping Massager with Red Light and Heat",
+                    "title_cn": "未分层",
+                    "brand": "Dopsikn",
+                    "segment_cn": "未分层",
+                    "price": 28.49,
+                    "rating": 4.3,
+                    "review_count": 1221,
+                    "estimated_monthly_sales": 5087,
+                },
+                {
+                    "asin": "B0CUP002",
+                    "title": "Smart Cupping Therapy Massager Vacuum Scraping Device",
+                    "brand": "REVO",
+                    "segment_cn": "未分层",
+                    "price": 136.0,
+                    "rating": 4.3,
+                    "review_count": 4458,
+                    "estimated_monthly_sales": 1966,
+                },
+            ],
+            "suppliers": supplier_rows(2),
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_life")
+        payload = json.dumps(lifecycle["sku_candidate_pool"], ensure_ascii=False)
+
+        self.assertNotIn("未分层", payload)
+        self.assertNotIn("用于判断竞品定位", payload)
+        self.assertNotIn("价格带 · 评分", payload)
+        self.assertIn("电动拔罐", payload)
+
+    def test_cosmo_evidence_excerpts_do_not_embed_internal_positioning_sentences(self):
+        data_pack = {
+            "research_object": {"value": "electric cupping massager"},
+            "products": [
+                {
+                    "asin": "B0CUP001",
+                    "title": "Lymphatic Drainage Massager Electric Cupping Massager with Heat Vibration",
+                    "title_cn": "未分层",
+                    "brand": "Goticc",
+                    "segment_cn": "未分层",
+                    "positioning_cn": "未分层 · $34.19 价格带 · 评分 4.5 · 评论 25，用于判断竞品定位和页面表达",
+                    "price": 34.19,
+                    "rating": 4.5,
+                    "review_count": 25,
+                    "estimated_monthly_sales": 860,
+                }
+            ],
+            "keywords": [
+                {
+                    "keyword": "electric cupping massager",
+                    "keyword_cn": "电动拔罐按摩器",
+                    "intent_cn": "按摩放松",
+                    "relevance_cn": "高相关",
+                    "monthly_search_volume": 3800,
+                }
+            ],
+        }
+
+        tags = renderer.generate_cosmo_alexa_tags(data_pack, {})
+        payload = json.dumps(tags, ensure_ascii=False)
+
+        self.assertNotIn("未分层", payload)
+        self.assertNotIn("用于判断竞品定位", payload)
+        self.assertNotIn("价格带 · 评分", payload)
+        self.assertIn("电动拔罐", payload)
+
+    def test_report_object_prefers_research_object_over_first_effective_product_segment(self):
+        data_pack = {
+            "research_object": {"value": "Electric Cupping Massager"},
+            "effective_products": [
+                {
+                    "asin": "B0SEGMENT01",
+                    "title": "Double Cup Electric Cupping Massager",
+                    "brand": "CupBrand",
+                    "segment_cn": "双杯/多杯套装型拔罐器",
+                }
+            ],
+        }
+        fns = {
+            "effective_products": lambda pack: pack.get("effective_products") or [],
+            "customer_product_position": lambda product: product.get("segment_cn"),
+        }
+
+        label = report_renderers.customer_report_object(data_pack, {}, "Electric Cupping Massager", fns)
+
+        self.assertEqual(label, "Electric Cupping Massager")
+        self.assertNotEqual(label, "双杯/多杯套装型拔罐器")
+
+    def test_lifecycle_candidate_priorities_are_spread_for_decision_ranking(self):
+        data_pack = {
+            "research_object": {"type": "keyword", "value": "wall lighting"},
+            "products": [
+                {
+                    "asin": f"B0LIGHT{i:03d}",
+                    "title": f"Wall lighting fixture {i}",
+                    "brand": f"Brand {i}",
+                    "segment_cn": "墙面灯具",
+                    "price": 39.99 + i,
+                    "rating": 4.5,
+                    "review_count": 9800,
+                    "estimated_monthly_sales": 26000,
+                }
+                for i in range(18)
+            ],
+            "suppliers": [
+                {
+                    "title": "室内墙面灯具成品供应",
+                    "price_rmb": 36,
+                    "supplier_name": "灯具工厂",
+                    "url": "https://detail.1688.com/offer/light.html",
+                }
+            ],
+        }
+
+        lifecycle = renderer.build_lifecycle_strategy_analysis(data_pack, {}, "src_light")
+        scores = [sku["priority"] for sku in lifecycle["sku_candidate_pool"][:15]]
+
+        self.assertGreaterEqual(max(scores), 90)
+        self.assertLessEqual(min(scores), 75)
+        self.assertGreaterEqual(len(set(scores)), 8)
+
     def test_lifecycle_sku_table_uses_semantic_strategy_filters(self):
         skus = [
             {
@@ -2222,6 +3291,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
 
         self.assertIn('data-filter="core_validation"', html)
         self.assertIn('data-type="core_validation"', html)
+        self.assertIn('data-sku-label="透视地面盲棚 主盲棚验证款"', html)
         self.assertIn('data-filter="scenario_upgrade"', html)
         self.assertNotIn('data-filter="A"', html)
         self.assertNotIn('data-type="a"', html)
@@ -2408,9 +3478,11 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn(".pricing-card.recommended::before", REPORT_CSS)
         self.assertIn(".visual-item:last-child", REPORT_CSS)
         self.assertIn(".prompt-card::before", REPORT_CSS)
+        self.assertIn(".prompt-copy-label", REPORT_CSS)
         self.assertIn(".template-market .supply-grid", REPORT_CSS)
-        self.assertRegex(REPORT_CSS, r"\.prompt-card\{[^}]*max-height:")
-        self.assertRegex(REPORT_CSS, r"\.prompt-text\{[^}]*line-clamp:")
+        self.assertNotRegex(REPORT_CSS, r"\.prompt-card\{[^}]*max-height:260px")
+        self.assertIn(".template-market .prompt-text{font-size:11px", REPORT_CSS)
+        self.assertIn("max-height:188px;overflow:auto", REPORT_CSS)
         self.assertRegex(REPORT_CSS, r"\.demand-evidence-grid\{[^}]*repeat\(2")
         self.assertIn(".template-demand .demand-evidence-card .quote-cn", REPORT_CSS)
         self.assertIn(".template-index .kpi-card .kpi-value", REPORT_CSS)
@@ -2427,7 +3499,7 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertIn(".market-voc-card.pain", REPORT_CSS)
 
     def test_report_css_styles_cosmo_reference_template_slots(self):
-        from site_assets import REPORT_CSS
+        from site_assets import REPORT_CSS, REPORT_POST_REFERENCE_CSS
 
         for selector in [
             ".cosmo-summary-strip",
@@ -2446,6 +3518,14 @@ class RenderDashboardHtmlTest(unittest.TestCase):
         self.assertRegex(REPORT_CSS, r"\.cosmo-summary-item b\{[^}]*font-size:")
         self.assertRegex(REPORT_CSS, r"\.cosmo-card-meta-grid\{[^}]*grid-template-columns:repeat\(2")
         self.assertRegex(REPORT_CSS, r"\.cosmo-action-direction\{[^}]*border-top:")
+        self.assertRegex(
+            REPORT_POST_REFERENCE_CSS,
+            r"body\.template-market #cosmo-alexa-tags \.cosmo-submodule-grid\{[^}]*grid-template-columns:repeat\(2",
+        )
+        self.assertNotRegex(
+            REPORT_POST_REFERENCE_CSS,
+            r"body\.template-market #cosmo-alexa-tags \.cosmo-submodule-grid\{[^}]*grid-template-columns:1fr",
+        )
 
     def test_market_voc_splits_positive_left_and_negative_right(self):
         reviews = []

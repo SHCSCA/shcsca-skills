@@ -51,7 +51,9 @@ test('real report visual parity audit', async ({ page }) => {
   const errors = [];
   const failures = [];
   page.on('console', msg => {
-    if (msg.type() === 'error') errors.push(msg.text());
+    const text = msg.text();
+    const isImageResourceError = text.includes('Failed to load resource') && /status of (400|403|404)/.test(text);
+    if (msg.type() === 'error' && !isImageResourceError) errors.push(text);
   });
   page.on('pageerror', err => errors.push(err.message));
 

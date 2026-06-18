@@ -18,7 +18,16 @@ This repository is a skills collection. Keep user-facing documentation aligned w
 For `amz-market-research-orchestrated`, common checks are:
 
 ```bash
-python -m unittest -v test_site_assets test_site_interactions test_validate_market_research_deliverables
+python -m unittest discover -s skills/amz-market-research-orchestrated/scripts -p "test_*.py" -v
+npm run test:amz-browser
 python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/<report_dir>
+python skills/amz-market-research-orchestrated/scripts/run_visual_parity_audit.py --dir reports/<report_dir>
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<report_dir> --depth standard
 python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<report_dir> --depth deep --reference-visual --download-root C:\Users\wz\Downloads\downloadpage
 ```
+
+Acceptance semantics:
+
+- Full acceptance requires `overall_pass=true`, `delivery_mode=full_acceptance`, and `full_acceptance_pass=true`.
+- Real reports with insufficient data gates may be valid diagnostic deliveries only when `overall_pass=false`, `delivery_mode=diagnostic_delivery`, and `diagnostic_delivery_pass=true`; do not describe these as complete market conclusions.
+- Visual audits may ignore remote image 400/403/404 resource failures, but JavaScript errors, page errors, missing required components, and layout overflow are still failures.

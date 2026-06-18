@@ -29,6 +29,8 @@ MIN_VALID_1688_QUOTES = 50
 MIN_SUPPLIER_FIELD_COVERAGE_PCT = 70
 MAX_SUPPLIER_MAX_TO_P50_RATIO = 20
 MAX_SUPPLIER_P75_TO_P25_RATIO = 5
+MIN_KEYWORD_CN_MAPPING_COVERAGE_PCT = 70
+MAX_CUSTOMER_KEYWORD_INTENT_DUPLICATE_RATIO = 0.30
 RECOMMENDED_TIKTOK_SIGNALS = 1
 SUPPLY_BLOCKER_MODULES = {
     "supplier_quote_depth",
@@ -63,6 +65,48 @@ SUPPLIER_NON_FINISHED_TOKENS = [
     "power supply",
     "module",
     "accessory",
+    "玻璃火罐",
+    "抽气式",
+    "抽气枪",
+    "拔罐枪",
+    "硅胶面部",
+    "面部罐",
+    "脸部",
+    "眼部",
+    "小儿",
+    "单个真空",
+    "散装",
+    "手动拉杆",
+    "延生罐体",
+    "罐子配件",
+]
+SUPPLIER_STRONG_FINISHED_GOOD_TOKENS = [
+    "电动",
+    "智能",
+    "充电",
+    "热敷",
+    "红光",
+    "负压",
+    "按摩器",
+    "刮痧仪",
+    "吸痧仪",
+    "揉腹仪",
+    "成品",
+    "套装",
+]
+SUPPLIER_HARD_COMPONENT_TOKENS = [
+    "玻璃火罐",
+    "抽气枪",
+    "拔罐枪",
+    "硅胶面部",
+    "面部罐",
+    "脸部硅胶",
+    "眼部",
+    "小儿",
+    "罐子配件",
+    "手动拉杆",
+    "单个真空",
+    "散装",
 ]
 SUPPLIER_CONTEXT_GENERIC_TERMS = {
     "产品",
@@ -279,7 +323,7 @@ def is_valid_segment(segment: str) -> bool:
 def valid_competitor_products(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     valid: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for product in relevant_products(effective_records(data_pack, "products")):
+    for product in relevant_products(effective_records(data_pack, "products"), data_pack.get("research_object")):
         if not isinstance(product, dict):
             continue
         asin = str(product.get("asin") or "").strip().upper()
@@ -462,7 +506,10 @@ def is_finished_supplier_quote(supplier: dict[str, Any]) -> bool:
     if price is None or price <= 0:
         return False
     text = supplier_title_text(supplier)
-    if any(token in text for token in SUPPLIER_NON_FINISHED_TOKENS):
+    has_strong_finished_signal = any(token in text for token in SUPPLIER_STRONG_FINISHED_GOOD_TOKENS)
+    if any(token in text for token in SUPPLIER_HARD_COMPONENT_TOKENS):
+        return False
+    if any(token in text for token in SUPPLIER_NON_FINISHED_TOKENS) and not has_strong_finished_signal:
         return False
     if price < 0.5:
         return False
@@ -562,9 +609,13 @@ def same_search_supplier_bucket_gate(valid_quotes: list[dict[str, Any]], minimum
 
 
 def keyword_bucket_key(keyword: dict[str, Any]) -> str:
-    source_type = str(keyword.get("source_type") or "").strip().casefold()
-    asin = str(keyword.get("asin") or "").strip().casefold()
-    bucket = f"traffic:{asin or 'unknown'}" if source_type == "product_traffic_terms" or asin else "market"
+    explicit_bucket = " ".join(str(keyword.get("source_bucket") or keyword.get("bucket") or "").strip().casefold().split())
+    if explicit_bucket:
+        bucket = explicit_bucket
+    else:
+        source_type = str(keyword.get("source_type") or "").strip().casefold()
+        asin = str(keyword.get("asin") or "").strip().casefold()
+        bucket = f"traffic:{asin or 'unknown'}" if source_type == "product_traffic_terms" or asin else "market"
     text = " ".join(str(keyword.get("keyword") or "").strip().casefold().split())
     return f"{bucket}|{text}"
 
@@ -585,6 +636,65 @@ def keyword_duplicate_diagnostic(keywords: list[dict[str, Any]]) -> dict[str, An
         "duplicate_ratio": round(ratio, 4),
         "max_duplicate_ratio": MAX_EFFECTIVE_KEYWORD_DUPLICATE_RATIO,
         "passed": ratio <= MAX_EFFECTIVE_KEYWORD_DUPLICATE_RATIO,
+    }
+
+
+def keyword_customer_intent_diagnostic(keywords: list[dict[str, Any]]) -> dict[str, Any]:
+    seen: set[str] = set()
+    total = 0
+    duplicate_extra = 0
+    examples: list[str] = []
+    for keyword in keywords:
+        label = str(keyword.get("customer_label_cn") or keyword.get("keyword_cn") or "").strip()
+        if not label or label.startswith("未映射关键词") or label.startswith("污染关键词"):
+            continue
+        key = re.sub(r"\s+", " ", label.casefold()).strip()
+        if not key:
+            continue
+        total += 1
+        if key in seen:
+            duplicate_extra += 1
+            if len(examples) < 8 and label not in examples:
+                examples.append(label)
+        seen.add(key)
+    ratio = duplicate_extra / total if total else 0.0
+    return {
+        "total": total,
+        "unique_customer_intents": len(seen),
+        "duplicate_extra": duplicate_extra,
+        "duplicate_ratio": round(ratio, 4),
+        "max_duplicate_ratio": MAX_CUSTOMER_KEYWORD_INTENT_DUPLICATE_RATIO,
+        "passed": ratio <= MAX_CUSTOMER_KEYWORD_INTENT_DUPLICATE_RATIO,
+        "duplicate_examples": examples,
+    }
+
+
+def keyword_mapping_quality(keywords: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(keywords)
+    mapped = 0
+    unmapped_examples: list[str] = []
+    for keyword in keywords:
+        keyword_cn = str(keyword.get("keyword_cn") or keyword.get("customer_label_cn") or "").strip()
+        raw_keyword = str(keyword.get("keyword") or "").strip()
+        is_mapped = (
+            bool(keyword_cn)
+            and not keyword_cn.startswith("未映射关键词")
+            and keyword_cn.casefold() != raw_keyword.casefold()
+            and re.search(r"[\u4e00-\u9fff]", keyword_cn) is not None
+        )
+        if is_mapped:
+            mapped += 1
+        elif len(unmapped_examples) < 8 and raw_keyword:
+            unmapped_examples.append(raw_keyword)
+    coverage = round((mapped / total) * 100, 1) if total else 0.0
+    return {
+        "total": total,
+        "mapped": mapped,
+        "unmapped": max(0, total - mapped),
+        "mapping_coverage_pct": coverage,
+        "required_mapping_coverage_pct": MIN_KEYWORD_CN_MAPPING_COVERAGE_PCT,
+        "passed": coverage >= MIN_KEYWORD_CN_MAPPING_COVERAGE_PCT,
+        "unmapped_examples": unmapped_examples,
     }
 
 
@@ -616,11 +726,14 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     supplier_quotes = [quote for quote in raw_supplier_quotes if is_finished_supplier_quote(quote)]
     relevant_supplier_quotes = [quote for quote in supplier_quotes if supplier_matches_research_context(quote, data_pack)]
     non_finished_filtered = len(raw_supplier_quotes) - len(supplier_quotes)
+    context_products = relevant_products(effective_records(data_pack, "products"), data_pack.get("research_object"))
     competitor_products = valid_competitor_products(data_pack)
     competitor_segments = segment_counts(competitor_products)
     effective_keywords = effective_records(data_pack, "keywords")
     effective_reviews = effective_records(data_pack, "reviews")
     keyword_duplicate_gate = keyword_duplicate_diagnostic(effective_keywords)
+    keyword_customer_intent_gate = keyword_customer_intent_diagnostic(effective_keywords)
+    keyword_mapping_gate = keyword_mapping_quality(effective_keywords)
     raw_supplier_quality_gate = supplier_quality(supplier_quotes)
     supplier_quality_gate = supplier_quality(relevant_supplier_quotes)
     same_search_bucket_gate = same_search_supplier_bucket_gate(relevant_supplier_quotes)
@@ -649,18 +762,22 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         for segment, count in competitor_segments.items()
         if count < MIN_COMPETITORS_PER_PRIMARY_SEGMENT
     }
+    segment_depth_gate_passed = not (standard_like and underfilled_segments)
     segment_gate_passed = (
-        not broad_research
-        or (
+        segment_depth_gate_passed
+        and (
+            not broad_research
+            or (
             len(competitor_segments) >= MIN_BROAD_MARKET_SEGMENTS
             and len(top_segment_counts) >= MIN_BROAD_MARKET_SEGMENTS
             and not underfilled_segments
+            )
         )
     )
     counts = {
         "sources": count(data_pack, "sources"),
         "raw_products": count(data_pack, "products"),
-        "products": len(effective_records(data_pack, "products")),
+        "products": len(context_products),
         "valid_competitors": len(competitor_products),
         "market_segments": len(competitor_segments),
         "raw_keywords": count(data_pack, "keywords"),
@@ -740,17 +857,32 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 len(competitor_segments),
                 MIN_BROAD_MARKET_SEGMENTS,
                 "研究对象属于大词，必须先拆分到可比较的细分赛道，不能把混合类目直接做成完整结论。",
-                "按橱柜感应灯、RGB 灯带、智能灯泡、氛围灯、户外感应灯等方向补齐每个主赛道至少 10 个有效竞品。",
+                "按当前研究对象重新拆分核心使用场景、价格带和功能路线，并补齐每个主赛道至少 10 个有效竞品。",
+            )
+        )
+    if standard_like and not segment_depth_gate_passed:
+        blocking_gaps.append(
+            gap(
+                "market_segment_depth",
+                min(underfilled_segments.values()) if underfilled_segments else 0,
+                MIN_COMPETITORS_PER_PRIMARY_SEGMENT,
+                "部分细分赛道有效竞品不足 10 个，不能进入推荐排名、生命周期 SKU 池或完整市场结论。",
+                "按当前提示的低样本赛道补采 Amazon 竞品；补齐前这些赛道只能作为需验证方向展示。",
             )
         )
     if counts["keywords"] < required_keywords:
+        keyword_next_step = (
+            f"当前原始关键词 {counts['raw_keywords']} 条，但有效去重关键词只有 {counts['keywords']} 条；请扩展细分赛道种子词、降低重复分页损耗，并重新归一化，直到有效去重关键词至少 {required_keywords} 条。"
+            if counts["raw_keywords"] >= required_keywords
+            else f"运行 collect_sorftime_keywords.py 扩展细分赛道种子词，采集后重新归一化，直到有效去重关键词至少 {required_keywords} 条。"
+        )
         blocking_gaps.append(
             gap(
                 "keyword_sample_depth",
                 counts["keywords"],
                 required_keywords,
                 "关键词样本不足，标准版/深度版不能支撑需求结构和机会判断。",
-                "运行 collect_sorftime_keywords.py 补到 1200 条采集目标，归一化后至少保留 1000 条。",
+                keyword_next_step,
             )
         )
     if not keyword_duplicate_gate["passed"]:
@@ -761,6 +893,26 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 0,
                 "有效关键词池仍存在重复记录，不能把重复流量词计入需求规模或机会排序。",
                 "重新运行 normalize_data_pack.py，按 normalized lowercase keyword + source bucket 去重；若重复来自采集层，需要修正采集分页合并逻辑。",
+            )
+        )
+    if standard_like and not keyword_customer_intent_gate["passed"]:
+        blocking_gaps.append(
+            gap(
+                "keyword_customer_intent_duplicate_ratio",
+                int(keyword_customer_intent_gate["duplicate_extra"]),
+                0,
+                "客户侧关键词主题重复率过高，不能把大量同义词当作独立需求规模或机会排序。",
+                "按中文意图聚合关键词，补采更多不同场景、功能、痛点和人群词；客户页主表必须按主题去重展示。",
+            )
+        )
+    if standard_like and not keyword_mapping_gate["passed"]:
+        blocking_gaps.append(
+            gap(
+                "keyword_chinese_mapping",
+                int(keyword_mapping_gate["mapping_coverage_pct"]),
+                MIN_KEYWORD_CN_MAPPING_COVERAGE_PCT,
+                "有效关键词中文映射覆盖率不足，不能把英文原词或未映射词直接用于客户页、COSMO 标签、赛道判断和广告动作。",
+                "补充关键词中文映射规则或 AI 标签画像后重新归一化；未映射关键词只能进入审计文件，不能参与客户结论。",
             )
         )
 
@@ -873,6 +1025,16 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     acceptance_ready = not blocking_gaps
     blocking_modules = {item.get("module") for item in blocking_gaps}
     partial_report_ready = bool(blocking_gaps) and blocking_modules <= SUPPLY_BLOCKER_MODULES
+    quality = data_pack.get("quality") or {}
+    try:
+        score = float(quality.get("overall_score", quality.get("score", 0.0)) or 0.0)
+    except (TypeError, ValueError):
+        score = 0.0
+    if not score:
+        score = 0.85 if acceptance_ready else 0.45 if not partial_report_ready else 0.6
+    delivery_mode = "full_delivery" if acceptance_ready else "diagnostic_delivery"
+    decision = "Watch" if acceptance_ready else "No-Go"
+    evidence_grade = "完整可交付" if acceptance_ready else ("供应链诊断交付" if partial_report_ready else "阻断交付")
     return {
         "report_dir": str(report_dir),
         "checked_at": utc_now(),
@@ -882,20 +1044,27 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "acceptance_ready": acceptance_ready,
         "partial_report_ready": partial_report_ready,
         "supply_conclusion_blocked": bool(blocking_modules & SUPPLY_BLOCKER_MODULES),
+        "delivery_mode": delivery_mode,
+        "decision": decision,
+        "evidence_grade": evidence_grade,
+        "score": round(score, 3),
+        "data_gaps": blocking_gaps,
         "blocking_gaps": blocking_gaps,
         "warnings": warnings,
         "counts": counts,
         "supplier_quote_gate": supplier_gate,
         "supplier_quality_gate": supplier_quality_gate,
         "keyword_duplicate_gate": keyword_duplicate_gate,
+        "keyword_customer_intent_gate": keyword_customer_intent_gate,
+        "keyword_mapping_gate": keyword_mapping_gate,
         "applied_waivers": applied_waivers,
         "competitor_gate": {
             "minimum_total": competitor_minimum,
             "valid_total": len(competitor_products),
-            "minimum_per_primary_segment": MIN_COMPETITORS_PER_PRIMARY_SEGMENT if broad_research else 0,
+            "minimum_per_primary_segment": MIN_COMPETITORS_PER_PRIMARY_SEGMENT if standard_like else 0,
             "segments": competitor_segments,
             "underfilled_segments": underfilled_segments,
-            "passed": len(competitor_products) >= competitor_minimum and (not broad_research or not underfilled_segments),
+            "passed": len(competitor_products) >= competitor_minimum and segment_depth_gate_passed and (not broad_research or not underfilled_segments),
         },
         "segment_gate": {
             "broad_research": broad_research,
@@ -903,6 +1072,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
             "segments": competitor_segments,
             "underfilled_segments": underfilled_segments,
             "passed": segment_gate_passed,
+            "depth_passed": segment_depth_gate_passed,
         },
         "collector_commands": collector_commands(report_dir),
     }

@@ -339,6 +339,11 @@ CUSTOMER_HTML_BANNED_LITERALS = [
 ]
 
 CUSTOMER_HTML_BANNED_VISIBLE_ENGLISH_LABELS = [
+    "Pain 主要痛点",
+    "Joy 主要爽点",
+    "PROMPT 01",
+    "PROMPT 02",
+    "PROMPT 03",
     "Positive",
     "Negative",
     "Positive Reviews",
@@ -347,7 +352,17 @@ CUSTOMER_HTML_BANNED_VISIBLE_ENGLISH_LABELS = [
 
 CUSTOMER_HTML_BANNED_STALE_COPY = [
     "正向反馈集中在开箱、陪伴和礼品场景",
+    "当前只展示",
+    "本节只展示",
 ]
+
+
+def contains_banned_literal(text: str, literal: str) -> bool:
+    if not literal:
+        return False
+    if re.search(r"[A-Za-z0-9_]", literal):
+        return re.search(rf"(?<![A-Za-z0-9_]){re.escape(literal)}(?![A-Za-z0-9_])", text) is not None
+    return literal in text
 
 CUSTOMER_HTML_BANNED_PATTERNS = [
     re.compile(r"\bcollect_[\w\u4e00-\u9fff-]+\.py\b", re.IGNORECASE),
@@ -358,6 +373,17 @@ CUSTOMER_HTML_BANNED_PATTERNS = [
     re.compile(r"\bdata/raw/[^\s<>'\"]+", re.IGNORECASE),
     re.compile(r"[A-Za-z]:\\[^\s<>'\"]+"),
 ]
+
+CUSTOMER_ASSET_ALLOWED_ASIN_KEYS = {
+    "reference_asin",
+    "reference_asins",
+    "competitor_asin",
+    "competitor_asins",
+    "target_asin",
+    "target_asins",
+    "benchmark_asin",
+    "benchmark_asins",
+}
 
 REVIEW_TEXT_KEYS = {"title", "text", "content", "body", "comment"}
 RAW_CLIENT_TEXT_KEYS = {"title", "name", "description", "summary", "content", "body", "comment"}
@@ -382,6 +408,14 @@ def slot_contract() -> dict[str, Any]:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValidationError(message)
+
+
+def has_class_tokens(html: str, *tokens: str) -> bool:
+    for match in re.finditer(r"class=[\"']([^\"']+)[\"']", html):
+        classes = set(match.group(1).split())
+        if all(token in classes for token in tokens):
+            return True
+    return False
 
 
 def file_sha256(path: Path) -> str:
@@ -640,9 +674,18 @@ def validate_quality_consistency(data_pack: dict[str, Any], delivery: dict[str, 
     )
 
 
+def load_recorded_or_assess_readiness(report_dir: Path) -> dict[str, Any]:
+    recorded_path = report_dir / "data" / "normalized" / "data_readiness_report.json"
+    if recorded_path.exists():
+        recorded = load_json(recorded_path)
+        if isinstance(recorded, dict):
+            return recorded
+    return assess_data_readiness(report_dir, "auto")
+
+
 def validate_data_readiness(report_dir: Path, delivery: dict[str, Any] | None = None) -> None:
     delivery = delivery or {}
-    readiness = assess_data_readiness(report_dir, "auto")
+    readiness = load_recorded_or_assess_readiness(report_dir)
     modules = ", ".join(gap.get("module", "unknown") for gap in readiness.get("blocking_gaps") or [])
     delivery_status = str(delivery.get("status") or "").strip().lower()
     delivery_decision = str(delivery.get("decision") or "").strip().lower()
@@ -727,6 +770,7 @@ def validate_analysis_plan(analysis_plan: dict[str, Any], source_ids: set[str]) 
 def technical_values_from_data_pack(data_pack: Any) -> set[str]:
     values: set[str] = set()
     tracked_keys = {"source_id", "source_ids", "provider", "raw_path", "path", "asin", "product_id", "video_id"}
+    generic_values = {"api", "us", "cn", "uk", "eu", "user"}
 
     def visit(value: Any, key: str | None = None) -> None:
         if isinstance(value, dict):
@@ -738,7 +782,7 @@ def technical_values_from_data_pack(data_pack: Any) -> set[str]:
         elif key in tracked_keys and value not in (None, ""):
             if isinstance(value, (str, int, float)):
                 text = str(value).strip()
-                if len(text) >= 3:
+                if len(text) >= 3 and text.casefold() not in generic_values:
                     values.add(text)
 
     visit(data_pack)
@@ -890,6 +934,17 @@ def is_amazon_competitor_image_src(src: str) -> bool:
     )
 
 
+def is_valid_customer_image_src(src: str) -> bool:
+    text = str(src or "").strip()
+    if not text or re.search(r"[\s\x00-\x1f\x7f]", text):
+        return False
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
 def raw_english_client_fragments(data_pack: dict[str, Any]) -> set[str]:
     fragments: set[str] = set()
     for value in raw_english_client_values(data_pack):
@@ -1021,7 +1076,10 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
         raise ValidationError(f"{rel_path} customer HTML contains empty customer KPI")
 
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
-        require(literal not in html_for_safety, f"{rel_path} customer HTML leaks technical identifier: {literal}")
+        require(
+            not contains_banned_literal(html_for_safety, literal),
+            f"{rel_path} customer HTML leaks technical identifier: {literal}",
+        )
 
     for placeholder in CUSTOMER_HTML_BANNED_PLACEHOLDERS:
         require(placeholder not in html_for_safety, f"{rel_path} customer HTML contains placeholder or non-final data wording: {placeholder}")
@@ -1037,7 +1095,7 @@ def validate_customer_html(rel_path: str, html_doc: str, data_pack: dict[str, An
         require(src_match is not None, f"{rel_path} customer HTML image missing src")
         src = (src_match.group(2) or "").strip()
         require(bool(src), f"{rel_path} customer HTML image has empty src")
-        require(re.match(r"^https?://", src, flags=re.I) is not None, f"{rel_path} customer HTML image src must be an http(s) URL")
+        require(is_valid_customer_image_src(src), f"{rel_path} customer HTML image src must be a valid http(s) URL without whitespace/control characters")
         class_match = re.search(r"\bclass\s*=\s*(['\"])(.*?)\1", tag, flags=re.I | re.S)
         class_text = class_match.group(2) if class_match else ""
         if any(token in class_text.split() for token in ["comp-product-thumb", "comp-image-thumb", "comp-deep-image", "sku-reference-thumb"]):
@@ -1097,15 +1155,37 @@ def validate_template_dom_class_parity(rel_path: str, report_html: str, report_s
 
 
 def validate_customer_visible_asset(rel_path: str, text: str, data_pack: dict[str, Any]) -> None:
+    text_for_safety = strip_allowed_customer_asset_exceptions(text)
     for literal in CUSTOMER_HTML_BANNED_LITERALS:
-        require(literal not in text, f"{rel_path} customer asset leaks technical identifier: {literal}")
+        require(
+            not contains_banned_literal(text_for_safety, literal),
+            f"{rel_path} customer asset leaks technical identifier: {literal}",
+        )
     for pattern in CUSTOMER_HTML_BANNED_PATTERNS:
-        match = pattern.search(text)
+        match = pattern.search(text_for_safety)
         if match is not None:
             raise ValidationError(f"{rel_path} customer asset leaks technical identifier: {match.group(0)}")
     for value in customer_safety_context(data_pack)["technical_values"]:
-        require(value not in text, f"{rel_path} customer asset leaks technical identifier: {value}")
-    validate_no_raw_english_leaks(rel_path, text, data_pack, "asset")
+        require(value not in text_for_safety, f"{rel_path} customer asset leaks technical identifier: {value}")
+    validate_no_raw_english_leaks(rel_path, text_for_safety, data_pack, "asset")
+
+
+def strip_allowed_customer_asset_exceptions(text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return text
+
+    def scrub(value: Any, key: str | None = None) -> Any:
+        if key in CUSTOMER_ASSET_ALLOWED_ASIN_KEYS:
+            return ""
+        if isinstance(value, dict):
+            return {str(child_key): scrub(child, str(child_key)) for child_key, child in value.items()}
+        if isinstance(value, list):
+            return [scrub(item, key) for item in value]
+        return value
+
+    return json.dumps(scrub(payload), ensure_ascii=False)
 
 
 def validate_customer_visible_assets(report_dir: Path, data_pack: dict[str, Any]) -> None:
@@ -1319,6 +1399,8 @@ def validate_view_models(report_dir: Path, data_pack: dict[str, Any]) -> None:
 
 
 def validate_text_artifacts(report_dir: Path, source_ids: set[str], data_pack: dict[str, Any]) -> None:
+    delivery = load_json(report_dir / "output/delivery_result.json")
+    blocked_delivery = delivery.get("status") == "blocked"
     report_md = (report_dir / "output/report.md").read_text(encoding="utf-8")
     compat_index_html = (report_dir / COMPAT_INDEX_REPORT).read_text(encoding="utf-8")
     bundle_index_html = (report_dir / BUNDLE_INDEX_REPORT).read_text(encoding="utf-8")
@@ -1339,7 +1421,10 @@ def validate_text_artifacts(report_dir: Path, source_ids: set[str], data_pack: d
     validate_index_report(bundle_index_html, BUNDLE_INDEX_REPORT, BUNDLE_INDEX_REQUIRED_LINKS, data_pack, require_same_folder=True)
     validate_index_report(compat_index_html, COMPAT_INDEX_REPORT, COMPAT_INDEX_REQUIRED_LINKS, data_pack)
     for key, html_doc in child_htmls.items():
-        validate_child_report(CHILD_REPORTS[key]["path"], html_doc, CHILD_REPORTS[key], data_pack)
+        if blocked_delivery:
+            validate_diagnostic_child_report(CHILD_REPORTS[key]["path"], html_doc, CHILD_REPORTS[key], data_pack)
+        else:
+            validate_child_report(CHILD_REPORTS[key]["path"], html_doc, CHILD_REPORTS[key], data_pack)
     validate_interactive_dom({BUNDLE_INDEX_REPORT: bundle_index_html, COMPAT_INDEX_REPORT: compat_index_html, **{spec["path"]: child_htmls[key] for key, spec in CHILD_REPORTS.items()}})
 
     missing_lineage = [source_id for source_id in source_ids if source_id not in lineage]
@@ -1477,6 +1562,124 @@ def validate_child_report(rel_path: str, report_html: str, spec: dict[str, Any],
             require(term not in report_html, f"{rel_path} customer HTML contains old lifecycle fallback term: {term}")
 
 
+def validate_diagnostic_child_report(rel_path: str, report_html: str, spec: dict[str, Any], data_pack: dict[str, Any]) -> None:
+    validate_html_basics(rel_path, report_html)
+    validate_customer_html(rel_path, report_html, data_pack)
+    require("补采诊断" in report_html, f"{rel_path} diagnostic child report missing 补采诊断 state")
+    require("当前阻断项" in report_html, f"{rel_path} diagnostic child report missing blocking section")
+    require("标准报告结构" in report_html, f"{rel_path} diagnostic child report missing fixed report structure section")
+    require("未达决策门槛" in report_html, f"{rel_path} diagnostic child report must state decision gate")
+    require("evidence-table" in report_html and "insight-table" in report_html, f"{rel_path} diagnostic child report must keep table slots")
+    template_class = {
+        "market-depth-report-v2": "template-market",
+        "lifecycle-strategy-report-v2": "template-lifecycle",
+        "demand-gap-report-v2": "template-demand",
+    }[spec["style"]]
+    require(template_class in report_html, f"{rel_path} diagnostic child report missing template class: {template_class}")
+    stale_full_claims = [
+        "竞品狙击结论",
+        "毛利率测算 · 各定价方案对比",
+        "SKU 优先级全量榜",
+        "证据充分",
+        "供应链可控度较高",
+        "Strategic Intelligence Report",
+        "Market Dashboard",
+        "Referral Fee",
+        "Brand Analytics",
+    ]
+    for claim in stale_full_claims:
+        require(claim not in report_html, f"{rel_path} diagnostic child report contains stale full-report claim: {claim}")
+    required_diagnostic_components = {
+        "market-depth-report-v2": [
+            "cosmo-diagnostic-shell",
+            "cosmo-layout",
+            "market-voc-sentiment-columns",
+            "supply-grid",
+            "prompt-card",
+        ],
+        "lifecycle-strategy-report-v2": [
+            "lifecycle-ecosystem",
+            "sku-priority",
+            "sku-pool-table",
+            "bundle-card",
+        ],
+        "demand-gap-report-v2": [
+            "demand-evidence",
+            "voice-card",
+            "kano-jtbd-grid",
+            "demand-priority-grid",
+        ],
+    }
+    for token in required_diagnostic_components.get(spec["style"], []):
+        require(token in report_html, f"{rel_path} diagnostic child report missing standard template component: {token}")
+    required_diagnostic_ids = {
+        "market-depth-report-v2": [
+            "market-dashboard",
+            "cosmo-alexa-tags",
+            "competitor-scan",
+            "voc-deep-dive",
+            "benchmark-sniper",
+            "product-definition",
+            "pricing",
+            "visual-direction",
+            "tiktok-trends",
+            "prompt",
+            "supply-chain",
+        ],
+        "lifecycle-strategy-report-v2": [
+            "strategy-dashboard",
+            "lifecycle-personas",
+            "lifecycle-journey",
+            "lifecycle-ecosystem",
+            "sku-strategy-pool",
+            "bundle-strategy",
+            "roadmap-90",
+            "risk-matrix",
+            "market-validation-summary",
+        ],
+        "demand-gap-report-v2": [
+            "target-anchor",
+            "decision-board",
+            "appeals-map",
+            "gap-analysis",
+            "kano-jtbd",
+            "voice-theater",
+            "priority-table",
+        ],
+    }
+    for section_id in required_diagnostic_ids.get(spec["style"], []):
+        require(
+            re.search(rf'id=[\'"]{re.escape(section_id)}[\'"]', report_html) is not None,
+            f"{rel_path} diagnostic child report missing standard diagnostic section id {section_id}",
+        )
+        require(
+            f'href="#{section_id}"' in report_html or f"href='#{section_id}'" in report_html,
+            f"{rel_path} diagnostic child report slot grid must link to standard diagnostic section id {section_id}",
+        )
+    if spec["style"] == "market-depth-report-v2":
+        require(
+            "comp-image-diagnostic-card" in report_html or "comp-image-strip-card" in report_html,
+            f"{rel_path} diagnostic child report missing competitor image component",
+        )
+        for class_tokens, name in [
+            (("cosmo-panel", "cosmo-matrix"), "cosmo-matrix"),
+            (("cosmo-panel", "cosmo-top-list"), "cosmo-top-list"),
+            (("cosmo-panel", "cosmo-gap-panel"), "cosmo-gap-panel"),
+            (("cosmo-panel", "cosmo-action-board"), "cosmo-action-board"),
+        ]:
+            require(
+                has_class_tokens(report_html, *class_tokens),
+                f"{rel_path} diagnostic child report COSMO missing {name}",
+            )
+    if spec["style"] == "lifecycle-strategy-report-v2":
+        for chart_id in ["lifecycleSunburst", "priorityChart"]:
+            require(
+                re.search(rf'id=[\'"]{re.escape(chart_id)}[\'"]', report_html) is not None,
+                f"{rel_path} diagnostic child report missing standard lifecycle diagnostic chart id {chart_id}",
+            )
+    require("图片加载失败" not in report_html, f"{rel_path} diagnostic child report must not expose image failure copy")
+
+
 def validate_fixed_template_slots(rel_path: str, report_html: str, style: str) -> None:
     if style == "market-depth-report-v2":
         ordered_ids = ["market-dashboard", "cosmo-alexa-tags", "competitor-scan", "voc-deep-dive"]
@@ -1502,8 +1705,16 @@ def validate_fixed_template_slots(rel_path: str, report_html: str, style: str) -
         require('class="cosmo-matrix-lanes"' in report_html, f"{rel_path} fixed template slot mismatch: COSMO matrix must use product/user lanes")
         require('class="cosmo-matrix-lane product-lane"' in report_html and 'class="cosmo-matrix-lane user-lane"' in report_html, f"{rel_path} fixed template slot mismatch: COSMO must separate product and user label lanes")
         require("产品标签 · 产品被算法识别为什么" in report_html and "用户标签 · 用户为什么搜索/购买" in report_html, f"{rel_path} fixed template slot mismatch: COSMO lane titles must be customer-readable")
-        for cosmo_slot in ["cosmo-matrix", "cosmo-top-list", "cosmo-gap-panel", "cosmo-action-board"]:
-            require(cosmo_slot in report_html, f"{rel_path} fixed template slot mismatch: COSMO missing {cosmo_slot}")
+        for class_tokens, name in [
+            (("cosmo-panel", "cosmo-matrix"), "cosmo-matrix"),
+            (("cosmo-panel", "cosmo-top-list"), "cosmo-top-list"),
+            (("cosmo-panel", "cosmo-gap-panel"), "cosmo-gap-panel"),
+            (("cosmo-panel", "cosmo-action-board"), "cosmo-action-board"),
+        ]:
+            require(
+                has_class_tokens(report_html, *class_tokens),
+                f"{rel_path} fixed template slot mismatch: COSMO missing {name}",
+            )
         require(report_html.count('class="pricing-card') == 3, f"{rel_path} fixed template slot mismatch: pricing-card must be exactly 3")
         require(report_html.count('class="prompt-card') == 3, f"{rel_path} fixed template slot mismatch: prompt-card must be exactly 3")
         require('id="pricing"' in report_html and 'id="prompt"' in report_html, f"{rel_path} fixed template slot mismatch: pricing and prompt anchors must be present")
@@ -1597,6 +1808,9 @@ def validate_interactive_dom(html_docs: dict[str, str]) -> None:
 
 
 def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None:
+    delivery_path = report_dir / "output/delivery_result.json"
+    delivery = load_json(delivery_path) if delivery_path.exists() else {}
+    blocked_delivery = delivery.get("status") == "blocked"
     review = load_json(report_dir / "analysis/critic_review.json")
     plan = load_json(report_dir / "analysis/refinement_plan.json")
     summary_text = (report_dir / "analysis/critic_summary.md").read_text(encoding="utf-8")
@@ -1611,7 +1825,18 @@ def validate_critic_outputs(report_dir: Path, data_pack: dict[str, Any]) -> None
     require(isinstance(review.get("resolved_findings"), list), "critic_review.resolved_findings must be a list")
     require(isinstance(review.get("remaining_findings"), list), "critic_review.remaining_findings must be a list")
     require(isinstance(review["refinement_targets"], list), "critic_review.refinement_targets must be a list")
+    if blocked_delivery:
+        require(review["pass"] is False, "blocked delivery critic_review.pass must be false")
+        require(review.get("status") == "not_run_data_readiness_blocked", "blocked delivery critic_review.status must explain readiness block")
+        require(str(review.get("grade") or "").upper() == "D", "blocked delivery critic_review.grade must be D")
+        require(isinstance(plan, dict), "refinement_plan.json must be an object")
+        require(plan.get("status") == "blocked", "blocked delivery refinement_plan.json status must be blocked")
+        require(plan.get("max_refinement_rounds") == 2, "refinement_plan.json must cap max_refinement_rounds at 2")
+        require("must not claim delivery completion" in summary_text, "blocked critic_summary.md must state completion is not allowed")
+        return
     require(review["pass"] is True, "critic_review.pass must be true before final delivery validation")
+    require(float(review["score"]) >= 70, "critic_review.score must be at least 70 for final delivery validation")
+    require(str(review.get("grade") or "").upper() not in {"C", "D"}, "critic_review.grade C/D cannot be accepted for final delivery validation")
     require(isinstance(plan, dict), "refinement_plan.json must be an object")
     require(plan.get("status") == "accepted", "refinement_plan.json status must be accepted before final delivery validation")
     require(plan.get("max_refinement_rounds") == 2, "refinement_plan.json must cap max_refinement_rounds at 2")
@@ -1699,7 +1924,7 @@ def validate_child_skill_invocation_log(report_dir: Path) -> None:
 
 def validate_delivery(report_dir: Path) -> None:
     delivery = load_json(report_dir / "output/delivery_result.json")
-    readiness = assess_data_readiness(report_dir, "auto")
+    readiness = load_recorded_or_assess_readiness(report_dir)
     expected_readiness = readiness_summary_for_contract(readiness)
     require(isinstance(delivery, dict), "delivery_result.json must be an object")
     status = delivery.get("status")

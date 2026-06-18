@@ -28,6 +28,7 @@ Packaged canonical assets:
 - Preserve mobile behavior through CSS media rules and JS that does not depend on a build step.
 - Use generated view models from `normalized_data_pack.json`; never fill visual components with sample template data.
 - Template skeletons are fixed contracts. Data quality may block a conclusion or trigger a diagnostic artifact, but it must not remove required headings, cards, tables, anchors, or chart containers from the standard HTML template.
+- Diagnostic child-report slot cards must link to the normal report section anchors, and the diagnostic detail sections must keep those same stable IDs. Do not generate dynamic `diagnostic-slot-*` IDs for required sections.
 
 ## Market Depth Parity
 
@@ -57,13 +58,18 @@ Required components:
 
 - `report-header`, `header-meta`, `kpi-grid`, `kpi-card`.
 - `cosmo-layout` with four fixed zones: `cosmo-matrix`, `cosmo-top-list`, `cosmo-gap-panel`, and `cosmo-action-board`. The matrix must render all 15 COSMO + Alexa relation slots with `data-cosmo-relation`, evidence coverage, confidence status, and Listing / QA / ad actions.
+- In diagnostic delivery, `cosmo-matrix` still renders all 15 relation slots. The cards may show low-confidence Chinese diagnostics, but the grid, product/user lanes, and horizontal top/gap submodules must stay intact.
+- Diagnostic delivery must keep the exact matrix wrapper `class="cosmo-panel cosmo-matrix"`; `cosmo-matrix-cell` items without the parent matrix panel are a structure failure.
+- In diagnostic delivery, child-report slot cards must show module-relevant metrics instead of rotating counts by position: competitor sections use qualified competitor counts, COSMO/keyword/prompt sections use keyword counts, VOC/demand/user-voice sections use review counts, TikTok sections use TikTok signal counts, supply-chain sections use valid 1688 quote counts, and lifecycle/SKU sections use SKU candidate counts. Slot copy must be module-specific; a repeated generic diagnostic sentence across every card is a parity failure.
+- Diagnostic delivery must not expose legacy English template labels or generic filler copy. `Pain 主要痛点`, `Joy 主要爽点`, visible `PROMPT 01/02/03`, `当前只展示...`, and `本节只展示...` are parity failures. Use Chinese business labels and module-specific diagnostic copy.
 - COSMO visual parity requires `cosmo-matrix` cards to use light separators instead of table-like heavy borders. `cosmo-top-list` and `cosmo-gap-panel` must render below the matrix as full-width horizontal card flows, not as narrow vertical sidebars. Because the reference market CSS resets all element padding, final shared assets must include post-reference `body.template-market #cosmo-alexa-tags ...` overrides that restore KPI, summary, panel, and matrix-card spacing.
 - `chart-container`, `mini-chart`, radar/bar/bubble fallback semantics.
 - `comp-table` or equivalent competitor evidence table.
 - `voc-grid`, `deep-dive-grid`, `comp-deep-card`.
 - `opportunity-matrix`.
-- Exactly 3 pricing strategy cards and exactly 3 AI image prompt cards with stable `#pricing` and `#prompt` anchors.
+- Exactly 3 pricing strategy cards and exactly 3 AI image prompt cards with stable `#pricing` and `#prompt` anchors. Prompt card bodies must be directly usable image-generation prompts with scene, composition, lighting/style, visible selling point, and negative constraints; they must not be ordinary strategy descriptions.
 - Competitor table must expose scoped ASIN values using `data-allow-asin="competitor-table"`.
+- Competitor and lifecycle reference images must use allowlisted Amazon image URLs when available. A runtime image request failure must keep the image frame and use a silent placeholder state; visible copy such as `图片加载失败`, `竞品图片未返回`, or `参考竞品图片未返回` is a parity failure. Visual audits may filter external image 400/403/404 resource errors, but must still fail on page JavaScript errors and layout failures.
 - Demand target anchor must expose the target reference ASIN using `data-allow-asin="demand-target-anchor"`.
 - Evidence drawer for methodology and limitations.
 
@@ -107,8 +113,8 @@ Required components:
 - `type-badge`, `supply-badge`, filter bar and filter buttons.
 - Bundle cards with price, savings, and dependency assumptions.
 - Four-dimensional ecosystem must keep a two-chart layout: `#sunburst` plus `#priorityChart`.
-- `#sunburst` must use a three-layer data structure: research object -> four-dimensional path -> segment/scenario -> SKU candidate or reference ASIN. A flat A/B/C/D pie/donut is not acceptable.
-- `#priorityChart` must adapt to candidate-pool size: compact score cards for `<=8`, full horizontal list for `9-20`, and Top 15 plus full candidate-pool table/drawer for `>20`.
+- `#sunburst` must use a three-layer data structure: research object -> four-dimensional path -> segment/scenario -> SKU candidate or reference ASIN. A flat A/B/C/D pie/donut is not acceptable. Long candidate text must be truncated or hidden in the chart and exposed through tooltip/table detail instead of overlapping in the Sunburst.
+- `#priorityChart` must adapt to candidate-pool size: compact score cards for `<=8`, full horizontal list for `9-20`, and Top 15 plus full candidate-pool table/drawer for `>20`. Chart labels must use stable SKU labels and must never include image fallback text such as `图片加载失败`.
 - 拓品方案池 must keep the five fixed SKU slots: 基础款、升级款、套装款、配件款、复购耗材.
 - 30/60/90 路线图 must keep six roadmap cards: three `Phase` strategy cards plus three action checklist cards, split across `roadmap-phase-grid` and `roadmap-action-grid`.
 - SKU table controls must keep seven reference filters: 全部、四个当前证据生成的中文策略类型、供应链验证、P1 立即启动.

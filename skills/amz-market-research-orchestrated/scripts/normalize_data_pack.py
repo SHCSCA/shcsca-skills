@@ -42,6 +42,35 @@ THEME_CN = {
 }
 
 KEYWORD_CN_RULES = [
+    ("electric cupping massager", "电动拔罐按摩器"),
+    ("smart cupping therapy massager", "智能拔罐理疗按摩器"),
+    ("vacuum cupping massager", "负压拔罐按摩器"),
+    ("cupping massager", "拔罐按摩器"),
+    ("cupping machine", "拔罐仪"),
+    ("cupping therapy set", "拔罐理疗套装"),
+    ("cupping set for massage therapy", "按摩理疗拔罐套装"),
+    ("cupping kit", "拔罐套装"),
+    ("cupping therapy", "拔罐理疗"),
+    ("cupping set", "拔罐套装"),
+    ("cupping", "拔罐"),
+    ("revo cupping device", "Revo 拔罐设备"),
+    ("red light therapy", "红光理疗"),
+    ("vacuum cupping", "负压拔罐"),
+    ("back massager", "背部按摩器"),
+    ("body sculpting machine", "塑形理疗仪"),
+    ("cellulite remover", "橘皮组织护理仪"),
+    ("anti cellulite", "橘皮组织护理"),
+    ("sciatica pain relief", "坐骨神经痛缓解"),
+    ("fascia release", "筋膜放松"),
+    ("muscle soreness", "肌肉酸痛缓解"),
+    ("pain relief", "疼痛缓解"),
+    ("gua sha", "刮痧"),
+    ("lymphatic drainage", "淋巴引流"),
+    ("cellulite massage", "橘皮组织按摩"),
+    ("back pain", "背部疼痛"),
+    ("massage cups", "拔罐杯"),
+    ("ventosas", "拔罐器"),
+    ("massage therapy", "按摩理疗"),
     ("under cabinet", "橱柜灯"),
     ("under counter", "柜底灯"),
     ("cabinet light", "橱柜灯"),
@@ -117,6 +146,13 @@ TITLE_SEGMENT_RULES = [
     ("智能灯泡", ["smart bulb", "a19", "light bulb"]),
     ("户外感应灯", ["outdoor", "solar", "security light", "flood light", "wall sconce"]),
     ("氛围灯", ["ambient", "night light", "table lamp", "sunset"]),
+]
+
+CUPPING_SEGMENT_RULES = [
+    ("套装型电动拔罐器", ["2 pack", "two pack", "multi pack", "set", "kit", "cups", "bundle", "套装", "多杯"]),
+    ("热敷红光电动拔罐器", ["red light", "heat", "heated", "heating", "hot compress", "红光", "热敷", "加热"]),
+    ("美体/淋巴引流负压仪", ["lymphatic", "cellulite", "body sculpting", "body slimming", "fascia", "淋巴", "橘皮", "美体", "塑形"]),
+    ("单杯智能电动拔罐器", ["electric cupping", "smart cupping", "vacuum cupping", "cupping massager", "suction", "电动拔罐", "智能拔罐", "负压拔罐"]),
 ]
 
 HUNTING_BLINDS_SEGMENT_RULES = [
@@ -810,6 +846,176 @@ LIGHTING_CATEGORY_NOISE = [
     "health",
 ]
 
+CUPPING_RESEARCH_TOKENS = {
+    "electric cupping",
+    "cupping massager",
+    "cupping therapy",
+    "vacuum cupping",
+    "smart cupping",
+    "revo cupping",
+    "拔罐",
+    "电动拔罐",
+    "负压拔罐",
+    "刮痧拔罐",
+}
+
+CUPPING_PRODUCT_SIGNALS = [
+    "cupping",
+    "vacuum therapy",
+    "negative pressure",
+    "red light therapy",
+    "gua sha",
+    "scraping",
+    "lymphatic drainage",
+    "cellulite",
+    "massage therapy",
+    "拔罐",
+    "拔罐器",
+    "拔罐仪",
+    "负压",
+    "红光",
+    "热敷",
+    "刮痧",
+    "吸痧",
+    "按摩器",
+]
+
+CUPPING_ELECTRIC_CORE_SIGNALS = [
+    "electric cupping",
+    "smart cupping",
+    "cupping massager",
+    "vacuum cupping",
+    "vacuum massage",
+    "vacuum device",
+    "negative pressure",
+    "adjustable suction",
+    "suction level",
+    "suction levels",
+    "red light",
+    "red light therapy",
+    "infrared",
+    "heated",
+    "heating",
+    "heat",
+    "hot compress",
+    "vibration",
+    "电动拔罐",
+    "智能拔罐",
+    "负压拔罐",
+    "负压",
+    "可调吸力",
+    "吸力档位",
+    "红光",
+    "热敷",
+    "加热",
+    "震动",
+]
+
+CUPPING_STRONG_ELECTRIC_CORE_SIGNALS = [
+    signal
+    for signal in CUPPING_ELECTRIC_CORE_SIGNALS
+    if signal not in {"vacuum massage", "vacuum device", "negative pressure", "负压"}
+]
+
+CUPPING_DIRECT_PRODUCT_TERMS = [
+    "cupping",
+    "cupping massager",
+    "cupping therapy",
+    "vacuum cupping",
+    "negative pressure",
+    "vacuum massage device",
+    "拔罐",
+    "拔罐器",
+    "拔罐仪",
+    "负压拔罐",
+    "负压",
+]
+
+CUPPING_MANUAL_OR_ADJACENT_PRODUCT_NOISE = [
+    "silicone cupping",
+    "silicone cup",
+    "silicone cups",
+    "vacuum suction cup",
+    "vacuum suction cups",
+    "facial cupping",
+    "face cupping",
+    "massage cups",
+    "chinese cupping therapy set",
+    "cupping therapy sets",
+    "cupping therapy set",
+    "cupping set",
+    "body sculpting machine",
+    "body sculpting",
+    "anti-cellulite tool",
+    "anti cellulite tool",
+    "lymphatic drainage massage",
+    "lymphatic drainage massager",
+    "skin firming care",
+    "gua sha & cupping",
+    "gua sha and cupping",
+    "jade stone",
+    "gua sha tool",
+    "guasha tool",
+    "wood therapy",
+    "maderoterapia",
+    "wooden massage",
+    "muscle scraper",
+    "scraping massage",
+    "deep tissue back massager",
+    "body massager",
+    "硅胶拔罐",
+    "硅胶罐",
+    "手动拔罐",
+    "玉石刮痧",
+    "木疗",
+    "刮痧板",
+    "筋膜刀",
+]
+
+CUPPING_KEYWORD_SIGNALS = [
+    *CUPPING_PRODUCT_SIGNALS,
+    "cupping kit",
+    "cupping set",
+    "cupping machine",
+    "massage cups",
+    "ventosas",
+    "back pain",
+    "back massager",
+    "body sculpting machine",
+    "cellulite remover",
+    "anti cellulite",
+    "sciatica pain relief",
+    "fascia release",
+    "muscle soreness",
+    "pain relief",
+]
+
+CUPPING_HARD_NOISE = [
+    "manual pump",
+    "hand pump",
+    "with pump",
+    "手动泵",
+    "抽气枪",
+    "outdoor suction cup",
+    "suction cup hook",
+    "suction cup hooks",
+    "phone mount",
+    "car mount",
+    "glass cup",
+    "wine glass",
+    "face cup only",
+    "facial cup only",
+    "硅胶面部",
+    "面部罐",
+    "脸部硅胶",
+    "眼部",
+    "抽气枪",
+    "拔罐枪",
+    "罐子配件",
+    "玻璃火罐",
+    "小儿",
+]
+
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -879,6 +1085,19 @@ def canonical_url(value: Any) -> str:
     if not netloc:
         return re.sub(r"/+$", "", text.split("#", 1)[0].split("?", 1)[0]).casefold()
     return urlunsplit((scheme, netloc, path, "", ""))
+
+
+def clean_remote_url(value: Any) -> str:
+    text = normalize_text(value)
+    if not text or re.search(r"[\s\x00-\x1f\x7f]", text):
+        return ""
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return ""
+    if parts.scheme.lower() not in {"http", "https"} or not parts.netloc:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, parts.fragment))
 
 
 def product_dedupe_key(item: dict[str, Any]) -> str:
@@ -1143,6 +1362,29 @@ def is_hunting_blinds_research(seed_terms: list[str]) -> bool:
     return any(term in joined for term in HUNTING_BLINDS_RESEARCH_TOKENS)
 
 
+def is_cupping_research(seed_terms: list[str]) -> bool:
+    joined = " ".join(seed_terms).casefold()
+    return any(term in joined for term in CUPPING_RESEARCH_TOKENS)
+
+
+def has_cupping_core_signal(text: str) -> bool:
+    return contains_any(text, CUPPING_ELECTRIC_CORE_SIGNALS)
+
+
+def has_strong_cupping_core_signal(text: str) -> bool:
+    return contains_any(text, CUPPING_STRONG_ELECTRIC_CORE_SIGNALS)
+
+
+def has_direct_cupping_product_signal(text: str) -> bool:
+    return contains_any(text, CUPPING_DIRECT_PRODUCT_TERMS)
+
+
+def is_non_electric_cupping_boundary_product(text: str) -> bool:
+    if not contains_any(text, CUPPING_MANUAL_OR_ADJACENT_PRODUCT_NOISE):
+        return False
+    return not has_strong_cupping_core_signal(text)
+
+
 def hunting_blind_segment(entity: dict[str, Any]) -> str:
     text = entity_search_text(
         entity,
@@ -1181,6 +1423,59 @@ def clear_customer_label_pollution(product: dict[str, Any]) -> None:
         product.pop("segment", None)
 
 
+def normalize_product_customer_aliases(product: dict[str, Any], seed_terms: list[str]) -> None:
+    if not is_lighting_research(seed_terms):
+        clear_customer_label_pollution(product)
+    inferred_segment = infer_cupping_segment(product) if is_cupping_research(seed_terms) else ""
+    if inferred_segment and (
+        not normalize_text(product.get("segment_cn") or product.get("segment"))
+        or is_placeholder_customer_label(product.get("segment_cn") or product.get("segment"))
+    ):
+        product["segment_cn"] = inferred_segment
+        product["segment"] = inferred_segment
+    inferred_title = title_cn(product.get("title"), first_existing(product.get("segment_cn"), product.get("segment")))
+    if inferred_title and (
+        not normalize_text(product.get("title_cn"))
+        or is_placeholder_customer_label(product.get("title_cn"))
+        or is_cross_domain_or_placeholder_label(product.get("title_cn"))
+    ):
+        product["title_cn"] = inferred_title
+    if product.get("monthly_sales") in (None, "") and product.get("estimated_monthly_sales") not in (None, ""):
+        product["monthly_sales"] = product.get("estimated_monthly_sales")
+    if product.get("market_segment") in (None, ""):
+        segment = first_existing(product.get("segment_cn"), product.get("segment"))
+        if segment not in (None, ""):
+            product["market_segment"] = segment
+
+
+def normalize_supplier_customer_aliases(supplier: dict[str, Any]) -> None:
+    if supplier.get("price") in (None, "") and supplier.get("price_rmb") not in (None, ""):
+        supplier["price"] = supplier.get("price_rmb")
+
+
+def normalize_review_customer_aliases(review: dict[str, Any]) -> None:
+    if review.get("review_text") in (None, "") and review.get("text") not in (None, ""):
+        review["review_text"] = review.get("text")
+
+
+def remove_cross_domain_data_gaps(data_pack: dict[str, Any], seed_terms: list[str]) -> int:
+    if is_lighting_research(seed_terms):
+        return 0
+    pollution_labels = {label for label in LIGHTING_CUSTOMER_LABELS if label}
+    if not pollution_labels:
+        return 0
+    kept: list[Any] = []
+    removed = 0
+    for gap in data_pack.setdefault("data_gaps", []):
+        text = json.dumps(gap, ensure_ascii=False) if isinstance(gap, dict) else normalize_text(gap)
+        if any(label in text for label in pollution_labels):
+            removed += 1
+            continue
+        kept.append(gap)
+    data_pack["data_gaps"] = kept
+    return removed
+
+
 def entity_search_text(entity: dict[str, Any], fields: list[str]) -> str:
     return " ".join(normalized_key(entity.get(field)) for field in fields)
 
@@ -1190,9 +1485,14 @@ def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[b
         product,
         ["title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "subcategory", "positioning_cn"],
     )
+    raw_product_text = entity_search_text(
+        product,
+        ["title", "brand", "category", "category_cn", "subcategory", "positioning_cn"],
+    )
     cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
     hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    cupping_mode = is_cupping_research(seed_terms)
     if cabinet_closet_mode:
         if contains_any(text, CABINET_CLOSET_HARD_NOISE):
             return False, "non_cabinet_closet_lighting_noise"
@@ -1227,6 +1527,14 @@ def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[b
         if contains_any(text, HUNTING_BLINDS_PRODUCT_SIGNALS):
             return True, "hunting_blind_signal"
         return False, "missing_hunting_blind_signal"
+    if cupping_mode:
+        if contains_any(raw_product_text, CUPPING_HARD_NOISE):
+            return False, "non_cupping_accessory_or_noise"
+        if is_non_electric_cupping_boundary_product(raw_product_text):
+            return False, "non_electric_manual_cupping_accessory"
+        if has_direct_cupping_product_signal(raw_product_text) and contains_any(raw_product_text, CUPPING_PRODUCT_SIGNALS):
+            return True, "cupping_signal"
+        return False, "missing_cupping_signal"
 
     seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
     product_tokens = tokens(text)
@@ -1238,6 +1546,9 @@ def product_relevance(product: dict[str, Any], seed_terms: list[str]) -> tuple[b
 
 
 def keyword_source_bucket(keyword: dict[str, Any]) -> str:
+    explicit_bucket = normalized_key(keyword.get("source_bucket") or keyword.get("bucket"))
+    if explicit_bucket:
+        return explicit_bucket
     source_type = normalized_key(keyword.get("source_type"))
     asin = normalized_key(keyword.get("asin"))
     if source_type == "product_traffic_terms" or asin:
@@ -1262,6 +1573,7 @@ def keyword_relevance(
     cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
     hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    cupping_mode = is_cupping_research(seed_terms)
     if under_cabinet_category_mode and source_type == "category_keywords":
         if contains_any(text, CABINET_CLOSET_HARD_NOISE):
             return False, "non_under_cabinet_category_keyword_noise"
@@ -1309,6 +1621,18 @@ def keyword_relevance(
         if source_type in {"competitor_product_keywords", "product_traffic_terms"} and (product_context_tokens or set()) & tokens(text):
             return True, "product_context_token_overlap"
         return False, "missing_hunting_blind_keyword_signal"
+    if cupping_mode:
+        if contains_any(text, CUPPING_HARD_NOISE):
+            return False, "non_cupping_keyword_noise"
+        if contains_any(text, CUPPING_KEYWORD_SIGNALS):
+            if str(keyword.get("keyword_cn") or "").startswith("未映射关键词"):
+                return False, "keyword_cn_unmapped"
+            return True, "cupping_keyword_signal"
+        if source_type in {"competitor_product_keywords", "product_traffic_terms"} and (product_context_tokens or set()) & tokens(text):
+            if str(keyword.get("keyword_cn") or "").startswith("未映射关键词"):
+                return False, "keyword_cn_unmapped"
+            return True, "product_context_token_overlap"
+        return False, "missing_cupping_keyword_signal"
     if not seed_terms:
         return True, "no_seed_keep_for_audit"
     if keyword.get("is_core_relevant") or keyword.get("relevance_cn") in {"高相关", "相邻相关"}:
@@ -1326,6 +1650,7 @@ def supplier_relevance(supplier: dict[str, Any], seed_terms: list[str]) -> tuple
     cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
     hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
+    cupping_mode = is_cupping_research(seed_terms)
     if cabinet_closet_mode:
         if contains_any(text, CABINET_CLOSET_HARD_NOISE):
             return False, "non_cabinet_closet_supplier_noise"
@@ -1342,6 +1667,12 @@ def supplier_relevance(supplier: dict[str, Any], seed_terms: list[str]) -> tuple
         if contains_any(text, HUNTING_BLINDS_PRODUCT_SIGNALS):
             return True, "hunting_blind_supplier_signal"
         return False, "missing_hunting_blind_supplier_signal"
+    if cupping_mode:
+        if contains_any(text, CUPPING_HARD_NOISE):
+            return False, "non_cupping_supplier_accessory_or_noise"
+        if contains_any(text, CUPPING_PRODUCT_SIGNALS):
+            return True, "cupping_supplier_signal"
+        return False, "missing_cupping_supplier_signal"
     return True, "generic_supplier"
 
 
@@ -1382,8 +1713,7 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
         passed, reason = product_relevance(product, seed_terms)
         product["research_relevance"] = {"passed": passed, "reason": reason}
         if passed:
-            if is_hunting_blinds_research(seed_terms):
-                clear_customer_label_pollution(product)
+            normalize_product_customer_aliases(product, seed_terms)
             effective_products.append(product)
         else:
             removed_products.append(
@@ -1427,14 +1757,17 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
     cabinet_closet_mode = is_cabinet_closet_light_research(seed_terms)
     lighting_mode = is_lighting_research(seed_terms)
     hunting_blinds_mode = is_hunting_blinds_research(seed_terms)
-    effective_reviews = [
-        review
-        for review in data_pack.get("reviews") or []
-        if not (cabinet_closet_mode or lighting_mode or hunting_blinds_mode)
-        or not valid_asins
-        or not review.get("asin")
-        or normalized_key(review.get("asin")).upper() in valid_asins
-    ]
+    cupping_mode = is_cupping_research(seed_terms)
+    effective_reviews = []
+    for review in data_pack.get("reviews") or []:
+        if (
+            not (cabinet_closet_mode or lighting_mode or hunting_blinds_mode)
+            or not valid_asins
+            or not review.get("asin")
+            or normalized_key(review.get("asin")).upper() in valid_asins
+        ):
+            normalize_review_customer_aliases(review)
+            effective_reviews.append(review)
 
     effective_suppliers: list[dict[str, Any]] = []
     removed_suppliers: list[dict[str, Any]] = []
@@ -1442,6 +1775,7 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
         passed, reason = supplier_relevance(supplier, seed_terms)
         supplier["research_relevance"] = {"passed": passed, "reason": reason}
         if passed:
+            normalize_supplier_customer_aliases(supplier)
             effective_suppliers.append(supplier)
         else:
             removed_suppliers.append(
@@ -1456,21 +1790,25 @@ def apply_research_relevance_gate(data_pack: dict[str, Any], seed_terms: list[st
     data_pack["effective_keywords"] = effective_keywords
     data_pack["effective_reviews"] = effective_reviews
     data_pack["effective_suppliers"] = effective_suppliers
+    effective_counts = {
+        "products": len(effective_products),
+        "keywords": len(effective_keywords),
+        "reviews": len(effective_reviews),
+        "suppliers": len(effective_suppliers),
+    }
+    data_pack["effective_counts"] = effective_counts
     data_pack["categories"] = build_categories_from_products(effective_products, data_pack.get("categories") or [])
     mode = (
         "cabinet_closet_lighting"
         if cabinet_closet_mode
         else ("lighting" if lighting_mode else ("hunting_blinds" if hunting_blinds_mode else "generic"))
     )
+    if cupping_mode:
+        mode = "cupping_massager"
     data_pack["research_relevance"] = {
         "mode": mode,
         "seed_terms": seed_terms,
-        "effective_counts": {
-            "products": len(effective_products),
-            "keywords": len(effective_keywords),
-            "reviews": len(effective_reviews),
-            "suppliers": len(effective_suppliers),
-        },
+        "effective_counts": effective_counts,
         "removed_counts": {
             "products": len(removed_products),
             "keywords": len(removed_keywords) + keyword_duplicate_extra,
@@ -1532,6 +1870,17 @@ def keyword_cn(keyword: Any) -> str:
     return f"未映射关键词：{text}"
 
 
+def valid_existing_keyword_cn(raw_keyword: Any, keyword_cn_value: Any) -> bool:
+    label = normalize_text(keyword_cn_value)
+    raw = normalize_text(raw_keyword)
+    return bool(
+        label
+        and not label.startswith("未映射关键词")
+        and label.casefold() != raw.casefold()
+        and has_cjk(label)
+    )
+
+
 def keyword_intent_cn(keyword: Any) -> str:
     text = normalized_key(keyword)
     if any(term in text for term in ["gift", "bundle", "set", "kit", "starter"]):
@@ -1552,18 +1901,18 @@ def keyword_intent_cn(keyword: Any) -> str:
 def keyword_relevance_cn(keyword: Any, seed_terms: list[str]) -> str:
     text = normalized_key(keyword)
     if not text:
-        return "待判断"
+        return "需复核"
     for seed in seed_terms:
         if seed and (seed in text or text in seed):
             return "高相关"
     seed_tokens = set().union(*(tokens(seed) for seed in seed_terms)) if seed_terms else set()
     keyword_tokens = tokens(text)
     if not seed_tokens or not keyword_tokens:
-        return "待判断"
+        return "需复核"
     overlap = len(seed_tokens & keyword_tokens)
     if overlap >= max(1, min(len(seed_tokens), len(keyword_tokens)) // 2):
         return "相邻相关"
-    return "待判断"
+    return "需复核"
 
 
 def title_cn(title: Any, segment: Any = None) -> str:
@@ -1582,9 +1931,28 @@ def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
         for key in ("title", "title_cn", "summary_cn", "text", "content", "body", "comment", "quote_cn")
     )
     text = normalized_key(raw_text)
+    therapy_context = any(
+        token in text
+        for token in [
+            "cupping",
+            "suction",
+            "massage",
+            "massager",
+            "lymphatic",
+            "cellulite",
+            "gua sha",
+            "拔罐",
+            "吸力",
+            "负压",
+            "热敷",
+            "红光",
+            "按摩",
+            "刮痧",
+        ]
+    )
     rules = [
         ("privacy", ["privacy", "policy", "data", "record", "recording", "permission", "personal information"]),
-        ("performance", ["not work", "doesn't work", "stopped working", "stop working", "broken", "defective", "fail", "failed", "不亮", "亮度", "不够亮", "失效", "不工作", "故障", "闪烁", "照射"]),
+        ("performance", ["not work", "doesn't work", "stopped working", "stop working", "broken", "defective", "fail", "failed", "不亮", "亮度", "不够亮", "失效", "不工作", "故障", "闪烁", "照射", "pain", "relief", "suction", "heat", "red light", "疼痛", "酸痛", "吸力", "负压", "热敷", "红光"]),
         ("battery_charging", ["battery", "charge", "charging", "recharge", "usb", "电池", "续航", "充电", "掉电", "不耐用", "容量"]),
         ("usability", ["confusing", "hard to use", "setup", "connect", "bluetooth", "wifi", "app", "遥控", "触控", "配对", "串扰", "操作", "开关"]),
         ("quality_durability", ["quality", "durable", "durability", "cheap", "material", "fall apart", "做工", "破损", "缺件", "材质", "粗糙", "断裂", "进水"]),
@@ -1597,24 +1965,71 @@ def infer_review_theme_keys(review: dict[str, Any]) -> list[str]:
     ]
     themes: list[str] = []
     for key, needles in rules:
+        if therapy_context and key == "installation_mounting":
+            needles = [needle for needle in needles if needle not in {"install", "mount", "adhesive", "magnet", "screw", "安装", "打孔", "胶贴", "磁吸", "孔位", "固定", "支架"}]
         if any(needle in text for needle in needles):
             themes.append(key)
     return themes
 
 
+def review_context_family(review: dict[str, Any]) -> str:
+    raw_text = " ".join(
+        str(review.get(key) or "")
+        for key in ("title", "title_cn", "summary_cn", "text", "content", "body", "comment", "quote_cn")
+    )
+    text = normalized_key(raw_text)
+    if any(
+        token in text
+        for token in [
+            "cupping",
+            "suction",
+            "massage",
+            "massager",
+            "lymphatic",
+            "cellulite",
+            "gua sha",
+            "pressure",
+            "pain relief",
+            "back pain",
+            "muscle soreness",
+            "temperature",
+            "拔罐",
+            "吸力",
+            "负压",
+            "热敷",
+            "红光",
+            "按摩",
+            "刮痧",
+            "疼痛缓解",
+            "酸痛",
+        ]
+    ):
+        return "therapy_massager"
+    if any(token in text for token in ["light", "brightness", "rgb", "lamp", "lumens", "照明", "灯", "亮度"]):
+        return "lighting"
+    return "generic"
+
+
 def review_summary_cn(review: dict[str, Any]) -> str:
     explicit = normalize_text(review.get("summary_cn") or review.get("text_cn") or review.get("quote_cn"))
-    if explicit:
-        return explicit
 
     raw_title = normalize_text(review.get("title"))
     raw_text = normalize_text(first_existing(review.get("text"), review.get("content"), review.get("body"), review.get("comment")))
+    raw_context_text = normalized_key(f"{raw_title} {raw_text}")
+    explicit_is_stale_installation = (
+        "安装" in explicit
+        and any(term in raw_context_text for term in ["easy", "use", "handle", "user friendly", "comfortable"])
+        and not any(term in raw_context_text for term in ["install", "setup", "set up", "assemble", "mount"])
+    )
+    if explicit and not explicit_is_stale_installation:
+        return explicit
     if has_cjk(raw_text):
         return raw_text
     if has_cjk(raw_title):
         return raw_title
 
-    text = normalized_key(f"{raw_title} {raw_text}")
+    text = raw_context_text
+    context = review_context_family(review)
     phrases: list[str] = []
     if any(term in text for term in ["stopped working", "stop working", "not work", "doesn't work", "broken", "defective", "failed"]):
         phrases.append("短期使用后出现失效")
@@ -1630,10 +2045,18 @@ def review_summary_cn(review: dict[str, Any]) -> str:
         phrases.append("材质做工和耐用性需要加强")
     if any(term in text for term in ["refund", "return", "warranty", "support", "service"]):
         phrases.append("售后承诺需要前置说明")
+    if context == "therapy_massager":
+        if any(term in text for term in ["heat", "warm", "red light", "therapy", "红光", "热敷"]):
+            phrases.append("热敷和红光理疗体验获得反馈")
+        if any(term in text for term in ["suction", "cup", "cupping", "pressure", "吸力", "负压"]):
+            phrases.append("吸力和拔罐稳定性是核心体验点")
+        if any(term in text for term in ["pain", "relief", "muscle", "back", "sore", "疼痛", "酸痛"]):
+            phrases.append("疼痛缓解和肌肉放松效果被频繁提及")
     if re.search(r"\blight\s*weight\b|\blightweight\b", text):
         phrases.append("轻便和携带体验获得正向反馈")
-    if any(term in text for term in ["easy", "install", "setup", "set up", "assemble"]):
-        phrases.append("安装和上手体验获得正向反馈")
+    has_install_signal = any(term in text for term in ["install", "setup", "set up", "assemble", "mount", "安装", "固定"])
+    if any(term in text for term in ["easy", "use", "handle", "user friendly", "操作", "易用"]) or has_install_signal:
+        phrases.append("安装和上手体验获得正向反馈" if has_install_signal and context != "therapy_massager" else "操作和上手体验获得正向反馈")
     if any(term in text for term in ["love", "great", "works well", "perfect", "recommend", "awesome", "excellent"]):
         phrases.append("整体使用满意度形成正向反馈")
     if any(term in text for term in ["gift", "kids", "daughter", "son", "family"]):
@@ -1646,7 +2069,7 @@ def review_summary_cn(review: dict[str, Any]) -> str:
         if rating and rating <= 3:
             phrases.append("负面反馈集中在体验未达预期")
         elif rating and rating >= 4:
-            phrases.append("正向反馈集中在使用满意度和场景匹配")
+            phrases.append("正向反馈集中在理疗效果、吸力稳定和操作便利" if context == "therapy_massager" else "正向反馈集中在使用满意度和场景匹配")
         else:
             phrases.append("用户反馈需要继续归类后再转成需求动作")
 
@@ -1684,10 +2107,52 @@ def as_number(value: Any) -> float:
         return 0.0
 
 
+def infer_cupping_segment(product: dict[str, Any]) -> str:
+    text = normalized_key(
+        " ".join(
+            normalize_text(product.get(key))
+            for key in (
+                "title",
+                "category",
+                "category_cn",
+                "subcategory",
+            )
+        )
+    )
+    if not text or contains_any(text, CUPPING_HARD_NOISE):
+        return ""
+    if is_non_electric_cupping_boundary_product(text):
+        return ""
+    if not has_direct_cupping_product_signal(text):
+        return ""
+    if not contains_any(text, CUPPING_PRODUCT_SIGNALS + CUPPING_KEYWORD_SIGNALS):
+        return ""
+    for label, needles in CUPPING_SEGMENT_RULES:
+        if any(needle in text for needle in needles):
+            return label
+    return "电动拔罐按摩器"
+
+
 def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
+    inferred_segment = infer_cupping_segment(product)
+    current_segment = normalize_text(product.get("segment_cn") or product.get("segment"))
+    if inferred_segment and (not current_segment or is_placeholder_customer_label(current_segment)):
+        product["segment_cn"] = inferred_segment
+        product["segment"] = inferred_segment
     inferred_title_cn = title_cn(product.get("title"), first_existing(product.get("segment_cn"), product.get("segment")))
     if inferred_title_cn:
         product["title_cn"] = product.get("title_cn") or inferred_title_cn
+    for image_key in ("image_url", "main_image_url", "main_image", "thumbnail", "thumbnail_url", "photo", "Photo", "image"):
+        if image_key in product:
+            cleaned = clean_remote_url(product.get(image_key))
+            if cleaned:
+                product[image_key] = cleaned
+            else:
+                product.pop(image_key, None)
+    for raw_key in ("主图", "图片", "Photo"):
+        cleaned = clean_remote_url(product.get(raw_key))
+        if cleaned and not product.get("image_url"):
+            product["image_url"] = cleaned
     segment_cn = normalize_text(product.get("segment_cn") or product.get("segment"))
     if segment_cn and not is_placeholder_customer_label(segment_cn):
         product["segment_cn"] = product.get("segment_cn") or segment_cn
@@ -1700,12 +2165,44 @@ def enrich_product(product: dict[str, Any]) -> dict[str, Any]:
 
 
 def enrich_keyword(keyword: dict[str, Any], seed_terms: list[str]) -> dict[str, Any]:
-    keyword["keyword_cn"] = keyword_cn(keyword.get("keyword"))
+    if not valid_existing_keyword_cn(keyword.get("keyword"), keyword.get("keyword_cn")):
+        keyword["keyword_cn"] = keyword_cn(keyword.get("keyword"))
     keyword["intent_cn"] = keyword_intent_cn(keyword.get("keyword"))
     keyword["relevance_cn"] = keyword.get("relevance_cn") or keyword_relevance_cn(keyword.get("keyword"), seed_terms)
     keyword["is_core_relevant"] = keyword["relevance_cn"] == "高相关"
     keyword["recommended_use_cn"] = "主词验证" if keyword.get("source_type") == "keyword_detail" else "长尾、内容与广告拓词"
     return keyword
+
+
+def remap_review_theme_for_context(theme: Any, review: dict[str, Any], context: str) -> str:
+    raw = normalize_text(theme)
+    normalized = normalized_key(raw)
+    text = normalized_key(
+        " ".join(
+            normalize_text(review.get(key))
+            for key in ("title", "title_cn", "summary_cn", "text", "content", "body", "comment", "quote_cn")
+        )
+    )
+    source_text = normalized_key(
+        " ".join(
+            normalize_text(review.get(key))
+            for key in ("title", "title_cn", "text", "content", "body", "comment")
+        )
+    )
+    stale_installation = normalized in {"installation_mounting", "install", "setup", normalized_key("安装与固定")}
+    stale_lighting = raw in {"亮度和灯效", "照明体验"} or normalized in {"brightness_lighting", "lighting"}
+    if stale_installation and any(term in text for term in ["easy to use", "ease of use", "user friendly", "comfortable to use", "handle", "操作", "易用"]):
+        if not any(term in source_text for term in ["install", "setup", "set up", "assemble", "mount", "安装", "固定"]):
+            return "usability"
+    if context != "therapy_massager":
+        return normalized or raw
+    if stale_installation or stale_lighting:
+        if any(term in text for term in ["pain", "relief", "muscle", "suction", "pressure", "heat", "red light", "therapy", "疼痛", "酸痛", "吸力", "负压", "热敷", "红光"]):
+            return "performance"
+        if any(term in text for term in ["easy to use", "ease of use", "user friendly", "comfortable to use", "handle", "操作", "易用"]):
+            return "usability"
+        return "usability"
+    return normalized or raw
 
 
 def enrich_review(review: dict[str, Any]) -> dict[str, Any]:
@@ -1718,11 +2215,36 @@ def enrich_review(review: dict[str, Any]) -> dict[str, Any]:
     themes = list(explicit_themes) if explicit_themes else list(explicit_themes_cn)
     if not themes:
         themes = infer_review_theme_keys(review)
+    context = review_context_family(review)
+    remapped_themes: list[str] = []
+    for theme in themes:
+        remapped = remap_review_theme_for_context(theme, review, context)
+        if remapped and remapped not in remapped_themes:
+            remapped_themes.append(remapped)
+    themes = remapped_themes or infer_review_theme_keys(review)
     review["themes"] = themes
     review["themes_cn"] = [THEME_CN.get(str(theme).casefold(), str(theme)) for theme in themes]
     review["summary_cn"] = review_summary_cn(review)
     review["title_cn"] = review_title_cn(review)
+    rating = as_number(review.get("rating"))
+    review["sentiment"] = "negative" if rating and rating <= 2 else "positive" if rating and rating >= 4 else "neutral"
     return review
+
+
+def enrich_supplier(supplier: dict[str, Any]) -> dict[str, Any]:
+    search_keyword = first_existing(
+        supplier.get("search_keyword"),
+        supplier.get("searchName"),
+        supplier.get("search_name"),
+        supplier.get("search_term"),
+        supplier.get("seed_keyword"),
+        supplier.get("keyword"),
+    )
+    if search_keyword:
+        supplier["search_keyword"] = normalize_text(search_keyword)
+    if not supplier.get("seed_keyword") and supplier.get("search_keyword"):
+        supplier["seed_keyword"] = supplier["search_keyword"]
+    return supplier
 
 
 def upsert_gap(data_pack: dict[str, Any], module: str, reason: str, impact: str, next_step: str) -> None:
@@ -1734,6 +2256,67 @@ def upsert_gap(data_pack: dict[str, Any], module: str, reason: str, impact: str,
             gap.update({"impact": impact, "next_step": next_step})
             return
     gaps.append({"module": module, "reason": reason, "impact": impact, "next_step": next_step})
+
+
+GAP_DEFAULTS = {
+    "amazon_product_enrichment_empty_dimensions": (
+        "amazon_product_enrichment",
+        "产品详情维度未返回可验证结果，不能用于页面事实承诺。",
+        "重新调用 Amazon 产品详情维度；仍为空时仅保留 ASIN、价格、评分等已验证字段。",
+    ),
+    "tiktok_signal_depth": (
+        "tiktok_signal_depth",
+        "TikTok 商品/视频信号不足，渠道内容热度只能标记为未知。",
+        "补采 TikTok 商品、视频和达人链路；不可用时保留渠道缺口，不写渠道趋势结论。",
+    ),
+    "competitor_pool_relevance": (
+        "competitor_pool_relevance",
+        "有效竞品池存在相关性或字段覆盖不足，不能支撑完整竞品结论。",
+        "按当前研究对象补采具备 ASIN、标题、品牌、价格、评分、评论和销量代理字段的竞品。",
+    ),
+    "supplier_quote_quality": (
+        "supplier_quote_quality",
+        "1688 报价字段、数量或相关性未达到客户可见测算门槛。",
+        "使用细分赛道中文词继续采集 1688，并保留标题、供应商、价格和链接。",
+    ),
+    "market_segment_split": (
+        "market_segment_split",
+        "细分赛道拆分不足或部分赛道样本不足，不能输出推荐排名。",
+        "按核心功能、场景和价格带补采竞品，确保主赛道达到门禁。",
+    ),
+    "amazon_competitor_images": (
+        "amazon_competitor_images",
+        "竞品图片覆盖不足，竞品全景和标杆拆解不能完整展示。",
+        "补采 Amazon 主图链接；无图竞品只进入表格，不进入图片卡片结论。",
+    ),
+}
+
+
+def backfill_data_gap_details(data_pack: dict[str, Any]) -> None:
+    normalized_gaps: list[Any] = []
+    for gap in data_pack.setdefault("data_gaps", []):
+        if not isinstance(gap, dict):
+            normalized_gaps.append(gap)
+            continue
+        marker = normalize_text(gap.get("module") or gap.get("type") or "data_gap")
+        default_module, default_reason, default_next_step = GAP_DEFAULTS.get(
+            marker,
+            (
+                marker,
+                "当前数据缺口未达到完整客户报告门槛。",
+                "补齐对应数据后重新归一化并重新渲染报告。",
+            ),
+        )
+        if not gap.get("module"):
+            gap["module"] = default_module
+        if not gap.get("reason"):
+            gap["reason"] = normalize_text(gap.get("gap")) or default_reason
+        if not gap.get("impact"):
+            gap["impact"] = "对应模块只能展示诊断，不能输出完整结论。"
+        if not gap.get("next_step"):
+            gap["next_step"] = default_next_step
+        normalized_gaps.append(gap)
+    data_pack["data_gaps"] = normalized_gaps
 
 
 def data_gap_identity(gap: Any) -> tuple[str, str, str]:
@@ -1873,7 +2456,7 @@ def normalize(report_dir: Path) -> dict[str, Any]:
     data_pack["tiktok_products"] = dedupe(data_pack.get("tiktok_products") or [], tiktok_product_dedupe_key, source_index)
     data_pack["tiktok_videos"] = dedupe(data_pack.get("tiktok_videos") or [], tiktok_video_dedupe_key, source_index)
     data_pack["tiktok_authors"] = dedupe(data_pack.get("tiktok_authors") or [], tiktok_author_dedupe_key, source_index)
-    data_pack["suppliers"] = dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)
+    data_pack["suppliers"] = [enrich_supplier(supplier) for supplier in dedupe(data_pack.get("suppliers") or [], supplier_dedupe_key, source_index)]
     data_pack["web_documents"] = dedupe(data_pack.get("web_documents") or [], web_document_dedupe_key, source_index)
     apply_research_relevance_gate(data_pack, seed_terms)
 
@@ -1928,8 +2511,11 @@ def normalize(report_dir: Path) -> dict[str, Any]:
             "VOC、APPEALS、KANO/JTBD 和用户原声只能作为初步线索，不能写成精确市场占比。",
             "对核心 ASIN 补采 Positive/Neutral/Negative 评论，优先达到 80 条，深度版建议 200 条以上。",
         )
+    cross_domain_gaps_removed = remove_cross_domain_data_gaps(data_pack, seed_terms)
+    backfill_data_gap_details(data_pack)
     data_gap_duplicates_removed = dedupe_data_gaps(data_pack)
     data_pack["normalization"]["data_gaps_recovered_removed"] = data_gaps_recovered_removed
+    data_pack["normalization"]["data_gaps_cross_domain_removed"] = cross_domain_gaps_removed
     data_pack["normalization"]["data_gaps_duplicates_removed"] = data_gap_duplicates_removed
     apply_quality_caps(data_pack, {**after_counts, **decision_counts}, cross_validated)
     data_pack["cleaning_summary"] = data_pack["normalization"]

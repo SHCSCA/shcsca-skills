@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import statistics
 import subprocess
@@ -62,7 +63,7 @@ from site_assets import (
     attach_site_chrome,
     write_basic_site_assets,
 )
-from view_model_builder import build_site_data, write_report_views
+from view_model_builder import build_site_data, customer_gap_module_label, write_report_views
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -145,7 +146,7 @@ def report_readiness_view(readiness: dict[str, Any], quality: dict[str, Any] | N
             continue
         gaps.append(
             {
-                "module": customer_safe_gap_text(gap.get("module")),
+                "module": customer_gap_module_label(gap.get("module")),
                 "reason": customer_safe_gap_text(first(gap.get("reason"), gap.get("gap"), default="当前门禁未通过")),
                 "impact": customer_safe_gap_text(first(gap.get("impact"), default="不能输出对应模块的完整结论")),
                 "next_step": customer_safe_gap_text(first(gap.get("next_step"), gap.get("next_action"), default="补齐数据后重新渲染")),
@@ -161,6 +162,22 @@ def report_readiness_view(readiness: dict[str, Any], quality: dict[str, Any] | N
                 "next_step": "继续用细分赛道中文词补采 1688，并保留标题、供应商、价格和链接",
             },
         )
+    supply_gate_passed = bool(
+        (readiness.get("supplier_quote_gate") or {}).get("passed")
+        and (
+            (readiness.get("supplier_quality_gate") or {}).get("customer_visible_passed")
+            if "customer_visible_passed" in (readiness.get("supplier_quality_gate") or {})
+            else (readiness.get("supplier_quality_gate") or {}).get("passed", True)
+        )
+    )
+    if supply_blocked:
+        supply_status = "供应链测算未达门槛"
+    elif delivery_state != "完整可交付" and supply_gate_passed:
+        supply_status = "供应链数据通过；完整结论仍受其他门禁阻断"
+    elif delivery_state != "完整可交付":
+        supply_status = "供应链状态随完整门禁降级"
+    else:
+        supply_status = "供应链测算达标"
     return {
         "delivery_state": delivery_state,
         "decision": final_decision if final_decision in {"Go", "Watch", "No-Go"} else "Watch",
@@ -169,7 +186,8 @@ def report_readiness_view(readiness: dict[str, Any], quality: dict[str, Any] | N
         "quality_sub": quality_sub,
         "quality_tone": quality_tone,
         "supply_blocked": supply_blocked,
-        "supply_status": "供应链测算未达门槛" if supply_blocked else "供应链测算门禁通过",
+        "supply_status": supply_status,
+        "supply_gate_passed": supply_gate_passed,
         "blocking_gaps": gaps,
         "counts": readiness.get("counts") or {},
         "sample_class": readiness.get("sample_class"),
@@ -192,7 +210,8 @@ def current_readiness_view(data_pack: dict[str, Any], analysis_plan: dict[str, A
         "quality_sub": sub,
         "quality_tone": tone,
         "supply_blocked": False,
-        "supply_status": "供应链测算门禁通过",
+        "supply_status": "供应链测算达标",
+        "supply_gate_passed": True,
         "blocking_gaps": [],
     }
 
@@ -228,7 +247,7 @@ def effective_records(data_pack: dict[str, Any], key: str) -> list[dict[str, Any
 
 
 def effective_products(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
-    return relevant_products(effective_records(data_pack, "products"))
+    return relevant_products(effective_records(data_pack, "products"), data_pack.get("research_object"))
 
 
 def effective_keywords(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
@@ -353,7 +372,9 @@ def run_child_report_renderers(report_dir: Path) -> list[dict[str, Any]]:
     for key, script_path in CHILD_REPORT_RENDERERS.items():
         command = [sys.executable, str(script_path), "--dir", str(report_dir)]
         started_at = utc_now()
-        result = subprocess.run(command, text=True, capture_output=True, check=False)
+        env = os.environ.copy()
+        env["AMZ_REUSE_CANONICAL_CHILD_HTML"] = "1"
+        result = subprocess.run(command, text=True, capture_output=True, check=False, env=env)
         finished_at = utc_now()
         output_path = report_dir / HTML_REPORTS[key]
         entry = {
@@ -555,9 +576,10 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
     traffic_keywords = [kw for kw in keywords if kw.get("source_type") == "product_traffic_terms"]
     relevant_keywords = [kw for kw in core_keywords if kw.get("is_core_relevant") or kw.get("relevance_cn") == "高相关"]
     adjacent_keywords = [kw for kw in core_keywords if kw not in relevant_keywords]
-    top_keywords = sorted(core_keywords or keywords, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
+    customer_core_keywords = aggregate_keywords_for_customer_table(core_keywords or keywords)
+    top_keywords = sorted(customer_core_keywords, key=lambda kw: as_float(kw.get("monthly_search_volume"), 0), reverse=True)
     source_type_counts = Counter(kw.get("source_type", "unknown") for kw in keywords)
-    relevance_counts = Counter(kw.get("relevance_cn", "待判断") for kw in keywords)
+    relevance_counts = Counter(kw.get("relevance_cn", "需复核") for kw in keywords)
     cpc_keywords = sorted([kw for kw in top_keywords if kw.get("recommended_cpc") not in (None, "")], key=lambda kw: as_float(kw.get("recommended_cpc"), 0), reverse=True)
     competition_keywords = sorted([kw for kw in top_keywords if kw.get("competitor_count") not in (None, "")], key=lambda kw: as_float(kw.get("competitor_count"), 0), reverse=True)
     visible_keywords = top_keywords[:40]
@@ -577,9 +599,9 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
         ]
         for kw in visible_keywords
     ]
-    row_filters = [first(kw.get("relevance_cn"), default="待判断") for kw in visible_keywords]
+    row_filters = [first(kw.get("relevance_cn"), default="需复核") for kw in visible_keywords]
     filter_options = [("全部", "all")]
-    for bucket in ["高相关", "相邻相关", "待判断"]:
+    for bucket in ["高相关", "相邻相关", "需复核"]:
         if bucket in set(row_filters):
             filter_options.append((bucket, bucket))
     intent_cards = (
@@ -623,6 +645,66 @@ def render_keywords(data_pack: dict[str, Any]) -> str:
         + details("关键词来源结构", source_table)
         + details("竞品反查流量词与流量入口", traffic_table)
     )
+
+
+def aggregate_keywords_for_customer_table(keywords: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    relevance_rank = {"高相关": 3, "相邻相关": 2, "需复核": 1, "待判断": 1}
+    for keyword in keywords:
+        label = keyword_customer_label(keyword) or clean(keyword.get("keyword_cn")) or clean(keyword.get("keyword"))
+        if not label:
+            continue
+        key = re.sub(r"\s+", " ", label.casefold()).strip()
+        group = groups.setdefault(
+            key,
+            {
+                "keyword_cn": label,
+                "keyword_terms": [],
+                "relevance_cn": first(keyword.get("relevance_cn"), default="-"),
+                "monthly_search_volume": 0.0,
+                "weekly_search_volume": 0.0,
+                "recommended_cpc": None,
+                "competitor_count": 0.0,
+                "intent_terms": [],
+                "season_terms": [],
+                "source_terms": [],
+            },
+        )
+        raw_keyword = clean(keyword.get("keyword"))
+        if raw_keyword and raw_keyword not in group["keyword_terms"]:
+            group["keyword_terms"].append(raw_keyword)
+        current_rank = relevance_rank.get(clean(group.get("relevance_cn")), 0)
+        next_rank = relevance_rank.get(clean(keyword.get("relevance_cn")), 0)
+        if next_rank > current_rank:
+            group["relevance_cn"] = keyword.get("relevance_cn")
+        group["monthly_search_volume"] += as_float(keyword.get("monthly_search_volume"), 0)
+        group["weekly_search_volume"] += as_float(keyword.get("weekly_search_volume"), 0)
+        cpc = keyword.get("recommended_cpc")
+        if cpc not in (None, ""):
+            group["recommended_cpc"] = max(as_float(group.get("recommended_cpc"), 0), as_float(cpc, 0))
+        group["competitor_count"] = max(group["competitor_count"], as_float(keyword.get("competitor_count"), 0))
+        for source_key, target_key in [
+            ("intent_cn", "intent_terms"),
+            ("season_peak", "season_terms"),
+            ("source_type", "source_terms"),
+        ]:
+            value = clean(keyword.get(source_key))
+            if value and value not in group[target_key]:
+                group[target_key].append(value)
+    aggregated: list[dict[str, Any]] = []
+    for group in groups.values():
+        row = dict(group)
+        row["keyword"] = " / ".join(row.pop("keyword_terms")[:3])
+        row["intent_cn"] = "；".join(row.pop("intent_terms")[:2]) or "-"
+        row["season_peak"] = "；".join(row.pop("season_terms")[:2]) or "-"
+        row["source_type"] = " / ".join(row.pop("source_terms")[:3]) or "-"
+        row["monthly_search_volume"] = int(row["monthly_search_volume"])
+        row["weekly_search_volume"] = int(row["weekly_search_volume"])
+        row["competitor_count"] = int(row["competitor_count"])
+        if row["recommended_cpc"] is not None:
+            row["recommended_cpc"] = f"{as_float(row['recommended_cpc'], 0):.2f}".rstrip("0").rstrip(".")
+        aggregated.append(row)
+    return aggregated
 
 
 def competitor_rows(products: list[dict[str, Any]], limit: int | None = None) -> list[list[Any]]:
@@ -687,6 +769,17 @@ def is_amazon_competitor_image_url(url: str) -> bool:
     )
 
 
+def is_valid_remote_image_url(url: str) -> bool:
+    text = clean(url)
+    if not text or re.search(r"[\s\x00-\x1f\x7f]", text):
+        return False
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
 def product_image_url(product: dict[str, Any]) -> str:
     enrichment = product.get("sorftime_enrichment") if isinstance(product.get("sorftime_enrichment"), dict) else {}
     candidates: list[Any] = [
@@ -724,19 +817,18 @@ def product_image_url(product: dict[str, Any]) -> str:
                 default="",
             )
         url = clean(candidate)
-        if re.match(r"^https?://", url, flags=re.I) and not is_supplier_image_url(url) and is_amazon_competitor_image_url(url):
+        if is_valid_remote_image_url(url) and not is_supplier_image_url(url) and is_amazon_competitor_image_url(url):
             return url
     return ""
 
 
 def image_with_load_fallback_html(url: str, class_name: str, alt: str, fallback_label: str) -> str:
     return (
-        "<span class=\"image-frame\">"
+        f"<span class=\"image-frame\" role=\"img\" aria-label=\"{esc(fallback_label)}槽位\">"
         f"<img class=\"{esc(class_name)}\" src=\"{esc(url)}\" alt=\"{esc(alt)}\" "
         "loading=\"lazy\" decoding=\"async\" "
-        "onerror=\"this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add('is-visible');\">"
-        "<span class=\"image-load-fallback\" hidden>"
-        f"{esc(fallback_label)}加载失败</span>"
+        "onerror=\"this.hidden=true;this.parentElement.classList.add('image-frame-missing');this.nextElementSibling.hidden=false;this.nextElementSibling.classList.add('is-visible');\">"
+        "<span class=\"image-load-fallback\" hidden></span>"
         "</span>"
     )
 
@@ -780,7 +872,7 @@ def product_image_or_empty_html(
 
 def sku_reference_image_html(sku: dict[str, Any], class_name: str = "sku-reference-thumb") -> str:
     url = clean(sku.get("reference_image_url"))
-    if not url or not re.match(r"^https?://", url, flags=re.I):
+    if not is_valid_remote_image_url(url):
         return ""
     if is_supplier_image_url(url) or not is_amazon_competitor_image_url(url):
         return ""
@@ -1012,11 +1104,13 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     research_context = cosmo_research_context_text(data_pack)
     for product in effective_products(data_pack):
-        label = customer_product_position(product)
-        text = " ".join(
-            clean(product.get(key))
-            for key in ("title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn", "positioning_cn")
-        )
+        label = normalize_cosmo_term(customer_product_position(product)) or lifecycle_customer_segment(product, data_pack)
+        text_parts = []
+        for key in ("title", "title_cn", "brand", "category", "category_cn", "segment", "segment_cn"):
+            value = clean(product.get(key))
+            if value and not is_bad_lifecycle_segment(value):
+                text_parts.append(value)
+        text = " ".join(text_parts)
         records.append(
             {
                 "term": label,
@@ -1029,7 +1123,7 @@ def cosmo_text_records(data_pack: dict[str, Any]) -> list[dict[str, Any]]:
         )
     for keyword in effective_keywords(data_pack):
         relevance = clean(keyword.get("relevance_cn"))
-        if "待判断" in relevance or "相邻相关" in relevance:
+        if "待判断" in relevance or "需复核" in relevance or "相邻相关" in relevance:
             continue
         label = keyword_customer_label(keyword) or clean(keyword.get("keyword_cn")) or clean(keyword.get("keyword"))
         text = " ".join(clean(keyword.get(key)) for key in ("keyword", "keyword_cn", "intent_cn", "relevance_cn", "source_type"))
@@ -1111,6 +1205,9 @@ def normalize_cosmo_term(value: Any) -> str:
     text = clean(value)
     text = re.sub(r"\bB0[A-Z0-9]{8,12}\b", "", text, flags=re.I)
     text = re.sub(r"\s+", " ", text).strip(" ·-:：,，")
+    lowered = text.casefold()
+    if any(part in lowered for part in ["未分层", "用于判断竞品定位", "价格带 · 评分", "竞品记录", "未命名竞品"]):
+        return ""
     text = COSMO_ENGLISH_TERM_TRANSLATIONS.get(text.casefold(), text)
     if re.search(r"[\u4e00-\u9fff]", text):
         text = re.sub(r"^(高价|中价|低价|通用|热销|畅销|基础|升级|套装|普通|高端)+", "", text)
@@ -1120,6 +1217,21 @@ def normalize_cosmo_term(value: Any) -> str:
     if re.search(r"[A-Za-z]{3,}", text) and not re.search(r"[\u4e00-\u9fff]", text):
         return ""
     return truncate(text, 36)
+
+
+def sanitize_cosmo_excerpt(value: Any, supported_terms: list[str] | None = None) -> str:
+    text = clean(value)
+    text = re.sub(
+        r"未分层\s*·\s*\$?[\d,.]+\s*价格带\s*·\s*评分\s*[\d.]+\s*·\s*评论\s*[\d,，]+[，,]?\s*用于判断竞品定位和页面表达",
+        "",
+        text,
+    )
+    text = text.replace("用于判断竞品定位和页面表达", "")
+    text = re.sub(r"(^|\s)未分层(\s|$)", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" ·-:：,，")
+    if not text and supported_terms:
+        text = "、".join(term for term in supported_terms if term)
+    return truncate(text or "当前证据已归入标签关系，需继续用评论、QA 或竞品字段补强。", 120)
 
 
 def cosmo_display_relation(relation_type: str, label_cn: str) -> str:
@@ -1299,6 +1411,7 @@ def add_generic_relation_terms(
     text: str,
     raw_term: str,
     child_product_context: bool = False,
+    setup_context: bool = True,
 ) -> None:
     lower = text.casefold()
     if relation_type in {"USED_AS", "IS_A"}:
@@ -1313,6 +1426,8 @@ def add_generic_relation_terms(
             ("便携收纳", ["portable", "carry", "foldable", "便携", "收纳", "折叠"]),
             ("快速安装", ["easy to set up", "install", "setup", "安装", "搭建"]),
         ]:
+            if label == "快速安装" and not setup_context:
+                continue
             if any(cosmo_cue_matches(text, lower, cue) for cue in cues):
                 add_unique_cosmo_candidate(candidates, label)
     if relation_type == "USED_TO":
@@ -1324,6 +1439,8 @@ def add_generic_relation_terms(
             ("快速安装", ["setup", "install", "安装", "搭建"]),
             ("隐蔽观察", ["conceal", "hide", "观察", "隐蔽"]),
         ]:
+            if label == "快速安装" and not setup_context:
+                continue
             if any(cosmo_cue_matches(text, lower, cue) for cue in cues):
                 add_unique_cosmo_candidate(candidates, label)
     if relation_type in {"USED_FOR_AUD", "USED_BY", "xIs_A"}:
@@ -1378,6 +1495,8 @@ def add_generic_relation_terms(
             ("材质更耐用", ["durable", "stainless", "耐用", "材质", "不锈钢"]),
             ("安装更简单", ["easy to set up", "setup", "install", "安装"]),
         ]:
+            if label == "安装更简单" and not setup_context:
+                continue
             if any(cosmo_cue_matches(text, lower, cue) for cue in cues):
                 add_unique_cosmo_candidate(candidates, label)
 
@@ -1453,6 +1572,26 @@ def is_child_product_cosmo_context(text: str) -> bool:
     )
 
 
+def is_cupping_cosmo_context(text: str) -> bool:
+    lower = clean(text).casefold()
+    return any(
+        cue in lower
+        for cue in [
+            "cupping",
+            "cupping therapy",
+            "electric cupping",
+            "vacuum cupping",
+            "red light therapy",
+            "lymphatic",
+            "拔罐",
+            "负压",
+            "刮痧",
+            "红光理疗",
+            "淋巴",
+        ]
+    )
+
+
 def cosmo_domain_context(record: dict[str, Any], detector) -> bool:
     context_text = clean(record.get("research_context"))
     record_text = clean(record.get("text"))
@@ -1467,7 +1606,9 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
     lower = text.casefold()
     hunting_context = cosmo_domain_context(record, is_hunting_cosmo_context)
     audio_context = cosmo_domain_context(record, is_audio_cosmo_context)
+    cupping_context = is_cupping_cosmo_context(record.get("research_context")) or is_cupping_cosmo_context(text)
     child_product_context = is_child_product_cosmo_context(clean(record.get("research_context"))) or is_child_product_cosmo_context(text)
+    setup_context = not cupping_context
     raw_term = normalize_cosmo_term(record.get("term"))
     candidates: list[str] = []
 
@@ -1497,15 +1638,18 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
             add_when("鹿猎场景", "deer", "鹿")
             add_when("火鸡狩猎", "turkey", "火鸡")
             add_when("户外狩猎活动", "hunting", "狩猎", "打猎")
-        add_when("户外使用场景", "outdoor", "户外")
-        add_when("露营/野外观察", "camping", "露营", "野外")
+        if not cupping_context:
+            add_when("户外使用场景", "outdoor", "户外")
+            add_when("露营/野外观察", "camping", "露营", "野外")
     elif relation_type == "USED_FOR_AUD":
         if hunting_context:
             add_when("猎人用户", "hunter", "hunting", "猎人", "狩猎")
         add_when("多人使用者", "two person", "three person", "多人")
-        add_when("户外爱好者", "outdoor", "户外")
+        if not cupping_context:
+            add_when("户外爱好者", "outdoor", "户外")
     elif relation_type == "CAPABLE_OF":
-        add_when("快速搭建", "easy to set up", "setup", "install", "弹出", "安装", "搭建")
+        if setup_context:
+            add_when("快速搭建", "easy to set up", "setup", "install", "弹出", "安装", "搭建")
         if hunting_context:
             add_when("保持隐蔽", "concealed", "conceal", "hide", "隐蔽")
             add_when("容纳多人", "2 person", "3 person", "多人", "容纳")
@@ -1515,7 +1659,8 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
             add_when("隐藏身形", "conceal", "hide", "隐蔽", "遮蔽")
             add_when("观察猎物", "deer", "turkey", "watch", "观察", "狩猎")
             add_when("快速搭建临时掩体", "pop up", "setup", "弹出", "搭建")
-        add_when("户外使用", "outdoor", "户外")
+        if not cupping_context:
+            add_when("户外使用", "outdoor", "户外")
         if audio_context:
             add_when("户外播放", "speaker", "music", "音箱", "播放")
         add_when("防水使用", "waterproof", "防水")
@@ -1532,10 +1677,13 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
     elif relation_type == "USED_ON":
         if hunting_context:
             add_when("狩猎季", "hunting season", "season", "季")
-        add_when("清晨/傍晚观察", "morning", "evening", "dawn", "清晨", "傍晚")
-        add_when("户外活动日", "day", "outdoor", "户外")
+        if not cupping_context:
+            add_when("清晨/傍晚观察", "morning", "evening", "dawn", "清晨", "傍晚")
+        if not cupping_context:
+            add_when("户外活动日", "outdoor", "户外")
     elif relation_type == "USED_IN_LOC":
-        add_when("户外地面" if hunting_context else "户外场景", "ground", "outdoor", "地面", "户外")
+        if not cupping_context:
+            add_when("户外地面" if hunting_context else "户外场景", "ground", "outdoor", "地面", "户外")
         if hunting_context:
             add_when("树林/野外", "woods", "field", "树林", "野外", "猎场")
             add_when("后院/农场", "yard", "farm", "后院", "农场")
@@ -1548,7 +1696,8 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
     elif relation_type == "USED_BY":
         if hunting_context:
             add_when("狩猎用户", "hunter", "hunting", "猎人", "狩猎")
-        add_when("户外使用者", "outdoor", "户外")
+        if not cupping_context:
+            add_when("户外使用者", "outdoor", "户外")
         add_when("新手用户", "beginner", "easy", "新手", "易用")
     elif relation_type == "xINTERSTED_IN":
         if hunting_context:
@@ -1558,20 +1707,21 @@ def cosmo_term_candidates(record: dict[str, Any], relation_type: str, dimension:
         elif audio_context:
             add_when("户外音乐", "speaker", "music", "音箱", "播放")
             add_when("便携户外使用", "portable", "outdoor", "便携", "户外")
-        else:
-            add_when("便携户外使用", "portable", "outdoor", "便携", "户外")
     elif relation_type == "xIs_A":
         if hunting_context:
             add_when("猎人", "hunter", "hunting", "猎人", "狩猎")
-        add_when("户外运动用户", "outdoor", "sport", "户外")
+        if not cupping_context:
+            add_when("户外运动用户", "outdoor", "sport", "户外")
         add_when("价格敏感买家", "price", "value", "价格")
     elif relation_type == "xWANT":
-        add_when("更容易安装", "easy to set up", "setup", "install", "易安装", "安装", "易用")
+        if setup_context:
+            add_when("更容易安装", "easy to set up", "setup", "install", "易安装", "安装", "易用")
         add_when("隐蔽性更稳定", "conceal", "hide", "隐蔽", "遮蔽")
         add_when("材质更耐用", "durable", "quality", "sturdy", "耐用", "质量", "材质")
-        add_when("空间更充足", "roomy", "space", "spacious", "空间", "尺寸")
+        if hunting_context:
+            add_when("空间更充足", "roomy", "space", "spacious", "空间", "尺寸")
 
-    add_generic_relation_terms(candidates, relation_type, text, raw_term, child_product_context)
+    add_generic_relation_terms(candidates, relation_type, text, raw_term, child_product_context, setup_context)
 
     if candidates:
         return candidates
@@ -1847,7 +1997,7 @@ def generate_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str
                     "source_type": match.get("source_type"),
                     "source_id": match.get("source_id"),
                     "field": match.get("field"),
-                    "excerpt": truncate(match.get("text"), 120),
+                    "excerpt": sanitize_cosmo_excerpt(match.get("text"), supported_terms),
                     "supported_terms": supported_terms,
                 }
                 if supported_terms and any(term not in covered_terms for term in supported_terms):
@@ -2101,6 +2251,75 @@ def render_cosmo_alexa_tags(data_pack: dict[str, Any], analysis_plan: dict[str, 
     )
 
 
+def render_cosmo_diagnostic_skeleton(metric: str) -> str:
+    def diagnostic_cell(slot_id: str, relation_type: str, label_cn: str, dimension: str) -> str:
+        marker = "产品" if dimension == "product" else "用户"
+        dimension_cn = "产品标签" if dimension == "product" else "用户标签"
+        hint = cosmo_low_coverage_hint(label_cn)
+        display_relation = cosmo_display_relation(relation_type, label_cn)
+        return (
+            "<article class=\"cosmo-tag-card cosmo-matrix-cell\" "
+            + f"data-cosmo-relation=\"{esc(slot_id)}\" data-dimension=\"{esc(dimension_cn)}\" data-confidence=\"低\">"
+            + "<div class=\"cosmo-card-top\"><div>"
+            + "<div class=\"cosmo-relation-lane\">"
+            + f"<span class=\"cosmo-relation-kind\">{esc(display_relation)}</span>"
+            + f"<b class=\"cosmo-relation-id\">{esc(marker)}</b>"
+            + "</div>"
+            + f"<h3 class=\"cosmo-relation-title\">{esc(label_cn)}</h3>"
+            + "</div><span class=\"cosmo-confidence-pill\">诊断</span></div>"
+            + f"<p class=\"cosmo-relation-meta\">{esc(dimension_cn)} · 未达决策门槛</p>"
+            + "<dl class=\"cosmo-card-meta-grid\">"
+            + f"<div><dt>标签对象</dt><dd>{esc(marker)}标签</dd></div>"
+            + "<div><dt>证据强度</dt><dd>需补采</dd></div>"
+            + "</dl>"
+            + "<div class=\"cosmo-term-block\"><div class=\"cosmo-block-label\">恢复后展示</div>"
+            + f"<div class=\"cosmo-tag-terms\"><span>{esc(hint)}</span></div></div>"
+            + "<div class=\"cosmo-evidence-strip\"><span>证据状态</span><b>诊断</b><em>不写入页面承诺</em></div>"
+            + "<p class=\"cosmo-business-meaning\"><b>诊断：</b>补齐竞品、关键词、评论、QA 或供应端证据后，在此关系卡展示真实标签词和动作建议。</p>"
+            + "<div class=\"cosmo-action-direction\"><span>动作方向</span><b>补证后再进入 Listing / QA / 广告承诺</b></div>"
+            + "</article>"
+        )
+
+    product_relations = [item for item in COSMO_ALEXA_RELATIONS if item[2] == "product"]
+    user_relations = [item for item in COSMO_ALEXA_RELATIONS if item[2] == "user"]
+    product_cells = "".join(
+        diagnostic_cell(f"P{idx:02d}", relation_type, label_cn, dimension)
+        for idx, (relation_type, label_cn, dimension, _) in enumerate(product_relations, start=1)
+    )
+    user_cells = "".join(
+        diagnostic_cell(f"U{idx:02d}", relation_type, label_cn, dimension)
+        for idx, (relation_type, label_cn, dimension, _) in enumerate(user_relations, start=1)
+    )
+    return (
+        "<div class=\"cosmo-diagnostic-shell cosmo-layout cosmo-layout-stacked\">"
+        "<div class=\"cosmo-summary-strip\">"
+        "<div class=\"cosmo-summary-item product\"><span>产品标签覆盖</span><b>诊断</b><em>保留 15 标签矩阵结构</em></div>"
+        "<div class=\"cosmo-summary-item user\"><span>用户标签覆盖</span><b>诊断</b><em>补齐后恢复高置信标签</em></div>"
+        "<div class=\"cosmo-summary-item weak\"><span>低置信关系</span><b>阻断</b><em>不写入页面承诺</em></div>"
+        f"<div class=\"cosmo-summary-item strong\"><span>证据记录</span><b>{esc(metric)}</b><em>用于补采定位</em></div>"
+        "</div>"
+        "<section class=\"cosmo-panel cosmo-matrix\"><div class=\"cosmo-panel-title\">15 标签矩阵</div>"
+        "<div class=\"cosmo-matrix-lanes\">"
+        "<div class=\"cosmo-matrix-lane product-lane\"><div class=\"cosmo-lane-title\">"
+        f"<span>产品标签 · 产品被算法识别为什么</span><b>{esc(len(product_relations))} 类</b><em>三列矩阵结构</em></div>"
+        f"<div class=\"cosmo-lane-grid\">{product_cells}</div></div>"
+        "<div class=\"cosmo-matrix-lane user-lane\"><div class=\"cosmo-lane-title\">"
+        f"<span>用户标签 · 用户为什么搜索/购买</span><b>{esc(len(user_relations))} 类</b><em>三列矩阵结构</em></div>"
+        f"<div class=\"cosmo-lane-grid\">{user_cells}</div></div>"
+        "</div></section>"
+        "<div class=\"cosmo-submodule-grid\"><section class=\"cosmo-panel cosmo-top-list\"><div class=\"cosmo-panel-title\">高置信标签排行</div>"
+        "<ol><li><span>诊断</span><strong>补采后输出排行</strong><em>证据不足不写入承诺</em></li></ol></section>"
+        "<section class=\"cosmo-panel cosmo-gap-panel\"><div class=\"cosmo-panel-title\">产品标签 / 用户标签缺口</div>"
+        "<ul><li><span>补采</span><strong>补齐证据后生成缺口</strong><em>当前仅显示诊断</em></li></ul></section></div>"
+        "<section class=\"cosmo-panel cosmo-action-board\"><div class=\"cosmo-panel-title\">Listing / QA / 广告动作</div>"
+        "<div class=\"cosmo-action-grid\"><article class=\"cosmo-action-card\"><span>Listing</span><h3>页面承诺暂不输出</h3>"
+        "<ul class=\"cosmo-action-list\"><li><b>动作</b><span>补齐门禁后写入真实动作。</span></li></ul></article>"
+        "<article class=\"cosmo-action-card\"><span>QA</span><h3>问答证据暂不输出</h3><ul class=\"cosmo-action-list\"><li><b>动作</b><span>补齐适用人群、使用场景和限制条件后恢复。</span></li></ul></article>"
+        "<article class=\"cosmo-action-card\"><span>广告</span><h3>投放标签暂不输出</h3><ul class=\"cosmo-action-list\"><li><b>动作</b><span>补齐高置信标签后再进入精准词或场景词。</span></li></ul></article>"
+        "</div></section></div>"
+    )
+
+
 def render_product_deep_dives(products: list[dict[str, Any]], keywords: list[dict[str, Any]]) -> str:
     traffic = traffic_terms_by_asin(keywords)
     cards = []
@@ -2157,10 +2376,10 @@ def percentile(values: list[float], ratio: float) -> float | None:
     return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
-def priced_competitors(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def priced_competitors(products: list[dict[str, Any]], research_object: Any = None) -> list[dict[str, Any]]:
     candidates = [
         product
-        for product in relevant_products(products)
+        for product in relevant_products(products, research_object)
         if product.get("asin") and as_float(product_price(product), -1) > 0
     ]
     prices = sorted(as_float(product_price(product), 0) for product in candidates)
@@ -2172,8 +2391,8 @@ def priced_competitors(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(candidates, key=lambda product: as_float(product_price(product), 0))
 
 
-def competitor_price_tiers(products: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
-    competitors = priced_competitors(products)
+def competitor_price_tiers(products: list[dict[str, Any]], research_object: Any = None) -> list[tuple[str, dict[str, Any]]]:
+    competitors = priced_competitors(products, research_object)
     if not competitors:
         return []
     indexes = [0, len(competitors) // 2, len(competitors) - 1]
@@ -2190,8 +2409,8 @@ def competitor_price_tiers(products: list[dict[str, Any]]) -> list[tuple[str, di
     return tiers
 
 
-def render_profitability_table(products: list[dict[str, Any]], valid_prices_rmb: list[float]) -> tuple[str, str]:
-    tiers = competitor_price_tiers(products)
+def render_profitability_table(products: list[dict[str, Any]], valid_prices_rmb: list[float], research_object: Any = None) -> tuple[str, str]:
+    tiers = competitor_price_tiers(products, research_object)
     if not tiers or len(valid_prices_rmb) < 50:
         return "", ""
     exchange_rate = 7.2
@@ -2532,7 +2751,7 @@ def render_supply_diagnostic(suppliers: list[dict[str, Any]], snapshot: dict[str
     diagnostic_panel = (
         "<div class=\"chart-container diagnostic-chart-container\">"
         "<div class=\"chart-title\">毛利率测算未启用 · 1688质量门禁未通过</div>"
-        "<div class=\"chart-subtitle\">保留模板图表槽位；当前只展示供应链补采诊断，不输出毛利率结论</div>"
+        "<div class=\"chart-subtitle\">供应链补采诊断已前置；毛利率结论等待报价质量达标</div>"
         "<div id=\"marginChart\" class=\"chart-body chart-h-260 diagnostic-chart-body\" data-chart-disabled=\"true\">"
         + "".join(
             "<div class=\"diagnostic-chart-item\">"
@@ -2709,7 +2928,7 @@ def tiktok_relevance(product: dict[str, Any], seed_terms: list[str]) -> str:
         return str(product["relevance_cn"])
     if not seed_terms:
         return "高相关"
-    return "待判断"
+    return "需复核"
 
 
 def customer_safe_signal_title(item: dict[str, Any], fallback: str) -> str:
@@ -2809,7 +3028,11 @@ def render_supply(data_pack: dict[str, Any], profitability: dict[str, Any]) -> s
     p75_rmb = percentile(valid_prices, 0.75)
     top_supplier = suppliers[0] if suppliers else {}
     supplier_focus = truncate(first(top_supplier.get("title_cn"), top_supplier.get("title"), "供应端记录"), 18)
-    profitability_table, formula = render_profitability_table(effective_products(data_pack), valid_prices)
+    profitability_table, formula = render_profitability_table(
+        effective_products(data_pack),
+        valid_prices,
+        data_pack.get("research_object"),
+    )
     supplier_rows = [
         [
             truncate(first(supplier.get("title_cn"), supplier.get("title"), "供应商记录"), 42),
@@ -2862,7 +3085,6 @@ def render_opportunities(opportunity: dict[str, Any]) -> str:
     top = opportunities[:3]
     recommended_idx = 1
     pricing_cards = []
-    prompt_cards = []
     for idx, item in enumerate(top):
         name = first(item.get("name"), f"机会 {idx + 1}")
         entry_shape = first(item.get("entry_shape"), item.get("recommendation"), "以小批量实物、页面卖点和广告转化验证为先。")
@@ -2879,14 +3101,6 @@ def render_opportunities(opportunity: dict[str, Any]) -> str:
             + "<div class=\"pricing-feature\">补齐 landed cost 与广告成本</div>"
             + "<div class=\"pricing-feature\">未验证前不扩大 SKU</div>"
             + "</div></article>"
-        )
-        prompt_cards.append(
-            "<article class=\"prompt-card\">"
-            + f"<div class=\"prompt-number\">Prompt {idx + 1:02d}</div>"
-            + f"<div class=\"prompt-scene\">{esc(name)}</div>"
-            + f"<div class=\"prompt-text\">把该机会写入主图、五点和 A/B 页面测试；只使用已采集证据支持的承诺。</div>"
-            + f"<div class=\"prompt-note\">{esc(first(item.get('decision'), 'Watch'))}</div>"
-            + "</article>"
         )
     pillar_inputs = [
         ("🧩", "差异化支柱 #1：模块化核心设计", "把最容易产生差评的结构、清洁、替换或维护问题做成可验证设计。首批实物必须能证明该问题被真实解决，而不是只在标题、五点或 A+ 页面里承诺。", "→ 解决痛点P1：体验缺口可被实测验证"),
@@ -2925,31 +3139,50 @@ def render_opportunities(opportunity: dict[str, Any]) -> str:
 
 def render_visual_direction(opportunity: dict[str, Any]) -> str:
     opportunities = fixed_opportunity_slots(opportunity.get("opportunities") or [])
-    prompt_templates = [
-        (
-            "生成一张低价流量验证款首图：画面只保留一个清晰日常使用场景，背景干净，产品轮廓完整可识别，预留一个核心利益点标注区域；避免豪华道具和复杂布景，重点验证搜索结果页点击率、首屏理解速度和页面承诺是否成立。",
-            "适用于：低价流量验证款，先验证点击率、核心场景和页面承诺边界。",
-        ),
-        (
-            "生成一张主力差异化对比图：用真实生活化场景展示产品如何解决核心痛点，画面可包含轻量前后对比或竞品差异对照，突出材质、安装细节和可信承诺区域；质感要高于低价款，但不能脱离实物能力。",
-            "适用于：主力差异化款，突出实物差异、竞品对比和可验证卖点。",
-        ),
-        (
-            "生成一张高溢价套装款主图：完整展示主品、配件、包装、说明卡和升级使用场景，用有秩序的开箱构图表达套装完整度、礼品感和价值堆叠；光线真实温和，重点验证高毛利价格带是否有足够感知价值。",
-            "适用于：高溢价套装款，验证 Bundle 价值感、礼品化和高毛利空间。",
-        ),
+    prompt_specs = [
+        {
+            "title": "低价流量验证款",
+            "scene": "single everyday use scene, clean background, one product hero angle",
+            "composition": "front three-quarter product view, product clearly recognizable, enough empty space for later manual callouts",
+            "selling_point": "show the simplest usage benefit and fast understanding in search results",
+            "note": "用于首图点击率和核心场景识别验证；生成后只保留真实能兑现的卖点。",
+        },
+        {
+            "title": "主力差异化款",
+            "scene": "realistic lifestyle scene showing the product solving the main customer pain point",
+            "composition": "product in use, one close-up detail area, subtle before-and-after or comparison feeling without text",
+            "selling_point": "make material, structure, installation, durability, or usability difference visually obvious",
+            "note": "用于主力差异化图；重点验证实物差异、竞品对比和页面承诺是否一致。",
+        },
+        {
+            "title": "高溢价套装款",
+            "scene": "premium bundle scene with main product, accessories, packaging, quick-start card, and upgraded use context",
+            "composition": "organized unboxing layout, main product dominant, accessories arranged neatly, premium but realistic",
+            "selling_point": "communicate bundle completeness, giftability, premium value, and higher perceived margin",
+            "note": "用于高溢价套装图；验证 Bundle 价值感、礼品化和高毛利价格带。",
+        },
     ]
     prompt_cards = []
     for idx, item in enumerate(opportunities[:3]):
         name = first(item.get("name"), f"机会 {idx + 1}")
-        prompt_text, prompt_note = prompt_templates[idx % len(prompt_templates)]
-        contextual_prompt = f"商品方向：{name}。{prompt_text}"
+        spec = prompt_specs[idx % len(prompt_specs)]
+        prompt_text = (
+            "Photorealistic Amazon product photography, "
+            f"product concept: {name}, "
+            f"image goal: {spec['title']}, "
+            f"scene: {spec['scene']}, "
+            f"composition: {spec['composition']}, "
+            f"visible selling point: {spec['selling_point']}, "
+            "soft realistic lighting, clean commercial styling, high detail, true-to-life materials, "
+            "no text, no watermark, no logo, no exaggerated glow, no distorted product, no extra unrelated objects."
+        )
         prompt_cards.append(
             "<article class=\"prompt-card\">"
             + f"<div class=\"prompt-number\">Prompt {idx + 1:02d}</div>"
             + f"<div class=\"prompt-scene\">{esc(name)}</div>"
-            + f"<div class=\"prompt-text\">{esc(contextual_prompt)}</div>"
-            + f"<div class=\"prompt-note\">{esc(prompt_note)} 需结合实物照片和实测表现再二次修订。</div>"
+            + "<div class=\"prompt-copy-label\">AI image prompt</div>"
+            + f"<div class=\"prompt-text\">{esc(prompt_text)}</div>"
+            + f"<div class=\"prompt-note\">{esc(spec['note'])} 需结合实物照片和实测表现再二次修订。</div>"
             + "</article>"
         )
     return (
@@ -2977,7 +3210,7 @@ def fixed_opportunity_slots(items: list[dict[str, Any]]) -> list[dict[str, Any]]
             "price_band": "$19-$29",
             "decision": "Watch",
             "entry_shape": "只验证核心转化和评价门槛，不承接全 SKU 扩张。",
-            "score": "固定模板槽位",
+            "score": "待数据验证",
         },
         {
             "tier": "Core · 推荐切入",
@@ -2985,7 +3218,7 @@ def fixed_opportunity_slots(items: list[dict[str, Any]]) -> list[dict[str, Any]]
             "price_band": "$39-$59",
             "decision": "Watch",
             "entry_shape": "承接销量、页面承诺和真实体验验证，是首轮主推价格带。",
-            "score": "固定模板槽位",
+            "score": "待数据验证",
         },
         {
             "tier": "Premium · 利润验证款",
@@ -2993,7 +3226,7 @@ def fixed_opportunity_slots(items: list[dict[str, Any]]) -> list[dict[str, Any]]
             "price_band": "$79-$99",
             "decision": "Watch",
             "entry_shape": "承接礼品化、Bundle 和高毛利空间，必须绑定实物质感与售后承诺。",
-            "score": "固定模板槽位",
+            "score": "待数据验证",
         },
     ]
     slots = [dict(item) for item in items[:3] if isinstance(item, dict)]
@@ -3151,6 +3384,10 @@ def delivery_readiness_summary(readiness: dict[str, Any]) -> dict[str, Any]:
         supplier_quality["field_diagnostic"] = "当前1688响应缺少商品标题和商品链接字段"
     return {
         "path": "data/normalized/data_readiness_report.json",
+        "decision": readiness.get("decision"),
+        "delivery_mode": readiness.get("delivery_mode"),
+        "evidence_grade": readiness.get("evidence_grade"),
+        "score": readiness.get("score"),
         "acceptance_ready": readiness.get("acceptance_ready"),
         "partial_report_ready": readiness.get("partial_report_ready"),
         "supply_conclusion_blocked": readiness.get("supply_conclusion_blocked"),
@@ -3166,8 +3403,18 @@ def delivery_readiness_summary(readiness: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def write_site_assets(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str, readiness: dict[str, Any] | None = None) -> None:
-    write_basic_site_assets(report_dir, build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS, readiness))
+def write_site_assets(
+    report_dir: Path,
+    data_pack: dict[str, Any],
+    analysis_plan: dict[str, Any],
+    decision: str,
+    readiness: dict[str, Any] | None = None,
+    delivery_result: dict[str, Any] | None = None,
+) -> None:
+    write_basic_site_assets(
+        report_dir,
+        build_site_data(data_pack, analysis_plan, decision, CHILD_SKILLS, readiness, delivery_result),
+    )
 
 
 def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any], readiness: dict[str, Any]) -> Path:
@@ -3176,7 +3423,9 @@ def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any
     data_pack["report_readiness"] = readiness
     data_pack["report_readiness_view"] = readiness_view
     write_lineage_markdown(data_pack, report_dir / "data" / "lineage.md")
-    cosmo_tags, lifecycle = ensure_generated_analysis_artifacts(report_dir, data_pack, analysis_plan)
+    cosmo_tags, lifecycle = load_or_generate_analysis_artifacts(report_dir, data_pack, analysis_plan)
+    data_pack["cosmo_alexa_tags"] = cosmo_tags
+    data_pack["lifecycle_strategy"] = lifecycle
     write_report_views(report_dir, data_pack, analysis_plan, decision)
     write_site_assets(report_dir, data_pack, analysis_plan, decision, readiness)
     write_report_brief(report_dir, data_pack, analysis_plan, decision, CHILD_SKILLS)
@@ -3204,17 +3453,90 @@ def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any
         "max_refinement_rounds": 2,
         "status": "not_run_data_readiness_blocked",
     }
+    diagnostic_critic = {
+        "pass": False,
+        "round_id": 0,
+        "score": 0,
+        "grade": "D",
+        "status": "not_run_data_readiness_blocked",
+        "findings": [
+            {
+                "id": "F-readiness-blocked",
+                "class": "data_gate",
+                "severity": "blocking",
+                "report_type": "market_depth",
+                "claim_path": "data_readiness.acceptance_ready",
+                "evidence_path": "data/normalized/data_readiness_report.json",
+                "problem": "数据门禁未通过，未执行最终 critic 通过评审。",
+                "required_refinement": "补齐阻断项后重新渲染并重新运行 critic。",
+            }
+        ],
+        "blocking_issues": ["数据门禁未通过，未执行最终 critic 通过评审。"],
+        "resolved_findings": [],
+        "remaining_findings": ["F-readiness-blocked"],
+        "report_issues": {
+            "market_depth": ["数据门禁未通过，市场深度报告仅输出诊断模板。"],
+            "lifecycle_strategy": ["数据门禁未通过，生命周期报告仅输出诊断模板。"],
+            "demand_gap": ["数据门禁未通过，需求断层报告仅输出诊断模板。"],
+        },
+        "data_confidence": {
+            "review_depth": "diagnostic",
+            "cross_validation": "diagnostic",
+            "decision_confidence": "blocked",
+        },
+        "suggestions": ["补齐 data_readiness_report 中的阻断项后重新生成完整报告。"],
+        "refinement_targets": [],
+        "applied_operations": [],
+        "max_refinement_rounds": 2,
+    }
+    diagnostic_plan = {
+        "status": "blocked",
+        "round_id": 0,
+        "max_refinement_rounds": 2,
+        "operations": [],
+        "refinement_targets": [],
+        "constraints": [
+            "Data readiness is blocked; critic refinement cannot rewrite normalized facts.",
+            "Regenerate after data collection and normalization pass.",
+        ],
+    }
+    write_json(report_dir / "analysis" / "critic_review.json", diagnostic_critic)
+    write_json(
+        report_dir / "analysis" / "critic_decision.json",
+        {
+            "decision": "No-Go",
+            "pass": False,
+            "score": 0,
+            "grade": "D",
+            "status": "not_run_data_readiness_blocked",
+        },
+    )
+    write_json(report_dir / "analysis" / "refinement_plan.json", diagnostic_plan)
+    (report_dir / "analysis" / "critic_summary.md").write_text(
+        "# Critic Summary\n\n"
+        "- readiness: `fail`\n"
+        "- final_pass: `false`\n"
+        "- final_score: `0`\n"
+        "- final_grade: `D`\n"
+        "- final_decision: `No-Go`\n"
+        "- remaining_findings: `F-readiness-blocked`\n\n"
+        "## Guardrails\n\n"
+        "- Data readiness is blocked; the report must not claim delivery completion.\n"
+        "- Re-run data collection, normalization, rendering, and critic after blocking gaps are cleared.\n",
+        encoding="utf-8",
+    )
     write_delivery_result(report_dir, delivery, CHILD_SKILLS)
+    write_site_assets(report_dir, data_pack, analysis_plan, decision, readiness, delivery)
     blocking_rows = [
         [
-            customer_safe_asset_text(gap.get("module")),
+            customer_gap_module_label(gap.get("module")),
             customer_safe_asset_text(gap.get("reason")),
             customer_safe_asset_text(gap.get("next_step")),
         ]
         for gap in readiness.get("blocking_gaps") or []
     ]
     if not blocking_rows:
-        blocking_rows = [["数据门禁", "当前数据尚未达到完整客户报告标准。", "补齐门禁后重新渲染。"]]
+        blocking_rows = [["数据门禁", "当前数据尚未达到完整客户报告标准。", "补齐门禁后重新分析。"]]
     warning_rows = [
         [
             customer_safe_asset_text(item.get("module")),
@@ -3223,25 +3545,99 @@ def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any
         ]
         for item in readiness.get("warnings") or []
     ]
+    counts = readiness.get("counts") or {}
+    competitor_gate = readiness.get("competitor_gate") or {}
+    segment_gate = readiness.get("segment_gate") or {}
+    supplier_quote_gate = readiness.get("supplier_quote_gate") or {}
+    supplier_quality_gate = readiness.get("supplier_quality_gate") or {}
+    blocked_delivery = not readiness.get("acceptance_ready")
+    competitor_status = "通过" if competitor_gate.get("passed") else "赛道不足" if counts.get("valid_competitors", 0) >= competitor_gate.get("minimum_total", 0) else "需补采"
+    segment_minimum = (
+        segment_gate.get("minimum_per_primary_segment")
+        or competitor_gate.get("minimum_per_primary_segment")
+        or 10
+    )
+    segment_standard = f"每个主赛道≥{num(segment_minimum)}"
+    supplier_quality_passed = (
+        supplier_quality_gate.get("customer_visible_passed")
+        if "customer_visible_passed" in supplier_quality_gate
+        else supplier_quality_gate.get("passed")
+        if "passed" in supplier_quality_gate
+        else supplier_quality_gate.get("field_quality_passed")
+    )
+    supplier_quote_status = (
+        "数量通过；完整结论受其他门禁阻断"
+        if blocked_delivery and supplier_quote_gate.get("passed")
+        else "通过"
+        if supplier_quote_gate.get("passed")
+        else "需补采"
+    )
+    supplier_title_status = (
+        "字段通过；测算门禁未完全通过"
+        if supplier_quality_gate.get("field_quality_passed") and not supplier_quality_passed
+        else "字段通过；完整结论受其他门禁阻断"
+        if blocked_delivery and supplier_quality_gate.get("field_quality_passed")
+        else "通过"
+        if supplier_quality_gate.get("field_quality_passed")
+        else "需复核"
+    )
     gate_rows = [
-        ["有效竞品", num((readiness.get("counts") or {}).get("valid_competitors")), num((readiness.get("competitor_gate") or {}).get("minimum_total")), "通过" if (readiness.get("competitor_gate") or {}).get("passed") else "需补采"],
-        ["细分赛道", num((readiness.get("counts") or {}).get("market_segments")), num((readiness.get("segment_gate") or {}).get("required_segments")), "通过" if (readiness.get("segment_gate") or {}).get("passed") else "需拆分"],
-        ["1688有效报价", num((readiness.get("counts") or {}).get("valid_supplier_quotes")), num((readiness.get("supplier_quote_gate") or {}).get("required")), "通过" if (readiness.get("supplier_quote_gate") or {}).get("passed") else "需补采"],
-        ["1688标题覆盖率", f"{(readiness.get('supplier_quality_gate') or {}).get('title_coverage_pct', 0)}%", "70%", "通过" if (readiness.get("supplier_quality_gate") or {}).get("field_quality_passed") else "需复核"],
+        ["合格竞品", num(counts.get("valid_competitors")), num(competitor_gate.get("minimum_total")), competitor_status],
+        ["细分赛道", num(counts.get("market_segments")), segment_standard, "通过" if segment_gate.get("passed") else "赛道不足"],
+        ["1688有效报价", num(counts.get("valid_supplier_quotes")), num(supplier_quote_gate.get("required")), supplier_quote_status],
+        ["1688标题覆盖率", f"{supplier_quality_gate.get('title_coverage_pct', 0)}%", "70%", supplier_title_status],
     ]
     trust_rows = [
         ["证据强度", readiness_view.get("evidence_strength", "低 / 阻断交付"), "当前只允许输出补采诊断，不输出完整结论"],
         ["数据覆盖", sample_coverage(data_pack), "用于定位补采方向，不作为客户决策结论"],
         ["数据缺口", f"{len(readiness.get('blocking_gaps') or [])} 项阻断", "所有缺口必须补齐后重新渲染"],
-        ["置信等级", readiness_view.get("delivery_state", "阻断交付"), "诊断页保留模板槽位，但不伪造结论"],
-        ["建议动作", "补齐门禁后重新渲染", "先完成数据补采，再恢复市场深度、生命周期和需求断层报告"],
+        ["置信等级", readiness_view.get("delivery_state", "阻断交付"), "标准报告结构已保留，页面承诺等待核心门槛达标"],
+        ["建议动作", "补齐门禁后重新分析", "先完成数据补采，再恢复市场深度、生命周期和需求断层报告"],
     ]
+    gap_lines = [
+        f"- {row[0]}：{row[1]}；下一步：{row[2]}"
+        for row in blocking_rows
+    ]
+    warning_lines = [
+        f"- {row[0]}：{row[1]}；下一步：{row[2]}"
+        for row in warning_rows
+    ] or ["- 未发现额外阻断风险。"]
+    gate_lines = [
+        f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |"
+        for row in gate_rows
+    ]
+    (report_dir / "output" / "report.md").write_text(
+        "# 市场调研审计稿 · 补采诊断\n\n"
+        "## 交付状态\n"
+        "- delivery_state: 阻断交付\n"
+        "- full_report_pass: false\n"
+        "- diagnostic_delivery_pass: true\n"
+        "- readiness_acceptance_ready: false\n"
+        "- final_decision: No-Go\n"
+        "- note: 当前只允许输出中文补采诊断和标准报告结构，不输出完整客户结论。\n\n"
+        "## 数据门禁\n"
+        "| 检查项 | 当前值 | 通过标准 | 状态 |\n"
+        "| --- | ---: | --- | --- |\n"
+        + "\n".join(gate_lines)
+        + "\n\n"
+        "## 当前阻断项\n"
+        + "\n".join(gap_lines)
+        + "\n\n"
+        "## 风险提醒\n"
+        + "\n".join(warning_lines)
+        + "\n\n"
+        "## Go / Watch / No-Go\n"
+        "- final_decision: No-Go\n"
+        "- rationale: 核心数据门禁未通过，三份子报告进入诊断交付；补齐阻断项并重新归一化前，不生成完整市场、生命周期或需求机会结论。\n"
+        "- next_step: 按阻断项补采 Amazon 竞品、关键词、渠道或供应链数据后重新渲染并重新运行验收。\n",
+        encoding="utf-8",
+    )
     def diagnostic_links_html(link_prefix: str = "") -> str:
         return (
         "<div class=\"report-grid diagnostic-report-grid\">"
-        f"<article class=\"report-card\"><a href=\"{link_prefix}market-depth-report.html\"><span>市场深度调研报告</span><strong>查看诊断</strong></a><p>当前只展示市场数据门禁、阻断原因和补采动作。</p></article>"
+        f"<article class=\"report-card\"><a href=\"{link_prefix}market-depth-report.html\"><span>市场深度调研报告</span><strong>查看诊断</strong></a><p>竞品、关键词、VOC 和供应链门禁未通过；本页列出缺口、影响和补采路径。</p></article>"
         f"<article class=\"report-card\"><a href=\"{link_prefix}lifecycle-strategy-report.html\"><span>产品全生命周期拓品战略报告</span><strong>查看诊断</strong></a><p>生命周期策略在数据补齐前不输出 SKU 结论。</p></article>"
-        f"<article class=\"report-card\"><a href=\"{link_prefix}demand-gap-report.html\"><span>用户心智断层与需求机会报告</span><strong>查看诊断</strong></a><p>需求机会在评论和关键词门禁通过后恢复。</p></article>"
+        f"<article class=\"report-card\"><a href=\"{link_prefix}demand-gap-report.html\"><span>用户心智断层与需求机会报告</span><strong>查看诊断</strong></a><p>需求机会在评论和关键词补采完成后恢复。</p></article>"
         "</div>"
         )
 
@@ -3267,32 +3663,396 @@ def write_readiness_diagnostic_bundle(report_dir: Path, data_pack: dict[str, Any
             return html_doc.replace("</body>", panel + "</body>", 1)
         return html_doc + panel
 
-    market_size = load_json(report_dir / "analysis" / "market_size.json", {})
-    voc = load_json(report_dir / "analysis" / "voc.json", {})
-    opportunity = load_json(report_dir / "analysis" / "opportunity.json", {})
-    profitability = load_json(report_dir / "analysis" / "profitability.json", {})
-    demand_gap = load_json(report_dir / "analysis" / "demand_gap.json", {})
-    docs, compat_html = build_report_documents(
-        data_pack,
-        analysis_plan,
-        market_size,
-        voc,
-        opportunity,
-        profitability,
-        lifecycle,
-        demand_gap,
-        delivery,
-        decision,
-        renderer_callbacks(),
-    )
-    safe_docs = {key: redact_customer_html(inject_diagnostic_panel(html_doc), data_pack) for key, html_doc in docs.items()}
+    def diagnostic_index_doc(link_prefix: str = "") -> str:
+        return (
+            "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>三合一市场研究报告 · 补采诊断</title>"
+            "<link rel=\"stylesheet\" href=\"assets/report.css\"></head>"
+            "<body class=\"template-index diagnostic-page\">"
+            "<nav class=\"site-nav\" aria-label=\"报告导航\"><button class=\"site-nav-toggle\" type=\"button\">目录</button>"
+            "<a class=\"site-nav-brand\" href=\"report.html\">三合一报告</a><div class=\"site-nav-links\">"
+            f"<a class=\"nav-link\" href=\"{link_prefix}market-depth-report.html\">市场深度</a>"
+            f"<a class=\"nav-link\" href=\"{link_prefix}lifecycle-strategy-report.html\">生命周期拓品</a>"
+            f"<a class=\"nav-link\" href=\"{link_prefix}demand-gap-report.html\">需求断层</a>"
+            "</div></nav><main class=\"container\">"
+            + diagnostic_panel(link_prefix)
+            + "</main><script src=\"assets/echarts.min.js\" defer></script><script src=\"assets/report.js\" defer></script></body></html>"
+        )
+
+    def diagnostic_child_doc(key: str) -> str:
+        specs = {
+            "market_depth": {
+                "body_class": "template-market",
+                "title": "市场深度调研报告 · 补采诊断",
+                "desc": "市场规模、竞品、VOC、COSMO 和供应链模块保持标准结构；本页输出门禁原因、业务影响和补采路径。",
+                "slots": [
+                    "大盘仪表盘",
+                    "COSMO + Alexa 标签识别",
+                    "Top 竞品全景扫描",
+                    "VOC 体验深潜",
+                    "标杆竞品拆解",
+                    "新品狙击企划",
+                    "建议定价策略",
+                    "视觉与包装指导",
+                    "TikTok 趋势信号",
+                    "AI生图 Prompt",
+                    "供应链成本估算",
+                ],
+                "anchors": [
+                    "market-dashboard",
+                    "cosmo-alexa-tags",
+                    "competitor-scan",
+                    "voc-deep-dive",
+                    "benchmark-sniper",
+                    "product-definition",
+                    "pricing",
+                    "visual-direction",
+                    "tiktok-trends",
+                    "prompt",
+                    "supply-chain",
+                ],
+            },
+            "lifecycle_strategy": {
+                "body_class": "template-lifecycle",
+                "title": "产品全生命周期拓品战略报告 · 补采诊断",
+                "desc": "生命周期 SKU 候选、四维生态、Bundle 和路线图保持标准结构；数据补齐前不输出 SKU 结论。",
+                "slots": [
+                    "战略仪表盘",
+                    "用户画像",
+                    "生命周期旅程",
+                    "四维拓品生态",
+                    "拓品方案池",
+                    "Bundle 策略",
+                    "30/60/90 天路线图",
+                    "风险矩阵",
+                    "市场验证摘要",
+                ],
+                "anchors": [
+                    "strategy-dashboard",
+                    "lifecycle-personas",
+                    "lifecycle-journey",
+                    "lifecycle-ecosystem",
+                    "sku-strategy-pool",
+                    "bundle-strategy",
+                    "roadmap-90",
+                    "risk-matrix",
+                    "market-validation-summary",
+                ],
+            },
+            "demand_gap": {
+                "body_class": "template-demand",
+                "title": "用户心智断层与需求机会报告 · 补采诊断",
+                "desc": "目标锚点、决策看板、需求主题、KANO/JTBD 和用户原声保持标准结构；证据补齐前不输出需求机会结论。",
+                "slots": [
+                    "目标ASIN锚点",
+                    "决策看板",
+                    "市场痛点全景图（需求主题）",
+                    "满意度鸿沟",
+                    "KANO × JTBD",
+                    "用户原声",
+                    "需求优先级",
+                ],
+                "anchors": [
+                    "target-anchor",
+                    "decision-board",
+                    "appeals-map",
+                    "gap-analysis",
+                    "kano-jtbd",
+                    "voice-theater",
+                    "priority-table",
+                ],
+            },
+        }
+        spec = specs[key]
+        slot_cards = []
+        slot_sections = []
+        def slot_anchor(value: str, idx: int) -> str:
+            anchors = spec.get("anchors") or []
+            if idx - 1 < len(anchors):
+                anchor = str(anchors[idx - 1]).strip()
+                if anchor:
+                    return anchor
+            base = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", value.casefold()).strip("-")
+            return f"diagnostic-slot-{idx:02d}-{base or 'section'}"
+
+        def component_skeleton(slot: str, metric: str, module_note: str) -> str:
+            lower = slot.casefold()
+            if key == "market_depth":
+                if "cosmo" in lower:
+                    return render_cosmo_diagnostic_skeleton(metric)
+                if "竞品全景" in slot or "标杆" in slot:
+                    products_with_images = [
+                        product
+                        for product in sorted(
+                            effective_products(data_pack),
+                            key=lambda item: as_float(product_sales(item), 0),
+                            reverse=True,
+                        )
+                        if product_image_url(product)
+                    ][:8]
+                    if products_with_images:
+                        image_items = "".join(
+                            "<figure class=\"comp-image-item\">"
+                            + product_image_html(product, "comp-image-thumb", "竞品图片")
+                            + f"<figcaption>{esc(customer_product_position(product))}</figcaption>"
+                            + "</figure>"
+                            for product in products_with_images
+                        )
+                        benchmark_cards = "".join(
+                            "<article class=\"benchmark-card comp-deep-card\">"
+                            + product_image_html(product, "comp-deep-image", "参考竞品图片")
+                            + "<div class=\"comp-deep-body\">"
+                            + f"<h3>{esc(customer_product_position(product))}</h3>"
+                            + f"<p>{esc(money(product_price(product)))} · 月销~{esc(num(product_sales(product)))} · {esc(first(product.get('rating'), '-'))}★</p>"
+                            + "<p>当前报告仍处诊断交付；图片和基础指标可用于补采定位，不输出完整狙击结论。</p>"
+                            + "</div></article>"
+                            for product in products_with_images[:3]
+                        )
+                        return (
+                            "<div class=\"card comp-image-strip-card\"><div class=\"card-title\">竞品图片全景</div>"
+                            + f"<div class=\"comp-image-strip\">{image_items}</div>"
+                            + "</div><div class=\"deep-dive-grid\">"
+                            + benchmark_cards
+                            + "</div>"
+                        )
+                    return (
+                        "<div class=\"card comp-image-diagnostic-card\"><div class=\"card-title\">竞品图片全景</div>"
+                        "<div class=\"thumb-wall\"><div class=\"comp-image-placeholder\">竞品主图需补采</div><div class=\"comp-image-placeholder\">补齐后展示 Amazon 主图</div><div class=\"comp-image-placeholder\">图片异常时保留诊断说明</div></div></div>"
+                        "<div class=\"deep-dive-grid\"><article class=\"benchmark-card comp-deep-card\"><h3>标杆竞品诊断卡</h3><p>ASIN、价格、评分、评论和图片数据不足；证据达标后输出真实拆解。</p></article></div>"
+                    )
+                if "voc" in lower:
+                    return (
+                        "<div class=\"market-voc-sentiment-columns\"><section class=\"market-voc-column pain\"><h3>负面痛点</h3><article class=\"market-voc-card pain diagnostic\"><b>负面01</b><h4>差评原声需补采</h4><p>补采后展示英文原文短摘、中文洞察、未满足点和行动建议。</p></article></section>"
+                        "<section class=\"market-voc-column joy\"><h3>正面爽点</h3><article class=\"market-voc-card joy diagnostic\"><b>正面01</b><h4>好评原声需补采</h4><p>补采后展示英文原文短摘、中文洞察、可放大卖点和行动建议。</p></article></section></div>"
+                    )
+                if "供应链" in slot:
+                    return (
+                        "<div class=\"supply-grid\"><article class=\"card\"><span>有效报价</span><b>" + esc(metric) + "</b><p>数量、字段和相关性单独判断。</p></article>"
+                        "<article class=\"card\"><span>成本分位数</span><b>诊断</b><p>报价质量达标后恢复 P25 / P50 / P75。</p></article><article class=\"card\"><span>毛利率测算</span><b>竞品门禁未通过</b><p>暂不输出毛利率。</p></article></div>"
+                    )
+                if "tiktok" in lower:
+                    return (
+                        "<div class=\"tiktok-diagnostic-card card\"><div class=\"card-title\">TikTok 趋势信号</div>"
+                        "<div class=\"kpi-grid\"><article class=\"kpi-card\"><div class=\"kpi-label\">商品信号</div><div class=\"kpi-value\">诊断</div><div class=\"kpi-sub\">补采后展示 TikTok 商品、视频和达人链路。</div></article>"
+                        "<article class=\"kpi-card\"><div class=\"kpi-label\">内容机会</div><div class=\"kpi-value\">渠道信号未采集</div><div class=\"kpi-sub\">当前不把 TikTok 缺口写成渠道趋势结论。</div></article></div>"
+                        "<table class=\"evidence-table insight-table\"><thead><tr><th>模块</th><th>当前状态</th><th>恢复条件</th></tr></thead><tbody><tr><td>TikTok 商品/视频</td><td>诊断</td><td>补采商品、视频、达人和播放互动字段</td></tr></tbody></table></div>"
+                    )
+                if "prompt" in lower:
+                    return (
+                        "<div class=\"prompt-grid\"><article class=\"prompt-card\"><span>图片方案 01</span><h3>低价验证款</h3><div class=\"prompt-copy\">数据达标后，按真实产品属性、目标场景、镜头构图、画面主体、光线材质和禁止元素生成可直接投喂的图片 Prompt。</div><p>诊断态不生成不可执行的伪 Prompt。</p></article>"
+                        "<article class=\"prompt-card\"><span>图片方案 02</span><h3>主力差异化款</h3><div class=\"prompt-copy\">补齐竞品、VOC 和供应链证据后，恢复差异化主图、场景图和卖点图 Prompt，并明确画面视角与产品承诺边界。</div><p>补齐证据后恢复。</p></article><article class=\"prompt-card\"><span>图片方案 03</span><h3>高溢价套装款</h3><div class=\"prompt-copy\">补齐 Bundle、包装、配件和价格带证据后，恢复高溢价套装图 Prompt，并约束套装内容、道具层级和质感表达。</div><p>补齐证据后恢复。</p></article></div>"
+                    )
+                return "<div class=\"kpi-grid diagnostic-component-skeleton\"><article class=\"kpi-card\"><div class=\"kpi-label\">当前结论</div><div class=\"kpi-value\">诊断</div><div class=\"kpi-sub\">" + esc(module_note) + "</div></article></div>"
+            if key == "lifecycle_strategy":
+                if "四维" in slot:
+                    return "<div class=\"lifecycle-ecosystem chart-grid\"><div class=\"chart-container\"><div id=\"lifecycleSunburst\" class=\"chart-body chart-h-360\" data-chart-disabled=\"true\">四维生态图需补采</div></div><div class=\"sku-priority chart-container\"><h3>SKU 优先级</h3><div id=\"priorityChart\" class=\"chart-body chart-h-360 diagnostic-chart-body\" data-chart-disabled=\"true\"><div class=\"diagnostic-chart-item\"><span>SKU 优先级</span><b>诊断</b><em>补齐门禁后输出候选池评分</em></div></div></div></div>"
+                if "拓品方案" in slot:
+                    return "<div class=\"sku-priority\"><h3>Top SKU 优先级</h3><div class=\"sku-strategy-grid\"><article class=\"sku-strategy-card\"><div class=\"sku-strategy-head\"><span>主品验证</span><b>诊断</b></div><h3>SKU 候选需验证</h3><p>补齐后展示参考 ASIN、供应链锚点和评分。</p></article></div><table class=\"sku-pool-table evidence-table\"><tbody><tr><td>完整候选池</td><td>证据达标后分页展示</td></tr></tbody></table></div>"
+                if "bundle" in lower:
+                    return "<div class=\"bundle-grid\"><article class=\"bundle-card\"><h3>Bundle 策略需验证</h3><p>补齐后展示主品、配件、包装和价格带。</p></article></div>"
+                return "<div class=\"lifecycle-kpi-secondary kpi-grid\"><article class=\"kpi-card\"><div class=\"kpi-label\">生命周期模块</div><div class=\"kpi-value\">诊断</div><div class=\"kpi-sub\">" + esc(module_note) + "</div></article></div>"
+            if key == "demand_gap":
+                if "用户原声" in slot:
+                    return "<div class=\"voice-grid\"><article class=\"voice-card pain\"><h3>负面原声需补采</h3><p>英文原文短摘、中文洞察、未满足点、可执行动作。</p></article><article class=\"voice-card joy\"><h3>正面原声需补采</h3><p>英文原文短摘、中文洞察、可放大卖点、证据强度。</p></article></div>"
+                if "kano" in lower:
+                    return "<div class=\"kano-jtbd-grid\"><article class=\"demand-evidence-card diagnostic\"><h3>KANO × JTBD 需验证</h3><p>补齐后输出需求类型、任务场景和行动优先级。</p></article></div>"
+                if "优先级" in slot:
+                    return "<div class=\"demand-priority-grid\"><article class=\"demand-evidence-card diagnostic\"><h3>需求优先级需验证</h3><p>补齐后展示强度、竞争缺口和落地动作。</p></article></div>"
+                return "<div class=\"demand-evidence-grid\"><article class=\"demand-evidence-card diagnostic\"><h3>需求证据</h3><p>" + esc(module_note) + "</p></article></div>"
+            return ""
+
+        counts = readiness.get("counts") or {}
+
+        def count_value(*names: str, fallback: int = 0) -> int:
+            for name in names:
+                value = counts.get(name)
+                if value not in (None, ""):
+                    return int(as_float(value, 0))
+            return fallback
+
+        competitor_count = count_value("valid_competitors", fallback=len(effective_products(data_pack)))
+        keyword_count = count_value("keywords", "effective_keywords", fallback=len(effective_keywords(data_pack)))
+        review_count = count_value("reviews", "effective_reviews", fallback=len(effective_reviews(data_pack)))
+        supplier_count = count_value(
+            "valid_supplier_quotes",
+            "finished_supplier_quotes",
+            fallback=int(as_float((readiness.get("supplier_quote_gate") or {}).get("actual"), len(effective_suppliers(data_pack)))),
+        )
+        tiktok_count = count_value(
+            "tiktok_products",
+            "tiktok_videos",
+            "tiktok_signals",
+            fallback=len(data_pack.get("tiktok_products") or data_pack.get("tiktok_videos") or data_pack.get("tiktok_signals") or []),
+        )
+        sku_count = count_value(
+            "sku_candidates",
+            "sku_candidate_pool",
+            "recommended_skus",
+            fallback=len(data_pack.get("sku_candidate_pool") or data_pack.get("recommended_skus") or []),
+        )
+        gate_count = len(readiness.get("blocking_gaps") or [])
+
+        def diagnostic_slot_metric(slot: str) -> str:
+            lower = slot.casefold()
+            if "供应链" in slot or "1688" in lower or "毛利" in slot:
+                return f"有效报价 {num(supplier_count)}"
+            if "tiktok" in lower:
+                return f"TikTok信号 {num(tiktok_count)}"
+            if "voc" in lower or "用户原声" in slot or "痛点" in slot or "满意" in slot or "kano" in lower or "jtbd" in lower or "需求" in slot:
+                return f"评论 {num(review_count)}"
+            if "cosmo" in lower or "标签" in slot or "关键词" in slot or "ai生图" in lower or "prompt" in lower:
+                return f"关键词 {num(keyword_count)}"
+            if key == "lifecycle_strategy" or "sku" in lower or "四维" in slot or "拓品" in slot or "bundle" in lower or "路线图" in slot:
+                return f"SKU候选 {num(sku_count)}"
+            if "竞品" in slot or "标杆" in slot or "定价" in slot or "大盘" in slot or "视觉" in slot or "包装" in slot or "锚点" in slot or "新品" in slot:
+                return f"合格竞品 {num(competitor_count)}"
+            return f"阻断项 {num(gate_count)}"
+
+        def diagnostic_slot_summary(slot: str) -> str:
+            lower = slot.casefold()
+            if "供应链" in slot or "1688" in lower:
+                return "供应链证据未达测算标准；报价质量、字段覆盖和继续采集方向已前置。"
+            if "tiktok" in lower:
+                return "TikTok 证据未形成趋势链路；渠道补采范围已前置。"
+            if "用户原声" in slot:
+                return "用户原声未达引用标准；保留正负面分栏和下一轮评论采集方向。"
+            if "满意" in slot:
+                return "满意度差异证据未达稳定判断标准；评论覆盖和缺口验证方向已前置。"
+            if "voc" in lower or "需求" in slot or "痛点" in slot or "kano" in lower or "jtbd" in lower:
+                return "评论证据未达稳定判断标准；保留正负面证据结构和下一轮采集方向。"
+            if "cosmo" in lower or "标签" in slot:
+                return "标签证据仍需补齐；保留 15 类关系框架和可审计覆盖。"
+            if "prompt" in lower or "ai生图" in lower:
+                return "图片 Prompt 证据未达直接投喂标准；保留三档图片策略和补证方向。"
+            if "视觉" in slot or "包装" in slot:
+                return "视觉与包装证据未达可执行标准；参考维度和素材补采方向已前置。"
+            if "新品" in slot:
+                return "新品狙击证据未达立项标准；聚焦竞品覆盖、卖点缺口和补采方向。"
+            if "目标ASIN" in slot or "锚点" in slot:
+                return "目标锚点证据未达稳定绑定标准；有效竞品覆盖和锚点补采方向已前置。"
+            if "决策看板" in slot:
+                return "决策看板仍受核心门禁限制；阻断项、影响和下一步动作已前置。"
+            if key == "lifecycle_strategy" or "sku" in lower or "四维" in slot or "拓品" in slot or "bundle" in lower:
+                return "SKU 候选池未达决策标准；候选生成和筛选方向已前置。"
+            if "竞品" in slot or "标杆" in slot or "定价" in slot or "大盘" in slot:
+                return "竞品证据未达完整分析标准；可复核竞品覆盖和补采动作已前置。"
+            return "关键证据未达结论门槛；保留门禁状态、影响范围和补采动作。"
+
+        def diagnostic_recovery_action(slot: str) -> str:
+            lower = slot.casefold()
+            if "供应链" in slot or "1688" in lower:
+                return "补齐 1688 标题、供应商、价格、链接和同赛道相关性后恢复毛利率测算。"
+            if "tiktok" in lower:
+                return "补齐 TikTok 商品、视频、达人和互动字段后恢复趋势信号。"
+            if "voc" in lower or "用户原声" in slot or "需求" in slot or "痛点" in slot or "满意" in slot or "kano" in lower or "jtbd" in lower:
+                return "补齐同类评论原声、星级、主题和情绪后恢复需求判断。"
+            if "cosmo" in lower or "标签" in slot:
+                return "补齐 Listing、关键词、评论和 QA 证据后恢复高置信标签动作。"
+            if "prompt" in lower or "ai生图" in lower:
+                return "补齐产品属性、目标场景、视觉卖点和页面承诺后恢复三档图片 Prompt。"
+            if "视觉" in slot or "包装" in slot:
+                return "补齐竞品主图、包装图、场景图和可验证卖点后恢复视觉建议。"
+            if "新品" in slot:
+                return "补齐标杆竞品、价格带、VOC 缺口和供应链锚点后恢复新品狙击方案。"
+            if "目标ASIN" in slot or "锚点" in slot:
+                return "补齐目标 ASIN、同类竞品、价格、评分和评论证据后恢复需求锚点。"
+            if "决策看板" in slot:
+                return "解决核心阻断项后恢复 Go / Watch / No-Go 判断和下一步动作。"
+            if key == "lifecycle_strategy" or "sku" in lower or "四维" in slot or "拓品" in slot or "bundle" in lower:
+                return "补齐有效竞品、VOC 和供应链锚点后恢复 SKU 候选评分。"
+            if "竞品" in slot or "标杆" in slot or "定价" in slot or "大盘" in slot:
+                return "补齐有效竞品池、主赛道覆盖和价格销量证据后恢复市场判断。"
+            return "补齐本节所需证据后恢复图表、表格、证据抽屉和业务判断。"
+
+        slot_rows = [
+            [slot, "未达决策门槛", diagnostic_recovery_action(slot)]
+            for slot in spec["slots"]
+        ]
+
+        for idx, slot in enumerate(spec["slots"], 1):
+            blocked = bool(readiness.get("blocking_gaps"))
+            card_tone = "blocked" if blocked else "watch"
+            metric = diagnostic_slot_metric(slot)
+            summary = diagnostic_slot_summary(slot)
+            recovery_action = diagnostic_recovery_action(slot)
+            slot_cards.append(
+                "<article class=\"diagnostic-slot-card "
+                + esc(card_tone)
+                + "\">"
+                + f"<div class=\"diagnostic-slot-head\"><span>{idx:02d}</span><strong><a href=\"#{esc(slot_anchor(slot, idx))}\">{esc(slot)}</a></strong></div>"
+                + f"<div class=\"diagnostic-slot-status\">未达决策门槛</div>"
+                + f"<div class=\"diagnostic-slot-metric\">{esc(metric)}</div>"
+                + f"<p>{esc(summary)}</p>"
+                + "<div class=\"diagnostic-slot-bar\"><span style=\"--w:45%\"></span></div>"
+                + "</article>"
+            )
+            slot_sections.append(
+                f"<section id=\"{esc(slot_anchor(slot, idx))}\" class=\"section diagnostic-section diagnostic-slot-section\">"
+                + f"<div class=\"section-header\"><span class=\"section-number\">{idx + 2:02d}</span><div>"
+                + f"<h2 class=\"section-title\">{esc(slot)}</h2>"
+                + f"<p class=\"section-desc\">诊断态 · {esc(summary)}</p>"
+                + "</div></div>"
+                + "<div class=\"diagnostic-slot-detail\">"
+                + "<article class=\"diagnostic-slot-card blocked\">"
+                + f"<div class=\"diagnostic-slot-head\"><span>{idx:02d}</span><strong>{esc(slot)}</strong></div>"
+                + "<div class=\"diagnostic-slot-status\">未达决策门槛</div>"
+                + f"<div class=\"diagnostic-slot-metric\">{esc(metric)}</div>"
+                + f"<p>{esc(recovery_action)}</p>"
+                + "<div class=\"diagnostic-slot-bar\"><span style=\"--w:45%\"></span></div>"
+                + "</article>"
+                + component_skeleton(slot, metric, summary)
+                + table(
+                    ["当前状态", "恢复条件", "补采动作"],
+                    [["诊断", "本节证据达标", recovery_action]],
+                    "evidence-table insight-table",
+                )
+                + "</div></section>"
+            )
+        html = (
+            "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            f"<title>{esc(spec['title'])}</title><link rel=\"stylesheet\" href=\"assets/report.css\"></head>"
+            f"<body class=\"{esc(spec['body_class'])} diagnostic-page\">"
+            "<nav class=\"site-nav\" aria-label=\"报告导航\"><button class=\"site-nav-toggle\" type=\"button\">目录</button>"
+            "<a class=\"site-nav-brand\" href=\"report.html\">三合一报告</a><div class=\"site-nav-links\">"
+            "<a class=\"nav-link\" href=\"market-depth-report.html\">市场深度</a><a class=\"nav-link\" href=\"lifecycle-strategy-report.html\">生命周期拓品</a><a class=\"nav-link\" href=\"demand-gap-report.html\">需求断层</a>"
+            "</div></nav><main class=\"container\">"
+            "<section class=\"section diagnostic-section\"><div class=\"section-header\"><span class=\"section-number\">00</span><div>"
+            f"<h1 class=\"section-title\">{esc(spec['title'])}</h1><p class=\"section-desc\">{esc(spec['desc'])}</p>"
+            "</div></div>"
+            "<div class=\"insight-box\"><strong>当前判断：</strong>本报告处于补采诊断状态。标准报告结构保留，但不输出完整客户结论。</div>"
+            "<div class=\"filter-bar diagnostic-filter-bar\"><button class=\"filter-btn active\" type=\"button\" data-filter=\"all\" aria-pressed=\"true\">全部门禁</button><button class=\"filter-btn\" type=\"button\" data-filter=\"blocked\" aria-pressed=\"false\">阻断项</button></div>"
+            "<div data-tabs class=\"diagnostic-tabs\"><button class=\"tab-button\" type=\"button\" data-tab-target=\"gate\" aria-selected=\"true\">门禁</button><button class=\"tab-button\" type=\"button\" data-tab-target=\"next\">补采</button><div data-tab-panel=\"gate\">当前仅展示可审计门禁状态。</div><div data-tab-panel=\"next\" hidden>补采完成后重新渲染完整模板。</div></div>"
+            "<div class=\"chart-container diagnostic-chart\"><div class=\"mini-chart\"><div class=\"bar-row\"><span>完整度</span><div class=\"bar\"><span style=\"--w:45%\"></span></div><b>诊断</b></div></div></div>"
+            + table(["检查项", "当前值", "业务含义"], trust_rows, "evidence-table insight-table")
+            + table(["门禁项", "当前值", "通过标准", "状态"], gate_rows, "evidence-table insight-table")
+            + "</section><section class=\"section diagnostic-section\"><div class=\"section-header\"><span class=\"section-number\">01</span><div><h2 class=\"section-title\">当前阻断项</h2></div></div>"
+            + table(["模块", "原因", "下一步动作"], blocking_rows, "evidence-table insight-table")
+            + "<details class=\"evidence-drawer\"><summary>门禁诊断记录</summary><div class=\"drawer-body\">阻断项来自主控数据门禁诊断；补齐后重新运行标准模板渲染。</div></details>"
+            + "</section><section class=\"section diagnostic-section\"><div class=\"section-header\"><span class=\"section-number\">02</span><div><h2 class=\"section-title\">标准报告结构</h2><p class=\"section-desc\">章节不删除；数据达标前只显示诊断和补采动作。</p></div></div>"
+            + "<div class=\"diagnostic-slot-grid\">"
+            + "".join(slot_cards)
+            + "</div>"
+            + table(["报告模块", "当前状态", "恢复条件"], slot_rows, "evidence-table insight-table")
+            + "</section>"
+            + "".join(slot_sections)
+            + "</main><script src=\"assets/echarts.min.js\" defer></script><script src=\"assets/report.js\" defer></script></body></html>"
+        )
+        return html
+
+    safe_docs = {
+        "index": redact_customer_html(diagnostic_index_doc(), data_pack),
+    }
+    for child_key in ("market_depth", "lifecycle_strategy", "demand_gap"):
+        safe_docs[child_key] = redact_customer_html(diagnostic_child_doc(child_key), data_pack)
     for key in HTML_REPORTS:
         path = report_dir / HTML_REPORTS[key]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(safe_docs[key], encoding="utf-8")
     compat_path = report_dir / COMPAT_INDEX_REPORT
     compat_path.parent.mkdir(parents=True, exist_ok=True)
-    compat_path.write_text(redact_customer_html(inject_diagnostic_panel(compat_html, "html_reports/"), data_pack), encoding="utf-8")
+    compat_path.write_text(redact_customer_html(diagnostic_index_doc("html_reports/"), data_pack), encoding="utf-8")
     return report_dir / HTML_REPORTS["index"]
 
 
@@ -3354,30 +4114,55 @@ def confidence_level(data_pack: dict[str, Any], analysis_plan: dict[str, Any] | 
 
 
 def sample_coverage(data_pack: dict[str, Any]) -> str:
-    keywords = len(effective_keywords(data_pack))
-    products = len(effective_products(data_pack))
-    reviews = len(customer_visible_reviews(data_pack))
-    suppliers = len(effective_suppliers(data_pack))
-    return f"关键词 {keywords}；竞品 {products}；评论 {reviews}；供应记录 {suppliers}"
+    return "；".join(f"{label} {num(value)}" for label, value in sample_coverage_items(data_pack))
 
 
 def sample_coverage_tags(data_pack: dict[str, Any]) -> str:
-    items = [
-        (len(effective_keywords(data_pack)), "关键词"),
-        (len(effective_products(data_pack)), "竞品"),
-        (len(customer_visible_reviews(data_pack)), "评论"),
-        (len(effective_suppliers(data_pack)), "供应记录"),
-    ]
+    items = [(value, label) for label, value in sample_coverage_items(data_pack)]
     tags = "".join(f"<span class=\"metric-tag\"><b>{esc(value)}</b><span>{esc(label)}</span></span>" for value, label in items)
     return f"<div class=\"metric-tags\">{tags}</div>"
+
+
+def readiness_count(data_pack: dict[str, Any], key: str, fallback: int) -> int:
+    readiness = current_readiness_view(data_pack)
+    counts = readiness.get("counts") if isinstance(readiness, dict) else {}
+    value = counts.get(key) if isinstance(counts, dict) else None
+    return int(value) if isinstance(value, int | float) and value >= 0 else fallback
+
+
+def sample_coverage_items(data_pack: dict[str, Any]) -> list[tuple[str, int]]:
+    readiness = current_readiness_view(data_pack)
+    counts = readiness.get("counts") if isinstance(readiness, dict) else {}
+    has_valid_competitor_count = isinstance(counts, dict) and counts.get("valid_competitors") is not None
+    keyword_count = readiness_count(data_pack, "keywords", len(effective_keywords(data_pack)))
+    relevant_product_count = len(effective_products(data_pack))
+    valid_competitor_count = readiness_count(data_pack, "valid_competitors", relevant_product_count)
+    review_count = readiness_count(data_pack, "reviews", len(customer_visible_reviews(data_pack)))
+    supplier_count = readiness_count(data_pack, "suppliers", len(effective_suppliers(data_pack)))
+    items: list[tuple[str, int]] = [("关键词", keyword_count)]
+    if has_valid_competitor_count:
+        items.append(("合格竞品", valid_competitor_count))
+    if relevant_product_count and (not has_valid_competitor_count or relevant_product_count != valid_competitor_count):
+        items.append(("相关产品覆盖", relevant_product_count))
+    items.extend(
+        [
+            ("评论", review_count),
+            ("供应记录", supplier_count),
+        ]
+    )
+    return items
 
 
 def client_trust_strip(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> str:
     gaps = len(data_pack.get("data_gaps") or []) + len(analysis_plan.get("limitations") or [])
     readiness = current_readiness_view(data_pack, analysis_plan, decision)
-    if readiness.get("blocking_gaps"):
-        gaps = max(gaps, len(readiness.get("blocking_gaps") or []))
-    next_action = "进入实物测试与页面卖点验证" if str(readiness.get("decision")).lower() == "go" else "核实关键缺口后小步验证"
+    complete_delivery = readiness.get("delivery_state") == "完整可交付"
+    if not complete_delivery and readiness.get("blocking_gaps"):
+        gaps = len(readiness.get("blocking_gaps") or [])
+    if not complete_delivery:
+        next_action = "先补齐核心门禁后重新渲染"
+    else:
+        next_action = "进入实物测试与页面卖点验证" if str(readiness.get("decision")).lower() == "go" else "核实关键缺口后小步验证"
     tabs = (
         "<div class=\"trust-tabs\" data-tabs>"
         "<div class=\"tab-list\" role=\"tablist\">"
@@ -3390,10 +4175,10 @@ def client_trust_strip(data_pack: dict[str, Any], analysis_plan: dict[str, Any],
     )
     return (
         "<div class=\"kpi-grid client-trust-grid\">"
-        + kpi_card("证据强度", readiness.get("evidence_strength", confidence_level(data_pack, analysis_plan)), "综合数据质量与方法链", "warning" if readiness.get("supply_blocked") else "success")
+        + kpi_card("证据强度", readiness.get("evidence_strength", confidence_level(data_pack, analysis_plan)), "综合数据质量与方法链", "success" if complete_delivery and not readiness.get("supply_blocked") else "warning")
         + kpi_card_html("数据覆盖", sample_coverage_tags(data_pack), "用于方向判断，不替代财务尽调", "")
         + kpi_card("数据缺口", f"{gaps} 项", "已纳入风险判断", "warning")
-        + kpi_card("建议动作", next_action, "客户版执行摘要", "success")
+        + kpi_card("建议动作", next_action, "客户版执行摘要", "success" if complete_delivery else "warning")
         + "</div>"
         + tabs
     )
@@ -3429,14 +4214,20 @@ def conclusion_block(items: list[tuple[str, str]], title: str = "Final Recommend
 
 def render_client_data_coverage(data_pack: dict[str, Any], analysis_plan: dict[str, Any], decision: str) -> str:
     readiness = current_readiness_view(data_pack, analysis_plan, decision)
-    coverage_message = "当前数据足以支持 Go / Watch / No-Go 方向判断。"
+    coverage_message = "当前数据已达到完整报告门槛，可支撑本次方向判断和下一步验证节奏。"
     action = f"按 {readiness.get('decision', decision)} 节奏推进验证"
+    if readiness.get("delivery_state") == "阻断交付":
+        coverage_message = "核心门禁未通过，当前只允许展示补采诊断和可审计缺口，不输出完整客户结论。"
+        action = "先补齐阻断项，再重新运行标准模板渲染"
+    elif readiness.get("delivery_state") == "诊断交付":
+        coverage_message = "局部门禁未通过，当前只能输出可用模块和中文诊断，不输出被阻断模块的确定结论。"
+        action = "先核实诊断项，再恢复完整报告结论"
     if readiness.get("supply_blocked"):
         coverage_message = "市场、VOC 和生命周期候选可读；供应链测算未达门槛，不能输出毛利率或可控结论。"
         action = "先补采严格相关 1688 成品报价，再恢复成本测算"
     rows = [
         ["市场判断", readiness.get("evidence_strength", confidence_level(data_pack, analysis_plan)), coverage_message, action],
-        ["数据覆盖", "中高", sample_coverage(data_pack), "优先核实最影响决策的缺口"],
+        ["数据覆盖", "中 / 诊断" if readiness.get("delivery_state") != "完整可交付" else "中高", sample_coverage(data_pack), "优先核实最影响决策的缺口"],
         ["数据缺口", "已标注", "缺口不会隐藏在报告正文里，会转成风险和下一步动作。", "进入定向复核或小批量验证"],
     ]
     return insight_table("客户版可信度说明", rows)
@@ -3487,6 +4278,62 @@ def render_market_conclusion(data_pack: dict[str, Any], analysis_plan: dict[str,
     )
 
 
+def render_seasonality_sales(analysis_plan: dict[str, Any]) -> str:
+    payload = analysis_plan.get("seasonality_sales") if isinstance(analysis_plan, dict) else {}
+    if not isinstance(payload, dict) or not payload:
+        return ""
+    current = payload.get("current_monthly_sales_estimate") or {}
+    assessment = payload.get("seasonality_assessment") or {}
+    trend_status = payload.get("trend_data_status") or {}
+    segment_rows = []
+    for item in (payload.get("segment_monthly_sales") or [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        segment_rows.append(
+            [
+                item.get("segment") or "-",
+                num(item.get("count")),
+                num(item.get("avg_estimated_monthly_sales")),
+                num(item.get("median_estimated_monthly_sales")),
+                num(item.get("sum_estimated_monthly_sales")),
+            ]
+        )
+    top_rows = []
+    for rank, item in enumerate((payload.get("top_products_by_estimated_monthly_sales") or [])[:10], start=1):
+        if not isinstance(item, dict):
+            continue
+        segment_label = item.get("segment") or "电动拔罐器"
+        product_label = first(item.get("title_cn"), item.get("product_title_cn"), f"{segment_label} Top {rank}", default=f"电动拔罐器 Top {rank}")
+        top_rows.append(
+            [
+                truncate(product_label, 42),
+                segment_label,
+                num(item.get("estimated_monthly_sales")),
+            ]
+        )
+    kpis = [
+        kpi_card("有效竞品合计月销量", num(current.get("sum_estimated_monthly_sales")), "市场数据当前月销量估算", "success"),
+        kpi_card("平均月销量", num(current.get("avg_estimated_monthly_sales")), "按有效竞品均值", ""),
+        kpi_card("中位月销量", num(current.get("median_estimated_monthly_sales")), "抗极值参考", ""),
+        kpi_card("趋势序列状态", "缺失" if trend_status.get("status") == "unavailable" else "可用", "月度趋势数据状态", "warning" if trend_status.get("status") == "unavailable" else "success"),
+    ]
+    rows = [
+        ["淡旺季结论", assessment.get("evidence_level") or "低", assessment.get("conclusion") or "趋势证据不足", assessment.get("next_data_needed") or "补月度趋势序列后复核"],
+        ["月销量口径", "中", payload.get("sales_metric_policy") or "第三方市场数据估算月销量，不是 Amazon 官方销量。", "用广告测试、库存和 BSR 监控复核"],
+        ["趋势缺口", "已标注", trend_status.get("impact") or "缺少逐月趋势，不能强判具体月份。", "补月度趋势、类目月度趋势或连续监控"],
+    ]
+    return (
+        "<section class=\"section\" id=\"seasonality-sales\"><div class=\"container\">"
+        "<div class=\"section-title\">淡旺季与月均预估销量</div>"
+        "<div class=\"section-desc\">该模块只展示可追溯到当前分析底稿的销量估算和趋势缺口，不把第三方估算写成 Amazon 官方数据。</div>"
+        f"<div class=\"kpi-grid\">{''.join(kpis)}</div>"
+        + insight_table("淡旺季判断与口径", rows)
+        + section_table("赛道月均预估销量", ["赛道", "竞品数", "平均月销量", "中位月销量", "合计月销量"], segment_rows)
+        + section_table("核心竞品月销量 Top", ["产品", "赛道", "估算月销量"], top_rows)
+        + "</div></section>"
+    )
+
+
 def bundle_href(filename: str, link_prefix: str = "") -> str:
     prefix = link_prefix.strip().strip("/")
     return f"{prefix}/{filename}" if prefix else filename
@@ -3494,6 +4341,7 @@ def bundle_href(filename: str, link_prefix: str = "") -> str:
 
 def render_index_cards(report_title: str, decision: str, data_pack: dict[str, Any], link_prefix: str = "") -> str:
     readiness = current_readiness_view(data_pack, None, decision)
+    complete_delivery = readiness.get("delivery_state") == "完整可交付"
     quality_label = readiness.get("quality_label") or customer_quality_summary(data_pack.get("quality") or {})[0]
     quality_sub = readiness.get("quality_sub") or "关键数据覆盖较完整，可进入客户判断"
     quality_tone = readiness.get("quality_tone") or "warning"
@@ -3510,7 +4358,7 @@ def render_index_cards(report_title: str, decision: str, data_pack: dict[str, An
         "<div class=\"kpi-grid\">"
         + kpi_card("核心判断", readiness.get("decision", decision), readiness.get("delivery_state", "Go / Watch / No-Go"), "warning")
         + kpi_card("数据质量", quality_label, quality_sub, quality_tone)
-        + kpi_card("供应链状态", readiness.get("supply_status", "供应链测算门禁通过"), "成本和毛利率结论按门禁动态降级", "warning" if readiness.get("supply_blocked") else "success")
+        + kpi_card("供应链状态", readiness.get("supply_status", "供应链测算达标"), "成本和毛利率结论按完整门禁动态降级", "success" if complete_delivery and not readiness.get("supply_blocked") else "warning")
         + kpi_card("证据记录数", num(len(data_pack.get("sources") or [])), "内部审计链路保留", "")
         + "</div>"
     )
@@ -3575,6 +4423,7 @@ LIFECYCLE_TYPE_KEY_BY_LETTER = {
 }
 LIFECYCLE_LETTER_BY_TYPE_KEY = {value: key for key, value in LIFECYCLE_TYPE_KEY_BY_LETTER.items()}
 LIFECYCLE_TYPE_ORDER = ["core_validation", "scenario_upgrade", "accessory_gap", "maintenance_repurchase"]
+LIFECYCLE_MIN_RECOMMENDED_SEGMENT_PRODUCTS = 10
 
 
 def lifecycle_strategy_type_key(value: Any, default: str = "core_validation") -> str:
@@ -3624,20 +4473,72 @@ def lifecycle_priority(product: dict[str, Any], supplier: dict[str, Any] | None,
     return max(45, min(98, round(58 + sales_score + review_score + rating_score + supplier_score - rank_penalty)))
 
 
+def normalize_lifecycle_priority_scores(candidates: list[dict[str, Any]]) -> None:
+    """Spread lifecycle scores so the chart remains decision-useful."""
+    if not candidates:
+        return
+    for item in candidates:
+        item["_raw_priority"] = as_float(item.get("priority"), 50)
+    candidates.sort(
+        key=lambda item: (
+            as_float(item.get("_raw_priority"), 0),
+            as_float(str(item.get("reference_sales", "")).replace(",", ""), 0),
+            as_float(str(item.get("reference_reviews", "")).replace(",", ""), 0),
+        ),
+        reverse=True,
+    )
+    count = len(candidates)
+    if count == 1:
+        candidates[0]["priority"] = min(96, max(58, round(as_float(candidates[0].get("_raw_priority"), 70))))
+    else:
+        spread = 58 if count >= 20 else 48 if count >= 12 else 28
+        for idx, item in enumerate(candidates):
+            if count >= 15:
+                rank_score = 96 - min(58, idx * 2)
+            else:
+                rank_score = 96 - round(idx * spread / max(1, count - 1))
+            raw = as_float(item.get("_raw_priority"), rank_score)
+            blended = round(rank_score * 0.82 + min(98, max(45, raw)) * 0.18)
+            item["priority"] = max(52, min(96, blended))
+    for item in candidates:
+        item.pop("_raw_priority", None)
+        priority_score = int(as_float(item.get("priority"), 0))
+        item["priority_score"] = priority_score
+        if not item.get("priority_basis"):
+            item["priority_basis"] = {
+                "reference_sales": item.get("reference_sales"),
+                "reference_reviews": item.get("reference_reviews"),
+                "reference_rating": item.get("reference_rating"),
+                "supply_anchor": bool(clean(item.get("supplier_title")) or "1688成品供应验证" in clean(item.get("supply"))),
+                "ranked_score": priority_score,
+            }
+
+
 def supplier_for_segment(suppliers: list[dict[str, Any]], segment: str, data_pack: dict[str, Any], offset: int = 0) -> dict[str, Any] | None:
     if not suppliers:
         return None
-    matched = [
-        supplier
-        for supplier in suppliers
-        if supplier_matches_lifecycle_context(supplier, data_pack, segment)
-    ]
+    cache_key = "_runtime_lifecycle_supplier_segment_cache"
+    cache = data_pack.get(cache_key)
+    if not isinstance(cache, dict):
+        cache = {}
+        data_pack[cache_key] = cache
+    segment_key = normalize_cosmo_term(segment) or "__all__"
+    supplier_ids = tuple(id(supplier) for supplier in suppliers)
+    cached = cache.get(segment_key)
+    if isinstance(cached, dict) and cached.get("supplier_ids") == supplier_ids:
+        pool = cached.get("pool") or suppliers
+        return pool[offset % len(pool)] if pool else None
+
+    matched = [supplier for supplier in suppliers if supplier_matches_lifecycle_context(supplier, data_pack, segment)]
+    matched_ids = {id(supplier) for supplier in matched}
     segment_tokens = tokens(segment)
     for supplier in suppliers:
         supplier_tokens = tokens(supplier_product_text(supplier) or supplier_title_text(supplier))
-        if segment_tokens and segment_tokens & supplier_tokens and supplier not in matched:
+        if segment_tokens and segment_tokens & supplier_tokens and id(supplier) not in matched_ids:
             matched.append(supplier)
+            matched_ids.add(id(supplier))
     pool = matched or suppliers
+    cache[segment_key] = {"supplier_ids": supplier_ids, "pool": pool}
     return pool[offset % len(pool)] if pool else None
 
 
@@ -3665,6 +4566,113 @@ def lifecycle_candidate_type(product: dict[str, Any], idx: int) -> str:
     return "maintenance_repurchase"
 
 
+def lifecycle_name_discriminator(entity: dict[str, Any], fallback: str = "") -> str:
+    brand = clean(first(entity.get("brand"), entity.get("brand_cn"), default=""))
+    if brand and brand not in {"未知品牌", "参考竞品", "供应端候选"}:
+        return truncate(brand, 14)
+    asin = clean(entity.get("asin"))
+    if asin:
+        return asin[-4:].upper()
+    supplier = clean(first(entity.get("supplier_name"), entity.get("store_name"), entity.get("StoreName"), default=""))
+    if supplier:
+        return truncate(supplier, 14)
+    product_id = clean(first(entity.get("product_id"), entity.get("ProductId"), default=""))
+    if product_id:
+        return product_id[-6:]
+    return truncate(fallback, 14)
+
+
+def unique_lifecycle_candidate_name(base_name: str, entity: dict[str, Any], used_names: set[str]) -> str:
+    fallback_name = clean(
+        first(
+            entity.get("title_cn"),
+            entity.get("name_cn"),
+            entity.get("segment_cn"),
+            entity.get("title"),
+            entity.get("name"),
+            default="SKU 候选",
+        )
+    )
+    base_name = clean(base_name) or fallback_name or "SKU 候选"
+    normalized = normalize_cosmo_term(base_name)
+    if not normalized:
+        discriminator = lifecycle_name_discriminator(entity)
+        base_name = f"SKU 候选 · {discriminator}" if discriminator else "SKU 候选"
+        normalized = normalize_cosmo_term(base_name) or f"sku-{len(used_names) + 1}"
+    if normalized not in used_names:
+        used_names.add(normalized)
+        return base_name
+    discriminator = lifecycle_name_discriminator(entity)
+    candidate = f"{base_name} · {discriminator}" if discriminator else base_name
+    normalized_candidate = normalize_cosmo_term(candidate)
+    if not normalized_candidate:
+        normalized_candidate = f"{normalized}-{len(used_names) + 1}"
+    if normalized_candidate not in used_names:
+        used_names.add(normalized_candidate)
+        return candidate
+    counter = 2
+    while counter <= 200:
+        suffix = f"{discriminator}-{counter}" if discriminator else str(counter)
+        candidate = f"{base_name} · {suffix}"
+        normalized_candidate = normalize_cosmo_term(candidate)
+        if not normalized_candidate:
+            normalized_candidate = f"{normalized}-{counter}"
+        if normalized_candidate not in used_names:
+            used_names.add(normalized_candidate)
+            return candidate
+        counter += 1
+    fallback = f"{base_name} · {len(used_names) + 1}"
+    used_names.add(f"sku-{len(used_names) + 1}")
+    return fallback
+
+
+def is_bad_lifecycle_segment(value: Any) -> bool:
+    text = clean(value)
+    if not text:
+        return True
+    lowered = text.casefold()
+    bad_parts = ["未分层", "未知", "用于判断竞品定位", "价格带 · 评分", "竞品记录", "未命名竞品"]
+    return any(part in lowered for part in bad_parts)
+
+
+def infer_lifecycle_segment_from_text(product: dict[str, Any], data_pack: dict[str, Any]) -> str:
+    text = " ".join(clean(product.get(key)) for key in ("title_cn", "title", "category_cn", "category", "seed_keyword")).casefold()
+    rules = [
+        ("热敷红光电动拔罐器", ["red light", "heat", "heated", "红光", "热敷", "加热"]),
+        ("电动拔罐按摩器", ["electric cupping", "cupping massager", "smart cupping", "vacuum cupping", "拔罐", "负压", "刮痧"]),
+        ("淋巴引流负压按摩器", ["lymphatic", "cellulite", "淋巴", "橘皮", "美体"]),
+        ("弹出式地面盲棚", ["hunting blind", "ground blind", "pop up blind", "deer blind", "地面盲棚", "狩猎棚"]),
+        ("宠物饮水机", ["cat water fountain", "pet fountain", "宠物饮水", "猫咪饮水"]),
+        ("智能玩具", ["plush toy", "ai plush", "companion toy", "毛绒", "玩具"]),
+    ]
+    for label, needles in rules:
+        if any(needle in text for needle in needles):
+            return label
+    research_object = data_pack.get("research_object")
+    if isinstance(research_object, dict):
+        research_value = clean(research_object.get("value"))
+    else:
+        research_value = clean(research_object)
+    research_lc = research_value.casefold()
+    for label, needles in rules:
+        if any(needle in research_lc for needle in needles):
+            return label
+    if re.search(r"[\u4e00-\u9fff]", research_value):
+        return truncate(research_value, 24)
+    title_cn = clean(product.get("title_cn"))
+    if title_cn and re.search(r"[\u4e00-\u9fff]", title_cn) and not is_bad_lifecycle_segment(title_cn):
+        return truncate(title_cn, 24)
+    return "目标类目竞品"
+
+
+def lifecycle_customer_segment(product: dict[str, Any], data_pack: dict[str, Any]) -> str:
+    for key in ("customer_segment_cn", "segment_cn", "segment", "category_cn"):
+        value = clean(product.get(key))
+        if value and re.search(r"[\u4e00-\u9fff]", value) and not is_bad_lifecycle_segment(value):
+            return truncate(value, 24)
+    return infer_lifecycle_segment_from_text(product, data_pack)
+
+
 def generated_lifecycle_skus(data_pack: dict[str, Any], fallback_source: str) -> list[dict[str, Any]]:
     lifecycle = build_lifecycle_strategy_analysis(data_pack, {}, fallback_source)
     return lifecycle.get("sku_candidate_pool") or []
@@ -3673,6 +4681,10 @@ def generated_lifecycle_skus(data_pack: dict[str, Any], fallback_source: str) ->
 def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: dict[str, Any], fallback_source: str) -> dict[str, Any]:
     attach_report_label_profile(data_pack, analysis_plan)
     products = sorted(effective_products(data_pack), key=lambda product: as_float(product_sales(product), 0), reverse=True)
+    product_segment_counts = Counter(
+        lifecycle_customer_segment(product, data_pack)
+        for product in products
+    )
     suppliers = [
         supplier
         for supplier in finished_supplier_records(effective_suppliers(data_pack))
@@ -3681,18 +4693,17 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
     type_labels = profile_lifecycle_type_labels(data_pack)
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
+    used_candidate_names: set[str] = set()
     max_candidates = 80
     for idx, product in enumerate(products):
         if len(candidates) >= max_candidates:
             break
-        segment = clean(first(product.get("customer_segment_cn"), product.get("segment_cn"), product.get("segment"), customer_product_position(product), default="核心赛道"))
-        if not segment or segment in {"未知", "未分层"}:
-            segment = customer_product_position(product)
+        segment = lifecycle_customer_segment(product, data_pack)
         sku_type = lifecycle_candidate_type(product, idx)
         suffix = type_labels.get(sku_type) or LIFECYCLE_SUFFIX_BY_TYPE[sku_type]
-        name = f"{segment} {suffix}"
+        name = unique_lifecycle_candidate_name(f"{segment} {suffix}", product, used_candidate_names)
         reference_asin = clean(product.get("asin"))
-        dedupe_key = f"{reference_asin}|{name}"
+        dedupe_key = f"asin|{reference_asin}" if reference_asin else f"product|{normalize_cosmo_term(name)}"
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
@@ -3716,6 +4727,10 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
             pain = "把维护、替换和售后承诺产品化，延长生命周期"
         reference_label = lifecycle_reference_competitor_label(first(product.get("brand"), ""), segment)
         priority = lifecycle_priority(product, supplier, idx)
+        supply_anchor = supplier_hint_from_record(supplier)
+        supply_status = "有供应链锚点" if supplier and supply_anchor else "仅竞品/VOC 候选"
+        segment_count = product_segment_counts.get(segment, 0)
+        segment_status = "可进入推荐" if segment_count >= LIFECYCLE_MIN_RECOMMENDED_SEGMENT_PRODUCTS else "需验证赛道"
         candidates.append(
             {
                 "id": f"SKU-{len(candidates)+1:03d}",
@@ -3727,11 +4742,16 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
                 "ecosystem_path": LIFECYCLE_PATH_BY_TYPE[sku_type],
                 "ecosystem_segment": segment,
                 "price": price,
+                "price_band": price,
                 "supply": supplier_hint_from_record(supplier),
+                "supply_chain_status": supply_status,
+                "supply_chain_anchor": supply_anchor or "仅由有效竞品、评论和关键词生成，需补 1688 成品锚点后再打样。",
                 "phase": "P1" if priority >= 82 else "P2",
                 "priority": priority,
                 "pain": f"对标 {reference_label}：{pain}",
                 "target_segment": segment,
+                "segment_competitor_count": segment_count,
+                "segment_status": segment_status,
                 "reference_competitor": reference_label,
                 "reference_asin": reference_asin,
                 "reference_price": money(base_price),
@@ -3755,8 +4775,8 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
         segment = truncate(title, 16)
         sku_type = "accessory_gap" if supplier_only_count % 2 == 0 else "maintenance_repurchase"
         suffix = type_labels.get(sku_type) or LIFECYCLE_SUFFIX_BY_TYPE[sku_type]
-        name = f"{segment} {suffix}"
-        dedupe_key = f"supplier|{normalize_cosmo_term(name)}"
+        name = unique_lifecycle_candidate_name(f"{segment} {suffix}", supplier, used_candidate_names)
+        dedupe_key = f"supplier|{clean(first(supplier.get('canonical_url'), supplier.get('url'), supplier.get('product_id'), supplier.get('ProductId'), normalize_cosmo_term(name), default=''))}"
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
@@ -3771,11 +4791,16 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
                 "ecosystem_path": LIFECYCLE_PATH_BY_TYPE[sku_type],
                 "ecosystem_segment": segment,
                 "price": money(first(supplier.get("price_rmb"), supplier.get("price"), default=""), "¥"),
+                "price_band": money(first(supplier.get("price_rmb"), supplier.get("price"), default=""), "¥"),
                 "supply": supplier_hint_from_record(supplier),
+                "supply_chain_status": "仅供应端候选",
+                "supply_chain_anchor": supplier_hint_from_record(supplier) or "1688 成品供应记录，需匹配 Amazon 参考竞品后再打样。",
                 "phase": "P2",
                 "priority": max(52, 70 - supplier_only_count),
                 "pain": "供应端存在可验证候选，但需要与 Amazon 参考竞品二次匹配后再进入打样。",
                 "target_segment": segment,
+                "segment_competitor_count": 0,
+                "segment_status": "仅供应端候选",
                 "reference_competitor": "供应端候选",
                 "reference_asin": "",
                 "reference_price": "",
@@ -3787,20 +4812,43 @@ def build_lifecycle_strategy_analysis(data_pack: dict[str, Any], analysis_plan: 
             }
         )
         supplier_only_count += 1
+    normalize_lifecycle_priority_scores(candidates)
     candidates.sort(key=lambda item: as_float(item.get("priority"), 0), reverse=True)
-    recommended = candidates[:8]
+    recommended = [item for item in candidates if item.get("segment_status") == "可进入推荐"][:8]
     path_counts = Counter(clean(item.get("ecosystem_path")) for item in candidates)
     segment_counts = Counter(clean(item.get("ecosystem_segment")) for item in candidates)
+    ecosystem_children: list[dict[str, Any]] = []
+    for path_label, path_count in path_counts.items():
+        if not path_label:
+            continue
+        path_items = [item for item in candidates if clean(item.get("ecosystem_path")) == path_label]
+        segment_children: list[dict[str, Any]] = []
+        for segment_label, segment_count in Counter(clean(item.get("ecosystem_segment")) for item in path_items).most_common(8):
+            if not segment_label:
+                continue
+            segment_items = [item for item in path_items if clean(item.get("ecosystem_segment")) == segment_label]
+            sku_children = [
+                {
+                    "label": truncate(clean(first(item.get("name"), item.get("reference_competitor"), default="SKU 候选")), 28),
+                    "count": 1,
+                    "reference_asin": clean(item.get("reference_asin")),
+                    "priority": item.get("priority_score", item.get("priority")),
+                }
+                for item in sorted(segment_items, key=lambda row: as_float(row.get("priority_score", row.get("priority")), 0), reverse=True)[:6]
+            ]
+            segment_children.append({"label": segment_label, "count": segment_count, "children": sku_children})
+        ecosystem_children.append({"label": path_label, "count": path_count, "children": segment_children})
     return {
         "schema_version": "lifecycle_strategy.v2",
         "generated_at": datetime.now(UTC).isoformat(),
-        "basis": "由当前有效竞品、VOC、关键词和 1688 成品供应记录生成 SKU 候选池；模板槽位不代表完整 SKU 池。",
+        "basis": "由当前有效竞品、VOC、关键词和 1688 成品供应记录生成 SKU 候选池；策略卡只展示优先级靠前的机会，不代表完整 SKU 池。",
         "sku_candidate_pool": candidates,
         "recommended_skus": recommended,
         "ecosystem_nodes": {
             "root": first((data_pack.get("research_object") or {}).get("value") if isinstance(data_pack.get("research_object"), dict) else "", "当前研究对象"),
             "paths": [{"label": key, "count": value} for key, value in path_counts.items() if key],
             "segments": [{"label": key, "count": value} for key, value in segment_counts.most_common(24) if key],
+            "children": ecosystem_children,
         },
         "filter_diagnostics": {
             "effective_products": len(products),
@@ -3822,6 +4870,18 @@ def ensure_generated_analysis_artifacts(report_dir: Path, data_pack: dict[str, A
     write_json(report_dir / "analysis" / "cosmo_alexa_tags.json", cosmo_tags)
     write_json(report_dir / "analysis" / "lifecycle_strategy.json", lifecycle)
     return cosmo_tags, lifecycle
+
+
+def load_or_generate_analysis_artifacts(report_dir: Path, data_pack: dict[str, Any], analysis_plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    cosmo_path = report_dir / "analysis" / "cosmo_alexa_tags.json"
+    lifecycle_path = report_dir / "analysis" / "lifecycle_strategy.json"
+    cosmo_tags = load_json(cosmo_path, {}) if cosmo_path.exists() else {}
+    lifecycle = load_json(lifecycle_path, {}) if lifecycle_path.exists() else {}
+    if cosmo_tags and lifecycle:
+        data_pack["cosmo_alexa_tags"] = cosmo_tags
+        data_pack["lifecycle_strategy"] = lifecycle
+        return cosmo_tags, lifecycle
+    return ensure_generated_analysis_artifacts(report_dir, data_pack, analysis_plan)
 
 
 def lifecycle_sku_pool_summary(lifecycle: dict[str, Any], data_pack: dict[str, Any]) -> dict[str, Any]:
@@ -3905,12 +4965,12 @@ def render_strategy_dashboard(data_pack: dict[str, Any], lifecycle: dict[str, An
     elif supplier_count >= 50:
         supply_metric_label = "供应链可控度"
         p1_metric_label = "P1 首发 SKU"
-        supply_control = "门禁通过"
-        supply_risk = "严格相关供应端报价已通过数量和字段质量门禁，可进入实物复核"
+        supply_control = "供应链达标"
+        supply_risk = "严格相关供应端报价已满足数量和字段质量要求，可进入实物复核"
         supply_style = "success"
         phase_subtext = "可控供应链"
         p1_subtext = "可先进入验证"
-        phase_row = "P1 可控供应链 + 信任与开箱触点优先"
+        phase_row = "P1 供应链达标 + 信任与开箱触点优先"
         strategy_conclusion = "以首发可控 SKU 为核心，围绕高优先级赛道做 Bundle 价格台阶验证；每个 SKU 必须绑定目标赛道、参考竞品、供应链风险和页面承诺，先验证转化与退货风险，再扩展长期复购触点。"
     elif supplier_count > 0:
         supply_metric_label = "供应链复核状态"
@@ -4210,7 +5270,7 @@ def render_sku_execution_table(skus: list[dict[str, Any]], fallback_source: str)
             supply_label = "外采"
         priority = max(1, min(100, int(as_float(sku.get("priority"), 50))))
         bar_color = "#c9a05a" if priority >= 70 else "#3d6b9e" if priority >= 55 else "#c9c9c9"
-        reference_image = sku_reference_image_html(sku)
+        reference_image = sku_reference_image_html(sku, "sku-reference-image")
         strategy_cards.append(
             "<article class=\"sku-strategy-card\">"
             + reference_image
@@ -4274,7 +5334,7 @@ def render_sku_execution_table(skus: list[dict[str, Any]], fallback_source: str)
             + "</div></div>"
         )
         return (
-            f"<tr data-filter=\"{esc(sku_type)}\" data-type=\"{esc(sku_type)}\" data-supply=\"{esc(supply_class)}\" data-phase=\"{esc(sku.get('phase'))}\" data-score=\"{priority}\" data-ecosystem-path=\"{esc(ecosystem_path)}\" data-segment=\"{esc(ecosystem_segment)}\">"
+            f"<tr data-filter=\"{esc(sku_type)}\" data-type=\"{esc(sku_type)}\" data-supply=\"{esc(supply_class)}\" data-phase=\"{esc(sku.get('phase'))}\" data-score=\"{priority}\" data-sku-label=\"{esc(first(sku.get('name'), '拓品 SKU'))}\" data-ecosystem-path=\"{esc(ecosystem_path)}\" data-segment=\"{esc(ecosystem_segment)}\">"
             + f"<td>{idx}</td>"
             + f"<td>{esc(sku.get('stage'))}</td>"
             + f"<td><span class=\"type-badge {esc(type_class.get(sku_type, 'a red'))}\">{esc(lifecycle_type_label(sku_type, type_labels))}</span></td>"
@@ -4516,6 +5576,16 @@ def appeal_rows(data_pack: dict[str, Any], fallback_source: str) -> list[list[An
     return rows
 
 
+def customer_safe_brand(value: Any) -> str:
+    brand = clean(value)
+    if not brand:
+        return "品牌未披露"
+    title_like_terms = ["electric", "cupping", "massager", "therapy", "choose the color", "with ", " for "]
+    if len(brand) > 24 or any(term in brand.casefold() for term in title_like_terms):
+        return "参考竞品品牌"
+    return brand
+
+
 def render_target_anchor(data_pack: dict[str, Any], object_value: Any, fallback_source: str) -> str:
     products = effective_products(data_pack)
     anchor = products[0] if products else {}
@@ -4527,7 +5597,7 @@ def render_target_anchor(data_pack: dict[str, Any], object_value: Any, fallback_
         if not asin:
             continue
         short_name = first(product.get("title_cn"), customer_safe_signal_title(product, "参考竞品"), default="参考竞品")
-        brand = first(product.get("brand"), "品牌未披露", default="品牌未披露")
+        brand = customer_safe_brand(product.get("brand"))
         price = money(product_price(product))
         rating_value = first(product.get("rating"), product.get("stars"), default="-")
         reviews_value = product_reviews(product)
@@ -4890,6 +5960,7 @@ def renderer_callbacks() -> dict[str, Any]:
         "render_personas": render_personas,
         "render_priority_table": render_priority_table,
         "render_product_deep_dives": render_product_deep_dives,
+        "render_seasonality_sales": render_seasonality_sales,
         "render_sku_execution_table": render_sku_execution_table,
         "render_strategy_dashboard": render_strategy_dashboard,
         "render_supply": render_supply,
@@ -4907,18 +5978,18 @@ def can_render_customer_bundle(readiness: dict[str, Any]) -> bool:
     return bool(readiness.get("acceptance_ready") or readiness.get("partial_report_ready"))
 
 
-def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2) -> Path:
+def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2, depth: str = "auto") -> Path:
     normalize_data_pack(report_dir)
-    readiness = assess_data_readiness(report_dir, "auto")
+    readiness = assess_data_readiness(report_dir, depth)
     write_readiness_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
     data_pack = load_json(report_dir / "data" / "data_pack.json", {})
     analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
     attach_report_label_profile(data_pack, analysis_plan)
     recovery_report: dict[str, Any] | None = None
     if not readiness["acceptance_ready"] and recover:
-        recovery_report = recover_readiness(report_dir, "auto", recovery_rounds)
+        recovery_report = recover_readiness(report_dir, depth, recovery_rounds)
         normalize_data_pack(report_dir)
-        readiness = assess_data_readiness(report_dir, "auto")
+        readiness = assess_data_readiness(report_dir, depth)
         write_readiness_json(report_dir / "data" / "normalized" / "data_readiness_report.json", readiness)
         data_pack = load_json(report_dir / "data" / "data_pack.json", {})
         analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
@@ -4934,6 +6005,8 @@ def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2) -> 
     opportunity = load_json(report_dir / "analysis" / "opportunity.json", {})
     profitability = load_json(report_dir / "analysis" / "profitability.json", {})
     cosmo_tags, lifecycle = ensure_generated_analysis_artifacts(report_dir, data_pack, analysis_plan)
+    data_pack["cosmo_alexa_tags"] = cosmo_tags
+    data_pack["lifecycle_strategy"] = lifecycle
     demand_gap = load_json(report_dir / "analysis" / "demand_gap.json", {})
     delivery = load_json(report_dir / "output" / "delivery_result.json", {})
     initial_decision = str(first(delivery.get("decision"), "Watch", default="Watch"))
@@ -5032,6 +6105,7 @@ def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2) -> 
         "max_refinement_rounds": critic_review["max_refinement_rounds"],
     }
     write_delivery_result(report_dir, delivery, CHILD_SKILLS)
+    write_site_assets(report_dir, data_pack, analysis_plan, str(decision), readiness, delivery)
     return report_dir / HTML_REPORTS["index"]
 
 
@@ -5040,9 +6114,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dir", required=True, help="Report directory containing data/ and analysis/.")
     parser.add_argument("--no-recover", action="store_true", help="Skip automatic Sorftime recovery attempts before diagnostics.")
     parser.add_argument("--recovery-rounds", type=int, default=2, help="Maximum targeted recovery rounds before diagnostic rendering.")
+    parser.add_argument("--depth", choices=["auto", "quick", "standard", "deep"], default="auto", help="Data-readiness depth used for rendering diagnostics and final reports.")
     args = parser.parse_args(argv)
     try:
-        output_path = render(Path(args.dir), recover=not args.no_recover, recovery_rounds=args.recovery_rounds)
+        output_path = render(Path(args.dir), recover=not args.no_recover, recovery_rounds=args.recovery_rounds, depth=args.depth)
     except RuntimeError as exc:
         print(f"render_failed: {exc}", file=sys.stderr)
         return 1

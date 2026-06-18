@@ -225,6 +225,21 @@ TARGET_SIGNAL_TOKENS = [
     "毛绒",
     "玩具",
     "陪伴",
+    "cupping",
+    "vacuum cupping",
+    "cupping therapy",
+    "red light cupping",
+    "拔罐",
+    "电动拔罐",
+    "负压",
+    "刮痧",
+    "hunting blind",
+    "ground blind",
+    "deer blind",
+    "turkey blind",
+    "狩猎",
+    "盲棚",
+    "地面盲棚",
 ]
 
 OFF_TARGET_NOISE_TOKENS = [
@@ -271,7 +286,30 @@ OFF_TARGET_NOISE_TOKENS = [
     "录像",
     "门铃",
     "订阅",
+    "massage gun",
+    "shiatsu",
+    "tens unit",
 ]
+
+
+RESEARCH_FAMILY_TOKENS = {
+    "cupping": {
+        "positive": ["cupping", "vacuum cupping", "cupping therapy", "red light cupping", "lymphatic drainage", "negative pressure", "cellulite", "拔罐", "电动拔罐", "负压", "负压拔罐", "刮痧拔罐", "淋巴引流"],
+        "negative": ["motion sensor light", "solar light", "wall light", "led strip", "lamp", "lighting", "户外感应灯", "灯带", "灯泡", "壁灯"],
+    },
+    "lighting": {
+        "positive": ["light", "lighting", "lamp", "led", "bulb", "strip", "cabinet", "sconce", "vanity", "motion sensor", "solar", "橱柜灯", "感应灯", "灯带", "灯泡", "壁灯", "镜前灯", "夜灯", "户外灯", "智能照明"],
+        "negative": ["cupping", "vacuum cupping", "hunting blind", "water bottle", "protein", "拔罐", "狩猎盲棚"],
+    },
+    "hunting_blind": {
+        "positive": ["hunting blind", "ground blind", "deer blind", "turkey blind", "pop up blind", "see through blind", "狩猎", "盲棚", "地面盲棚", "打猎帐篷"],
+        "negative": ["motion sensor light", "solar light", "cupping", "water bottle", "protein", "灯带", "拔罐"],
+    },
+    "plush_toy": {
+        "positive": ["plush", "toy", "stuffed", "companion", "毛绒", "玩具", "陪伴"],
+        "negative": ["lighting", "cupping", "hunting blind", "water bottle", "protein", "灯带", "拔罐", "狩猎盲棚"],
+    },
+}
 
 
 def product_text(product: dict[str, Any]) -> str:
@@ -303,7 +341,48 @@ def is_off_target_product(product: dict[str, Any]) -> bool:
     return any(token in text for token in OFF_TARGET_NOISE_TOKENS)
 
 
-def has_product_relevance_signal(product: dict[str, Any]) -> bool:
+def research_object_text(research_object: Any) -> str:
+    if isinstance(research_object, dict):
+        parts = [research_object.get("value"), research_object.get("category")]
+        parts.extend(research_object.get("seed_keywords") or [])
+        parts.extend(research_object.get("seed_asins") or [])
+        return " ".join(clean(part).casefold() for part in parts if part not in (None, "", [], {}))
+    return clean(research_object).casefold()
+
+
+def research_family(research_object: Any) -> str:
+    text = research_object_text(research_object)
+    if any(token in text for token in ["cupping", "拔罐"]):
+        return "cupping"
+    if any(token in text for token in ["hunting blind", "ground blind", "deer blind", "turkey blind", "狩猎", "盲棚"]):
+        return "hunting_blind"
+    if any(token in text for token in ["plush", "toy", "stuffed", "毛绒", "玩具"]):
+        return "plush_toy"
+    if any(token in text for token in ["light", "lighting", "lamp", "led", "bulb", "sconce", "照明", "灯"]):
+        return "lighting"
+    return ""
+
+
+def product_matches_research_family(product: dict[str, Any], research_object: Any = None) -> bool:
+    family = research_family(research_object)
+    if not family:
+        return True
+    text = product_text(product)
+    tokens = RESEARCH_FAMILY_TOKENS.get(family) or {}
+    positives = tokens.get("positive") or []
+    negatives = tokens.get("negative") or []
+    has_positive = any(token in text for token in positives)
+    has_negative = any(token in text for token in negatives)
+    if has_positive:
+        return True
+    if has_negative:
+        return False
+    return False
+
+
+def has_product_relevance_signal(product: dict[str, Any], research_object: Any = None) -> bool:
+    if research_object is not None and not product_matches_research_family(product, research_object):
+        return False
     segment = product_segment_value(product)
     if segment and not is_unknown_segment(segment):
         return True
@@ -311,15 +390,16 @@ def has_product_relevance_signal(product: dict[str, Any]) -> bool:
     return any(token in text for token in TARGET_SIGNAL_TOKENS)
 
 
-def relevant_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def relevant_products(products: list[dict[str, Any]], research_object: Any = None) -> list[dict[str, Any]]:
     candidates = [
         product
         for product in products
         if isinstance(product, dict)
         and not is_off_target_product(product)
         and (product.get("research_relevance") or {}).get("passed") is not False
+        and product_matches_research_family(product, research_object)
     ]
-    signaled = [product for product in candidates if has_product_relevance_signal(product)]
+    signaled = [product for product in candidates if has_product_relevance_signal(product, research_object)]
     return signaled if signaled else candidates
 
 

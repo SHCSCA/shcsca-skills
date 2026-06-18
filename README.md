@@ -111,15 +111,28 @@ v2 主要数据源：
 | 相关性 | 非当前研究对象的产品、关键词、评论和供应记录不得进入客户 view model |
 | 1688 供应链 | 去重有效报价、标题/链接覆盖率、赛道匹配和价格分布同时达标后才允许毛利率测算 |
 | COSMO + Alexa 15 标签 | 15 类关系必须全部存在；客户页展示中文标签、证据覆盖、置信度、业务解释和 Listing / QA / 广告动作 |
+| 竞品图片 | 有 Amazon 图片 URL 时渲染竞品图；URL 运行时失败时保留稳定图片框并静默兜底，不展示“图片加载失败”类客户文案 |
+| 生命周期优先级 | SKU 候选池按数量自适应：`<=8` 为紧凑评分卡，`9-20` 为完整横向榜，`>20` 为 Top 15 + 完整候选池 |
 | 客户安全 | 客户 HTML 禁止展示 `source_id`、`provider`、`raw_path`、技术错误和占位字段 |
 
 常用验证命令：
 
 ```bash
-python -m unittest -v test_site_assets test_site_interactions test_validate_market_research_deliverables
+python -m unittest discover -s skills/amz-market-research-orchestrated/scripts -p "test_*.py" -v
+npm run test:amz-browser
 python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/<report_dir>
+python skills/amz-market-research-orchestrated/scripts/run_visual_parity_audit.py --dir reports/<report_dir>
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<report_dir> --depth standard
 python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/<report_dir> --depth deep --reference-visual --download-root C:\Users\wz\Downloads\downloadpage
 ```
+
+验收口径：
+
+| 场景 | 期望结果 |
+|---|---|
+| 完整验收样本 | `acceptance_proof.json` 中 `overall_pass=true`、`delivery_mode=full_acceptance`、`full_acceptance_pass=true` |
+| 真实数据不达门槛样本 | 保留四页完整模板并输出中文诊断；`overall_pass=false`、`delivery_mode=diagnostic_delivery`、`diagnostic_delivery_pass=true` |
+| PC 视觉审计 | `run_visual_parity_audit.py` 通过；外部图片 400/403/404 可过滤，但 JavaScript/pageerror、布局溢出、缺组件仍失败 |
 
 ### `amz-create-image`
 

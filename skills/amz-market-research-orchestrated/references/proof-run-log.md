@@ -2,6 +2,48 @@
 
 This file records local proof runs that are relevant to the `amz-market-research-orchestrated` 100-point scorecard. It is a pointer log, not a replacement for the generated proof JSON files.
 
+## 2026-06-18
+
+### Standard Template Delivery Gate Check
+
+Scope:
+
+- Verified the current standard HTML renderer, validators, customer-safety rules, browser smoke test, visual audit, and acceptance-proof semantics after the image fallback and lifecycle priority fixes.
+- Confirmed that runtime Amazon image URL failures use a stable silent placeholder instead of customer-visible failure copy.
+- Confirmed that lifecycle priority display is adaptive: compact score cards for small SKU pools, full horizontal list for medium pools, and Top 15 plus complete candidate-pool detail for large pools.
+- Confirmed that diagnostic delivery remains distinct from full acceptance: a real report can pass diagnostic rendering and validators while `overall_pass=false` when readiness gates are still blocked.
+
+Regression commands:
+
+```bash
+python -m unittest discover -s skills/amz-market-research-orchestrated/scripts -p "test_*.py" -v
+npm run test:amz-browser
+python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/electric_cupping_massager_us_20260617
+python skills/amz-market-research-orchestrated/scripts/run_visual_parity_audit.py --dir reports/electric_cupping_massager_us_20260617
+python skills/amz-market-research-orchestrated/scripts/validate_market_research_deliverables.py --dir reports/wall_lighting_us_20260615
+python skills/amz-market-research-orchestrated/scripts/run_visual_parity_audit.py --dir reports/wall_lighting_us_20260615
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/electric_cupping_massager_us_20260617 --depth standard
+python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py --dir reports/wall_lighting_us_20260615 --depth standard
+```
+
+Result:
+
+- Full Python discovery suite: 360 tests passed.
+- Browser smoke: passed through `npm run test:amz-browser`.
+- `validate_market_research_deliverables.py`: passed for `electric_cupping_massager_us_20260617` and `wall_lighting_us_20260615`.
+- `run_visual_parity_audit.py`: passed for both real sample reports. External image resource failures are filtered only for remote image 400/403/404; JavaScript/page errors and layout failures remain blocking.
+- `electric_cupping_massager_us_20260617`: `overall_pass=false`, `delivery_mode=diagnostic_delivery`, `diagnostic_delivery_pass=true`, `decision=No-Go`; blocked by keyword sample depth and customer-intent duplicate ratio.
+- `wall_lighting_us_20260615`: `overall_pass=false`, `delivery_mode=diagnostic_delivery`, `diagnostic_delivery_pass=true`; blocked by keyword customer-intent duplicate ratio and Chinese mapping coverage.
+- A temporary acceptance fixture was also checked as `overall_pass=true`, `delivery_mode=full_acceptance`, `full_acceptance_pass=true`.
+
+Customer HTML forbidden-copy scan:
+
+```bash
+rg -n --glob "*.html" "图片加载失败|参考竞品图片未返回|竞品图片未返回|Type A|Type B|Type C|Type D|source_id|raw_path|provider|待补|暂无|未命名竞品|竞品记录|清洗数据|样本 [0-9]|PROMPT 0[123]" reports/electric_cupping_massager_us_20260617/output reports/wall_lighting_us_20260615/output
+```
+
+Result: no customer HTML matches.
+
 ## 2026-06-16
 
 ### COSMO Template Visual Fix
