@@ -12,7 +12,7 @@
 
 | 角色 | 能解决的问题 |
 |---|---|
-| Amazon 卖家 / 跨境运营 | 广告架构、CPC 模型、图片需求稿、功能需求验证、竞品拆解、Listing 转化判断 |
+| Amazon 卖家 / 跨境运营 | 广告架构、CPC 与成本利润模型、图片需求稿、功能需求验证、竞品拆解、Listing 转化判断 |
 | 市场研究人员 | 公司、概念、赛道、竞品的横纵向深度研究 |
 | 内容创作者 | 长文写作、风格约束、反空话表达 |
 | 工程团队 | TDD、调试、需求拷问、Issue 拆解、架构改进 |
@@ -44,7 +44,7 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 | Skill | 类型 | 适用场景 |
 |---|---|---|
-| `amz-ad-architecture` | 自建 | Amazon 中文广告架构、预算分配、CPC 参数模型、否词与 7 天优化规则 |
+| `amz-ad-architecture` | 自建 | Amazon 中文广告架构、预算分配、CPC/成本利润联动、指标解释、否词与 7 天优化规则 |
 | `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
 | `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研主控，使用 Sorftime MCP + Firecrawl 生成可审计静态站点三报告 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
@@ -57,14 +57,16 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 
 ### `amz-ad-architecture`
 
-Amazon 中文广告架构与可执行 Excel 投放表 Skill。它根据产品资料、关键词/竞品数据、售价、预算和阶段目标，建立带公式的广告活动结构，而不是只给一张静态关键词表。
+Amazon 中文广告架构与可执行 Excel 投放表 Skill。它根据产品资料、关键词/竞品数据、售价、成本、预算和阶段目标，建立带公式的广告活动结构，并用盈亏平衡 CPA/ACOS 约束理论最高 CPC，而不是只给一张静态关键词表。
 
 每份广告架构默认使用中文活动命名，并强制包含：
 
 | 工作表 | 作用 |
 |---|---|
 | `广告架构总览` | 汇总活动职责、预算、竞价策略、广告位、风险与调整逻辑 |
-| `CPC参数模型` | 用售价、目标 ACOS、预期 CVR、预算和广告位加价计算理论最高 CPC 与竞价压力 |
+| `CPC参数模型` | 用目标 CPA、盈亏平衡 CPA、预期 CVR、预算和广告位加价计算理论最高 CPC 与竞价压力 |
+| `成本利润模型` | 按 SKU 计算广告前贡献利润、盈亏平衡 ACOS/CPA 和安全差额，并回传 CPC 模型 |
+| `指标名词解释` | 解释目标 CPA、CPC 压力、广告位加价、位置后最高竞价等指标的公式与操作口径 |
 | `否词与流量隔离` | 管理否定精准、否定词组、品牌/ASIN 排除和活动间流量路由 |
 | `7天优化规则` | 规定新品前 7 天的加价、降价、迁词、否词和预算转移条件 |
 | `数据来源与公式` | 记录市场 CPC、购买率/CVR、CPA、ACOS 与关键公式的数据口径 |
@@ -258,9 +260,10 @@ shcsca-skills/
 ├── README.md
 ├── AGENTS.md
 └── skills/
-    ├── amz-ad-architecture/               # 自建 · Amazon 中文广告架构与 CPC 模型
+    ├── amz-ad-architecture/               # 自建 · Amazon 中文广告架构、成本利润与 CPC 联动
     │   ├── SKILL.md
-    │   └── agents/
+    │   ├── agents/
+    │   └── references/
     ├── amz-create-image/                  # 自建 · Amazon 图片需求稿
     │   ├── SKILL.md
     │   ├── references/
