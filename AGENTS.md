@@ -9,7 +9,7 @@ This repository is a skills collection. Keep user-facing documentation aligned w
 - Use `rg` / `rg --files` for repository search.
 - Do not treat `amz-market-depth-report`, `amz-lifecycle-strategy-report`, or `amz-demand-gap-report` as top-level skills. They are internal modules under `skills/amz-market-research-orchestrated/child_skills/`.
 - `amz-market-research-orchestrated` is the only external trigger for the Amazon market research workflow.
-- `amz-ad-architecture` is a top-level installable skill for Chinese Amazon advertising structures, CPC models, negative targeting, and seven-day optimization rules.
+- `amz-ad-architecture` is a top-level installable skill for Chinese Amazon advertising structures, cost-profit and CPC linkage, metric definitions, negative targeting, and seven-day optimization rules.
 - The root README is for human users. Keep it concise and aligned with the actual installable skill directories.
 - There is no root `docs/` directory currently. Sync project knowledge through `README.md`, this file, and skill-local `SKILL.md` / `references/`.
 - Ignore untracked scratch or generated output directories unless the user explicitly asks to publish them.
