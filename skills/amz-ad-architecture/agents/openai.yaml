@@ -1,7 +1,12 @@
 interface:
   display_name: "亚马逊中文广告架构"
-  short_description: "生成含总览、CPC模型、否词和七天规则的中文广告架构表"
-  default_prompt: "使用 $amz-ad-architecture 为我的亚马逊产品制作中文广告架构表。"
+  short_description: "生成含成本利润、CPC联动、否词和七天规则的中文广告架构表"
+  default_prompt: "使用 $amz-ad-architecture 为我的亚马逊产品制作含成本利润与CPC联动的中文广告架构表。"
 
 policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
   allow_implicit_invocation: true
