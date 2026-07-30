@@ -45,7 +45,7 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | Skill | 类型 | 适用场景 |
 |---|---|---|
 | `amz-ad-architecture` | 自建 | Amazon 中文广告架构、预算分配、CPC/成本利润联动、指标解释、否词与 7 天优化规则 |
-| `amz-create-image` | 自建 | Amazon 主图 / 副图 / A+ 美工需求稿，按运营判断生成 Excel 交付稿 |
+| `amz-create-image` | 自建 · v8 | Amazon 主图 / 副图 / 高级 A+ 简版美工需求稿，支持功能轮播与场景轮播 |
 | `amz-market-research-orchestrated` | 自建 · 可执行 v2 | Amazon / 电商市场深度调研主控，使用 Sorftime MCP + Firecrawl 生成可审计静态站点三报告 |
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
@@ -161,33 +161,26 @@ python skills/amz-market-research-orchestrated/scripts/run_acceptance_proof.py -
 
 ### `amz-create-image`
 
-Amazon 主图、辅图、A+ 视觉需求稿生成 Skill。
+Amazon 主图、副图、普通 A+ 与高级 A+ 简版视觉需求稿 Skill。
 
-它不直接生成最终图片，而是把运营判断转成美工可执行的 Excel 图片需求稿。核心能力包括：
+运营分析仍会覆盖产品定位、关键词意图、Review/VOC、竞品、A9/COSMO/Rufus 和合规风险，但交给摄影师/美工的 Excel 不再堆十几张分析 Sheet：
 
-| 能力 | 输出 |
+| 阶段 | 默认交付 |
 |---|---|
-| 产品定位 | 适用人群、价格带、核心差异、购买理由 |
-| 关键词意图 | 核心品类词、功能词、场景词、痛点词、问题型词到图片模块的映射 |
-| Review / VOC 洞察 | 好评动机、差评痛点、退货疑虑、Q&A 问题到副图和 A+模块的映射 |
-| 竞品拆解 | 信息层级、视觉钩子、未满足痛点，不复制竞品素材和文案 |
-| A9 / COSMO / Rufus 视角 | 搜索相关性、点击转化、场景意图、对话式购物问题承接 |
-| 合规风控 | 参数、认证、医疗安全承诺、侵权和夸大表达检查 |
+| 主图/副图 | `主图副图` 1张工作表，默认1张主图＋7张副图 |
+| A+ | 在原文件增加 `A+需求`，最终共2张工作表 |
+| 高级 A+ | 默认5模块，支持功能轮播2–5帧、场景轮播2–6帧 |
 
-工作流采用强门禁：
+两张表均采用六列执行卡片：编号、适用范围、画面要求、英文文案、参考图、备注/禁用。参考图直接嵌入对应行，不使用路径或 WPS `DISPIMG`。
 
-1. 收集产品资料和运营信号。
-2. 要求上传主图 / 副图参考图。
-3. 生成主图 / 副图需求稿并等待验收。
-4. 验收通过后再要求上传 A+参考图。
-5. 在已验收的原 Excel 工作簿中补充 A+需求稿，并另存新版本。
+高级 A+ 对需要双端素材的模块分别规划桌面 `1464 × 600` 与手机 `600 × 450`，并按 Amazon 原生字段控制导航、标题和正文字符数。
 
 内置模板：`skills/amz-create-image/templates/amz-create-image_workbook.xlsx`
 
 示例触发：
 
 ```text
-/amz-create-image 帮我做一个 Amazon 太阳能户外灯的主图和副图美工需求稿
+/amz-create-image 帮我做一个带功能轮播和场景轮播的高级 A+ 简版需求稿
 ```
 
 ### `zach-feature-demand-validator`
@@ -266,6 +259,8 @@ shcsca-skills/
     │   └── references/
     ├── amz-create-image/                  # 自建 · Amazon 图片需求稿
     │   ├── SKILL.md
+    │   ├── agents/
+    │   ├── assets/
     │   ├── references/
     │   └── templates/
     ├── amz-market-research-orchestrated/  # 自建 · 可执行 v2 · Amazon 市场研究总控
