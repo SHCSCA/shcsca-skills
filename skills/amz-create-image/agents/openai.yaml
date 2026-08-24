@@ -1,8 +1,7 @@
 interface:
   display_name: Amazon 图片需求稿
   short_description: 生成美工可执行的 Amazon 主图、副图与高级 A+ 简表
-  default_prompt: Use $amz-create-image to create a concise, designer-ready Amazon
-    image and A+ requirements workbook.
+  default_prompt: Use $amz-create-image to create a concise, designer-ready Amazon image requirements workbook with remote reference-image formulas, preserved template styling, and carousel panels split into separate execution rows.
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:
