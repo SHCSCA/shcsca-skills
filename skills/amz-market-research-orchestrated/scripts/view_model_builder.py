@@ -752,7 +752,10 @@ def safe_kpis(data_pack: dict[str, Any], decision: str) -> list[dict[str, Any]]:
     keyword_intent_count = keyword_intent_gate.get("unique_customer_intents") or keyword_customer_intent_count(effective_keywords)
     keyword_subtext = f"{len(effective_keywords)} 条有效关键词聚合后的客户意图"
     if keyword_intent_gate and keyword_intent_gate.get("passed") is False:
-        keyword_subtext += "；重复率过高已阻断完整结论"
+        if keyword_intent_gate.get("waived") is True:
+            keyword_subtext += "；本次授权按样本限制展示"
+        else:
+            keyword_subtext += "；重复率过高已阻断完整结论"
     products = relevant_products(effective_records(data_pack, "products"), data_pack.get("research_object"))
     top100_units = category.get("top100_estimated_monthly_units")
     competitor_units = sum(as_float(product_sales(product), 0) for product in products)

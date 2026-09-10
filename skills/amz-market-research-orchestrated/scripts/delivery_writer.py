@@ -138,16 +138,27 @@ def write_report_brief(report_dir: Path, data_pack: dict[str, Any], analysis_pla
             "analysis_plan": "analysis/analysis_plan.json",
         },
     }
-    for key in ("created_at", "task_purpose", "market_scope", "data_scope", "output_scope", "constraints", "keyword_sample_depth_waiver"):
+    waiver_keys = (
+        "keyword_sample_depth_waiver",
+        "competitor_pool_depth_waiver",
+        "keyword_customer_intent_duplicate_waiver",
+    )
+    for key in ("created_at", "task_purpose", "market_scope", "data_scope", "output_scope", "constraints", *waiver_keys):
         if key in existing and key not in report_brief:
             report_brief[key] = existing[key]
-    if existing.get("keyword_sample_depth_waiver"):
-        report_brief.setdefault("data_scope", {})
-        if isinstance(report_brief["data_scope"], dict):
-            report_brief["data_scope"].setdefault("keyword_sample_depth_waiver", existing["keyword_sample_depth_waiver"])
+    report_brief.setdefault("data_scope", {})
+    if isinstance(report_brief["data_scope"], dict):
+        for waiver_key in waiver_keys:
+            existing_data_scope = existing.get("data_scope") if isinstance(existing.get("data_scope"), dict) else {}
+            if isinstance(existing_data_scope, dict) and existing_data_scope.get(waiver_key):
+                report_brief["data_scope"].setdefault(waiver_key, existing_data_scope[waiver_key])
+            if existing.get(waiver_key):
+                report_brief["data_scope"].setdefault(waiver_key, existing[waiver_key])
     existing_data_inputs = existing.get("data_inputs") if isinstance(existing.get("data_inputs"), dict) else {}
-    if isinstance(existing_data_inputs, dict) and existing_data_inputs.get("keyword_sample_depth_waiver"):
-        report_brief["data_inputs"]["keyword_sample_depth_waiver"] = existing_data_inputs["keyword_sample_depth_waiver"]
+    if isinstance(existing_data_inputs, dict):
+        for waiver_key in waiver_keys:
+            if existing_data_inputs.get(waiver_key):
+                report_brief["data_inputs"][waiver_key] = existing_data_inputs[waiver_key]
     existing_path.write_text(json.dumps(report_brief, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

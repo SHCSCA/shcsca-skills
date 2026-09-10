@@ -218,6 +218,66 @@ class DataReadinessTest(unittest.TestCase):
             self.assertEqual(report["applied_waivers"][0]["authorized_required"], 998)
             self.assertTrue(any(item["module"] == "keyword_sample_depth_waiver" for item in report["warnings"]))
 
+    def test_user_authorized_competitor_floor_waiver_is_run_specific(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(
+                root / "report_brief.json",
+                {
+                    "data_scope": {
+                        "competitor_pool_depth_waiver": {
+                            "authorized_by_user": True,
+                            "authorized_min_effective_competitors": 21,
+                            "reason": "User authorized continuing this run with the current 21 competitors.",
+                        }
+                    }
+                },
+            )
+            write_json(root / "data" / "data_pack.json", base_pack(products=competitor_rows(21, segment_count=2)))
+
+            report = assess(root, "standard")
+
+            self.assertTrue(report["acceptance_ready"])
+            self.assertEqual(report["competitor_gate"]["minimum_total"], 21)
+            self.assertEqual(report["competitor_gate"]["default_minimum_total"], 30)
+            self.assertTrue(any(item["module"] == "competitor_pool_depth" for item in report["applied_waivers"]))
+            self.assertTrue(any(item["module"] == "competitor_pool_depth_waiver" for item in report["warnings"]))
+
+    def test_user_authorized_keyword_intent_duplicate_waiver_is_run_specific(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(
+                root / "report_brief.json",
+                {
+                    "data_scope": {
+                        "keyword_customer_intent_duplicate_waiver": {
+                            "authorized_by_user": True,
+                            "authorized_max_duplicate_ratio": 1.0,
+                            "reason": "User authorized continuing this run with the current keyword intent sample.",
+                        }
+                    }
+                },
+            )
+            keywords = [
+                {
+                    "keyword": f"electric cupping long tail unique {idx}",
+                    "keyword_cn": "电动拔罐按摩器" if idx < 700 else "红光理疗拔罐",
+                    "source_bucket": "market",
+                    "source_id": "src_001",
+                    "provider": "sorftime",
+                }
+                for idx in range(1000)
+            ]
+            write_json(root / "data" / "data_pack.json", base_pack(keywords=keywords, effective_keywords=keywords))
+
+            report = assess(root, "standard")
+
+            self.assertTrue(report["acceptance_ready"])
+            self.assertFalse(report["keyword_customer_intent_gate"]["passed"])
+            self.assertTrue(report["keyword_customer_intent_gate"]["waived"])
+            self.assertNotIn("keyword_customer_intent_duplicate_ratio", {item["module"] for item in report["blocking_gaps"]})
+            self.assertTrue(any(item["module"] == "keyword_customer_intent_duplicate_ratio" for item in report["applied_waivers"]))
+
     def test_standard_report_blocks_segments_with_less_than_ten_competitors(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -407,6 +467,23 @@ class DataReadinessTest(unittest.TestCase):
             self.assertTrue(readiness_path.exists())
             written = json.loads(readiness_path.read_text(encoding="utf-8"))
             self.assertFalse(written["acceptance_ready"])
+
+    def test_cli_returns_zero_when_partial_report_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_json(root / "data" / "data_pack.json", base_pack(suppliers=supplier_rows(49)))
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--dir", str(root), "--depth", "standard", "--write"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            stdout = json.loads(result.stdout)
+            self.assertFalse(stdout["acceptance_ready"])
+            self.assertTrue(stdout["partial_report_ready"])
 
     def test_standard_pack_blocks_when_competitor_pool_under_30(self):
         with tempfile.TemporaryDirectory() as tmp:

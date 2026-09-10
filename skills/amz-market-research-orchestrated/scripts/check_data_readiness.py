@@ -195,19 +195,32 @@ def infer_depth(report_dir: Path, explicit_depth: str) -> str:
     return "standard"
 
 
-def authorized_keyword_minimum(report_dir: Path, default: int) -> tuple[int, dict[str, Any] | None]:
-    """Allow a run-specific, user-authorized keyword floor without changing defaults."""
+def find_run_specific_waiver(report_dir: Path, key: str) -> dict[str, Any] | None:
     brief = load_json(report_dir / "report_brief.json", {})
     if not isinstance(brief, dict):
-        return default, None
+        return None
     data_scope = brief.get("data_scope") if isinstance(brief.get("data_scope"), dict) else {}
-    waiver = data_scope.get("keyword_sample_depth_waiver") if isinstance(data_scope, dict) else None
-    if not isinstance(waiver, dict):
-        waiver = brief.get("keyword_sample_depth_waiver")
     data_inputs = brief.get("data_inputs") if isinstance(brief.get("data_inputs"), dict) else {}
-    if not isinstance(waiver, dict) and isinstance(data_inputs, dict):
-        waiver = data_inputs.get("keyword_sample_depth_waiver")
+    for container in (data_scope, brief, data_inputs):
+        if isinstance(container, dict) and isinstance(container.get(key), dict):
+            return container[key]
+    return None
+
+
+def waiver_is_user_authorized(waiver: dict[str, Any] | None) -> bool:
     if not isinstance(waiver, dict):
+        return False
+    if waiver.get("authorized_by_user") is not True:
+        return False
+    if not str(waiver.get("reason") or "").strip():
+        return False
+    return True
+
+
+def authorized_keyword_minimum(report_dir: Path, default: int) -> tuple[int, dict[str, Any] | None]:
+    """Allow a run-specific, user-authorized keyword floor without changing defaults."""
+    waiver = find_run_specific_waiver(report_dir, "keyword_sample_depth_waiver")
+    if not waiver_is_user_authorized(waiver):
         return default, None
     try:
         authorized_minimum = int(waiver.get("authorized_min_effective_keywords"))
@@ -215,11 +228,39 @@ def authorized_keyword_minimum(report_dir: Path, default: int) -> tuple[int, dic
         return default, None
     if authorized_minimum <= 0 or authorized_minimum >= default:
         return default, None
-    if waiver.get("authorized_by_user") is not True:
+    return authorized_minimum, waiver
+
+
+def authorized_competitor_minimum(report_dir: Path, default: int) -> tuple[int, dict[str, Any] | None]:
+    """Allow a run-specific, user-authorized competitor floor without changing defaults."""
+    waiver = find_run_specific_waiver(report_dir, "competitor_pool_depth_waiver")
+    if not waiver_is_user_authorized(waiver):
         return default, None
-    if not str(waiver.get("reason") or "").strip():
+    try:
+        authorized_minimum = int(waiver.get("authorized_min_effective_competitors"))
+    except (TypeError, ValueError):
+        return default, None
+    if authorized_minimum <= 0 or authorized_minimum >= default:
         return default, None
     return authorized_minimum, waiver
+
+
+def authorized_keyword_customer_intent_duplicate(
+    report_dir: Path, gate: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Allow a run-specific customer-intent duplicate gate waiver without changing defaults."""
+    waiver = find_run_specific_waiver(report_dir, "keyword_customer_intent_duplicate_waiver")
+    if not waiver_is_user_authorized(waiver):
+        return None
+    actual = to_float(gate.get("duplicate_ratio"))
+    if actual is None:
+        return None
+    allowed = to_float(waiver.get("authorized_max_duplicate_ratio"))
+    if allowed is None:
+        allowed = actual
+    if allowed + 0.0001 < actual:
+        return None
+    return waiver
 
 
 def load_data_pack(report_dir: Path) -> tuple[dict[str, Any], str]:
@@ -754,7 +795,11 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
     if missing_1688_fields:
         supplier_quality_gate["missing_documented_required_fields"] = missing_1688_fields
         supplier_quality_gate["observed_fields"] = supplier_collection_summary.get("observed_fields") or []
-    competitor_minimum = MIN_DEEP_COMPETITORS if resolved_depth == "deep" else MIN_STANDARD_COMPETITORS if standard_like else MIN_QUICK_PRODUCTS
+    default_competitor_minimum = MIN_DEEP_COMPETITORS if resolved_depth == "deep" else MIN_STANDARD_COMPETITORS if standard_like else MIN_QUICK_PRODUCTS
+    competitor_minimum = default_competitor_minimum
+    competitor_waiver: dict[str, Any] | None = None
+    if standard_like:
+        competitor_minimum, competitor_waiver = authorized_competitor_minimum(report_dir, competitor_minimum)
     broad_research = is_broad_research(report_dir, data_pack)
     top_segment_counts = sorted(competitor_segments.values(), reverse=True)
     underfilled_segments = {
@@ -817,6 +862,56 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 MIN_STANDARD_KEYWORDS,
                 "用户授权本次以低于默认 1000 条有效关键词门槛继续；报告结论需要保留样本限制说明。",
                 "不要把本次授权改写为默认合同；后续同类项目仍按 1000 条有效关键词门槛执行。",
+            )
+        )
+    if competitor_waiver:
+        applied_waivers.append(
+            {
+                "module": "competitor_pool_depth",
+                "default_required": default_competitor_minimum,
+                "authorized_required": competitor_minimum,
+                "authorized_by_user": True,
+                "reason": competitor_waiver.get("reason"),
+                "limitation": competitor_waiver.get("limitation", "低于默认竞品池门槛，报告必须显式披露。"),
+            }
+        )
+        warnings.append(
+            warning(
+                "competitor_pool_depth_waiver",
+                len(competitor_products),
+                default_competitor_minimum,
+                "用户授权本次以低于默认竞品池门槛继续；市场格局、价格带和标杆拆解必须按当前样本披露限制。",
+                "不要把本次授权改写为默认合同；后续标准版仍按默认竞品池门槛执行。",
+            )
+        )
+
+    keyword_intent_waiver = (
+        authorized_keyword_customer_intent_duplicate(report_dir, keyword_customer_intent_gate)
+        if standard_like and not keyword_customer_intent_gate["passed"]
+        else None
+    )
+    if keyword_intent_waiver:
+        keyword_customer_intent_gate["waived"] = True
+        keyword_customer_intent_gate["waiver_reason"] = keyword_intent_waiver.get("reason")
+        applied_waivers.append(
+            {
+                "module": "keyword_customer_intent_duplicate_ratio",
+                "default_required": MAX_CUSTOMER_KEYWORD_INTENT_DUPLICATE_RATIO,
+                "authorized_required": keyword_intent_waiver.get(
+                    "authorized_max_duplicate_ratio", keyword_customer_intent_gate.get("duplicate_ratio")
+                ),
+                "authorized_by_user": True,
+                "reason": keyword_intent_waiver.get("reason"),
+                "limitation": keyword_intent_waiver.get("limitation", "关键词意图重复率高，客户页必须按主题去重展示。"),
+            }
+        )
+        warnings.append(
+            warning(
+                "keyword_customer_intent_duplicate_waiver",
+                int(keyword_customer_intent_gate["duplicate_extra"]),
+                0,
+                "用户授权本次以当前关键词意图样本继续；不得把重复同义词当成独立需求规模。",
+                "客户页主表必须按主题聚合展示，后续项目仍按默认客户意图重复率门槛执行。",
             )
         )
 
@@ -895,7 +990,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
                 "重新运行 normalize_data_pack.py，按 normalized lowercase keyword + source bucket 去重；若重复来自采集层，需要修正采集分页合并逻辑。",
             )
         )
-    if standard_like and not keyword_customer_intent_gate["passed"]:
+    if standard_like and not keyword_customer_intent_gate["passed"] and not keyword_intent_waiver:
         blocking_gaps.append(
             gap(
                 "keyword_customer_intent_duplicate_ratio",
@@ -1060,6 +1155,7 @@ def assess(report_dir: Path, depth: str = "auto") -> dict[str, Any]:
         "applied_waivers": applied_waivers,
         "competitor_gate": {
             "minimum_total": competitor_minimum,
+            "default_minimum_total": default_competitor_minimum,
             "valid_total": len(competitor_products),
             "minimum_per_primary_segment": MIN_COMPETITORS_PER_PRIMARY_SEGMENT if standard_like else 0,
             "segments": competitor_segments,
@@ -1094,7 +1190,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.write:
         write_json(args.dir / "data" / "normalized" / "data_readiness_report.json", report)
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if report["acceptance_ready"] else 2
+    return 0 if report["acceptance_ready"] or report.get("partial_report_ready") else 2
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
             def fake_call_tool(_url, name, args):
                 seen_calls.append((name, dict(args)))
                 if name == collector.SIMILAR_TOOL:
-                    self.assertEqual(args, {"searchName": "under cabinet lights", "page": 1, "site": "US"})
+                    self.assertEqual(args, {"productName": "under cabinet lights", "page": 1, "site": "US"})
                     rows = [
                         {
                             "ProductId": "p1",
@@ -143,7 +143,7 @@ class CollectSorftimeTikTokSignalsTest(unittest.TestCase):
                     rows = []
                     return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
                 self.assertEqual(name, collector.SIMILAR_TOOL)
-                self.assertEqual(args, {"searchName": "light", "page": 1, "site": "JP"})
+                self.assertEqual(args, {"productName": "light", "page": 1, "site": "JP"})
                 rows = [{"ProductId": "jp1", "Title": "Light", "月销量": 10}]
                 return {"result": {"content": [{"type": "text", "text": json.dumps(rows, ensure_ascii=False)}]}}
 

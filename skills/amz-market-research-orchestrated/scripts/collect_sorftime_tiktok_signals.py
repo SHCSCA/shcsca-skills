@@ -331,7 +331,7 @@ def invalidate_normalization(report_dir: Path, data_pack: dict[str, Any]) -> Non
 
 
 def run_call(url: str, raw_dir: Path, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], Path]:
-    raw_path = raw_dir / f"sorftime_{tool}_{slug(args.get('searchName') or args.get('productId') or args.get('nodeId'))}_p{args.get('page', 1):03d}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.json"
+    raw_path = raw_dir / f"sorftime_{tool}_{slug(args.get('searchName') or args.get('productName') or args.get('productId') or args.get('nodeId'))}_p{args.get('page', 1):03d}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.json"
     response = call_tool(url, tool, args)
     rows = content_rows(response)
     write_json(raw_path, {"tool": tool, "args": args, "result": response, "parsed": rows})
@@ -369,7 +369,7 @@ def collect(
 
     for seed in seed_terms:
         for page in range(1, max_pages + 1):
-            args = {"searchName": seed, "page": page, "site": site}
+            args = {"productName": seed, "page": page, "site": site}
             try:
                 _, rows, raw_path = run_call(url, raw_dir, SIMILAR_TOOL, args)
                 source_id = f"sf_tiktok_similar_{slug(seed)}_p{page:03d}"

@@ -3150,7 +3150,7 @@ def render_visual_direction(opportunity: dict[str, Any]) -> str:
         {
             "title": "主力差异化款",
             "scene": "realistic lifestyle scene showing the product solving the main customer pain point",
-            "composition": "product in use, one close-up detail area, subtle before-and-after or comparison feeling without text",
+            "composition": "product in use, one close-up detail area, subtle visual contrast without text",
             "selling_point": "make material, structure, installation, durability, or usability difference visually obvious",
             "note": "用于主力差异化图；重点验证实物差异、竞品对比和页面承诺是否一致。",
         },
@@ -5986,7 +5986,7 @@ def render(report_dir: Path, recover: bool = True, recovery_rounds: int = 2, dep
     analysis_plan = load_json(report_dir / "analysis" / "analysis_plan.json", {})
     attach_report_label_profile(data_pack, analysis_plan)
     recovery_report: dict[str, Any] | None = None
-    if not readiness["acceptance_ready"] and recover:
+    if not can_render_customer_bundle(readiness) and recover:
         recovery_report = recover_readiness(report_dir, depth, recovery_rounds)
         normalize_data_pack(report_dir)
         readiness = assess_data_readiness(report_dir, depth)
