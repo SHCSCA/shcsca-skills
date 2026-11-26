@@ -15,6 +15,8 @@ This repository is a skills collection. Keep user-facing documentation aligned w
 - There is no root `docs/` directory currently. Sync project knowledge through `README.md`, this file, and skill-local `SKILL.md` / `references/`.
 - Ignore untracked scratch or generated output directories unless the user explicitly asks to publish them.
 
+- `cyber-motuo-content-pipeline` is a top-level installable orchestrator; its nine modules under `child_skills/` are internal workflow modules, not sibling top-level Skills.
+
 ## Validation
 
 For `amz-market-research-orchestrated`, common checks are:
