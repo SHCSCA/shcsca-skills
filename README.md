@@ -50,8 +50,32 @@ cp -r skills/<skill-name> ~/.openclaw/skills/
 | `zach-feature-demand-validator` | 自建 | 用 Review、关键词、社区证据判断功能点是不是真需求 |
 | `hv-analysis` | khazix | 横向竞品 + 纵向演变的深度调研报告 |
 | `khazix-writer` | khazix | 模拟“有见识的普通人”写长文，拒绝空洞套话 |
+| `cyber-motuo-content-pipeline` | 自建 · 主控 | 每日三篇微信公众号内容生产：AIHOT采集、选题核验、AI+电商隐私、写作、质检、封面、草稿与归档 |
 | `neat-freak` | khazix | 任务结束后同步项目文档、Agent 记忆和 README |
 | `mattpocock/*` | mattpocock | 工程协作 Skills：TDD、诊断、需求拷问、Issue 拆解等 |
+
+## AI 公众号内容生产
+
+### `cyber-motuo-content-pipeline`
+
+每日三篇公众号内容生产主控，固定覆盖 AI 前沿、AI + 电商、AI 商业探索。流程包含 AIHOT 多路径采集、HKR 选题、原始信源核验、亚马逊信息匿名化、Khazix Writer 写作适配、文章质检、视觉包装、微信公众号草稿和腾讯文档归档。
+
+主控目录内的 `child_skills/` 包含九个内部模块：AIHOT 采集、选题筛选、事实核验、亚马逊隐私、写作适配、编辑质检、视觉包装、微信草稿和内容归档。它们是该主控的内部模块，不作为同级顶层 Skill 单独安装。
+
+外部依赖：
+- `khazix-writer`：本仓库已有，作为外部写作方法依赖。
+- `aihot`：从 [AIHOT 官方 Skill](https://aihot.news/aihot-skill/README.md) 单独安装并验证。
+- 微信草稿与腾讯文档写入：需要对应官方授权接口或 MCP/连接器；未连接时只生成可复制稿件，不声称写入成功。
+
+安装主控：
+```bash
+cp -r skills/cyber-motuo-content-pipeline ~/.agents/skills/
+```
+
+Windows PowerShell：
+```powershell
+Copy-Item -Recurse skills/cyber-motuo-content-pipeline "$HOME/.agents/skills/"
+```
 
 ## 跨境电商 Skills
 
